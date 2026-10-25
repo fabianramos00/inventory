@@ -1,0 +1,52 @@
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+inventory-desktop
+/inventory
+/build/bin/
+wailsjs/
+
+# Go test and coverage
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+frontend/coverage/
+frontend/.vite/
+node_modules/
+dist/
+test-results/
+playwright-report/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local database and dumps
+*.dump
+*.sql.gz
+pgdata/
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# opencode local deps
+.opencode/node_modules/
+
+# Logs
+*.log

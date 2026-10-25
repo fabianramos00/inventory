@@ -1,0 +1,193 @@
+# Testing
+
+Tests exist to prove contract parity, business correctness, and desktop
+behavior. They are not optional polish.
+
+## Layers
+
+| Layer | Tool | Scope |
+|---|---|---|
+| Go unit | `testing` | Services, decimal math, status derivation, validation |
+| Go handler | `httptest` | Routing, auth, status codes, JSON shape |
+| Go integration | `testing` + PostgreSQL | Transactions, stock locking, migrations |
+| Frontend unit | Vitest | Hooks, formatters, utilities, components |
+| Frontend E2E | Playwright | Login, inventory, sales, orders, users, keyboard |
+| Contract parity | Go test | Same fixtures against FastAPI and Go |
+
+## Commands
+
+```bash
+# Go
+go test ./...
+go test -race ./...
+go test -tags=integration ./...
+go vet ./...
+gofmt -l .
+
+# Frontend
+cd frontend
+pnpm lint
+pnpm test
+pnpm build
+pnpm test:e2e
+```
+
+Run the checks that cover the changed area before committing. Run the full
+suite before release.
+
+## Go unit tests
+
+- Table-driven.
+- No database, no HTTP.
+- Cover:
+  - Payment status derivation (`pending`, `partial`, `paid`).
+  - Delivery status derivation (`pending`, `partial`, `delivered`).
+  - Sale/order total recalculation.
+  - Decimal parsing and rounding.
+  - `delivered_quantity <= quantity`.
+  - `amount_paid <= total`.
+  - Pagination helpers (`limit + 1`).
+  - Password hashing and JWT claims.
+- Each non-trivial branch has at least one case.
+
+## Go handler tests
+
+Use `httptest.NewServer` with a real router and fake services.
+
+- Public routes succeed without auth; protected routes return `401`.
+- Superuser routes return `403` for a regular user.
+- Malformed JSON returns `422` with the normalized error shape.
+- Unknown IDs return `404`.
+- Money fields are JSON numbers with two decimals.
+- Response field names match [API-CONTRACT.md](API-CONTRACT.md).
+
+## Go integration tests
+
+Use a dedicated PostgreSQL database:
+
+```bash
+export TEST_DATABASE_URL="postgresql://inventory:inventory@localhost:5432/inventory_test"
+go test -tags=integration ./...
+```
+
+Rules:
+
+- Apply goose migrations before the suite.
+- Each test runs in its own transaction when possible, or truncates the
+  affected tables after itself.
+- Never run integration tests against the development or production database.
+- Required cases:
+  - Concurrent sale creation cannot oversell the last unit.
+  - Sale creation decrements stock; deletion restores it.
+  - Sale item add/update/remove adjust stock by the delta.
+  - Receiving an order increments stock exactly once.
+  - Receiving twice does not double stock.
+  - Deleting a received order does not reverse stock (legacy behavior).
+  - Unique SKU and identity card violations map to a readable error.
+  - Dashboard queries return zero-filled 7-day data.
+
+## Frontend tests
+
+Vitest + Testing Library:
+
+- Hook tests: loading, success, error, retry, pagination, invalidation.
+- Auth interceptor: one refresh for concurrent 401s, queue drain, logout on
+  refresh failure, no refresh loop.
+- Formatters: `es-CO`, COP, `DD/MM/YYYY`.
+- Component tests: dialogs trap focus, Escape closes, labels are associated,
+  errors have `role="alert"`.
+- Form validation: required fields, numeric ranges, delivered vs quantity,
+  amount paid vs total.
+
+Playwright:
+
+- Login success and failure.
+- Inventory list, filter, create, edit, delete.
+- Sale creation with insufficient stock.
+- Sale item edit and deletion restore stock.
+- Purchase order receiving.
+- User creation and role visibility.
+- Keyboard-only dialog and dropdown flows.
+
+Use hash URLs (`/#/inventory`) for the desktop router. Run against Vite dev
+plus a test Go API. Add a manual Wails smoke test before release: launch,
+login, create a sale, restart, confirm data persists.
+
+## Contract parity
+
+The FastAPI app is the reference. The Go API must match it.
+
+```text
+testdata/contract/
+  auth/
+  inventory/
+  sales/
+  supply-chain/
+  dashboard/
+  users/
+```
+
+Each fixture contains:
+
+```json
+{
+  "method": "GET",
+  "path": "/api/v1/inventory/products?limit=10",
+  "auth": "superuser",
+  "body": null,
+  "expect": { "status": 200 }
+}
+```
+
+The parity test:
+
+1. Seeds identical data in both databases.
+2. Sends the same request to `LEGACY_API_URL` and the Go test server.
+3. Compares status code, JSON object shape, array ordering, and values.
+4. Normalizes timestamps and generated IDs before comparison.
+5. Compares money as decimals, never floats.
+6. Writes a diff report to `testdata/contract/report.md` on failure.
+
+Environment:
+
+```bash
+LEGACY_API_URL=https://inventory-api-2rq4.onrender.com/api/v1 \
+LEGACY_USER=... LEGACY_PASSWORD=... \
+go test -tags=contract ./...
+```
+
+If the legacy service is unavailable, record the reason and run the saved
+fixtures in replay mode. Do not mark parity as passing without a run.
+
+### Parity matrix
+
+| Module | Endpoints | Status |
+|---|---:|---|
+| Auth | 3 | Pending |
+| Users | 5 | Pending |
+| Inventory | 24 | Pending |
+| Sales + clients | 15 | Pending |
+| Supply chain | 16 | Pending |
+| Dashboard | 4 | Pending |
+| **Total** | **67** | Pending |
+
+Update the status column as each module passes. The matrix is the release
+gate.
+
+## Accessibility checks
+
+- Every input has a label.
+- Dialogs have `role="dialog"`, `aria-modal`, a title, focus trap, and focus
+  restore.
+- Dropdowns expose `aria-expanded`, `aria-controls`, and keyboard navigation.
+- Errors use `role="alert"`.
+- Skip link targets `#main-content`.
+- Contrast and focus rings survive the es-CO/COP changes.
+
+## Definition of Done for tests
+
+- The changed behavior has at least one test.
+- A bug fix has a regression test that fails before the fix.
+- Contract parity is updated when an endpoint changes.
+- New tests are deterministic and do not depend on wall-clock time or remote
+  services.
