@@ -1,0 +1,36 @@
+.cellSubline {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-meta);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.totalCell {
+  color: var(--ink-1);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.payLine {
+  color: var(--ink-meta);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.payPaid {
+  color: var(--success-ink);
+}
+
+.rowActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}

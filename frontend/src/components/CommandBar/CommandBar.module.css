@@ -1,0 +1,114 @@
+.commandBar {
+  position: relative;
+  z-index: 10;
+  background-color: var(--glass-panel-bg);
+  background-image: var(--glass-sheen);
+  border: 1px solid var(--glass-panel-border);
+  border-radius: var(--radius-card);
+  padding: 8px 10px;
+  -webkit-backdrop-filter: var(--glass-panel-filter-sm);
+  backdrop-filter: var(--glass-panel-filter-sm);
+  overflow: visible;
+}
+
+.controlsBar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (min-width: 640px) {
+  .controlsBar {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+}
+
+.searchWrapper {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-meta);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.searchInput {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 12px 0 34px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--ink-1);
+  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+}
+
+.searchInput::placeholder {
+  color: var(--ink-meta);
+}
+
+.searchInput:focus-visible {
+  border-color: var(--ink-2);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.clearFiltersBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: var(--control-h);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+}
+
+.clearFiltersBtn:hover {
+  background: var(--surface-hover);
+  color: var(--ink-1);
+  border-color: var(--border-strong);
+}
+
+@media (max-width: 639px) {
+  .commandBar {
+    padding: 6px 8px;
+  }
+
+  .actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-left: 0;
+    padding-bottom: 2px;
+  }
+
+  .actions > * {
+    flex: none;
+  }
+}

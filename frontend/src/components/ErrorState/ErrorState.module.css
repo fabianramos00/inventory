@@ -1,0 +1,49 @@
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  text-align: center;
+  background-color: var(--glass-panel-bg);
+  border: 1px solid var(--glass-panel-border-soft);
+  border-radius: var(--radius-card);
+  box-shadow: var(--glass-panel-highlight);
+  -webkit-backdrop-filter: var(--glass-panel-filter-sm);
+  backdrop-filter: var(--glass-panel-filter-sm);
+}
+
+.errorIcon {
+  color: var(--destructive-ink);
+}
+
+.message {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.retryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 0 10px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-1);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+}
+
+.retryButton:hover {
+  background: var(--surface-hover);
+  border-color: var(--border);
+}

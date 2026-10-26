@@ -1,0 +1,21 @@
+.stockMeterBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.stockMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-meta);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.valueDanger {
+  color: var(--destructive-ink);
+  font-weight: 600;
+}

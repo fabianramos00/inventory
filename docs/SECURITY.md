@@ -44,8 +44,9 @@ WebView (React) ── HTTP loopback ── Go API ── PostgreSQL
 - Bind to `127.0.0.1` only. Never `0.0.0.0`, never a LAN address.
 - Use an OS-assigned ephemeral port.
 - Do not print the API URL in release logs.
-- CORS allows only the Wails webview origin and the Vite dev origin. Do not
-  use `*` with credentials.
+- CORS allows only the Wails webview origin, the Vite dev origin, and the
+  Playwright preview origin (`http://localhost:4173`,
+  `http://127.0.0.1:4173`). Do not use `*` with credentials.
 - Close the HTTP server on app shutdown.
 - `GET /healthz` is unauthenticated and returns no business data.
 
@@ -58,9 +59,11 @@ WebView (React) ── HTTP loopback ── Go API ── PostgreSQL
 - Login rate limit: 5 attempts per minute per client.
 - Reject inactive users on login and on every authenticated request.
 - All `/users` routes require `is_superuser`.
-- `SECRET_KEY` is generated per install or supplied explicitly. It is never
-  hardcoded and never committed.
-- Passwords are 8–128 characters. Never log or return them.
+- `SECRET_KEY` is generated per install or supplied explicitly. It must be at
+  least 32 bytes; known placeholders are rejected. It is never hardcoded and
+  never committed.
+- Passwords are 8–128 characters and at most 72 bytes (bcrypt limit). Never
+  log or return them.
 
 ### Token storage
 

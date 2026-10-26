@@ -1,0 +1,17 @@
+.fallback {
+  padding: 40px;
+  text-align: center;
+  color: var(--ink-2);
+  font-family: inherit;
+}
+
+.message {
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.link {
+  font-size: 14px;
+  color: var(--ink-1);
+  font-weight: 500;
+}

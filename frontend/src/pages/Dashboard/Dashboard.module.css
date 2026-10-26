@@ -1,0 +1,396 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  padding-bottom: 32px;
+}
+
+.contextAction {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-h);
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+}
+
+.contextAction:hover {
+  background: var(--surface-hover);
+  color: var(--ink-1);
+  border-color: var(--border-strong);
+}
+
+/* ── Grid: trend 8 + rail 4 ─────────────────────────────────── */
+.mainGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--page-gap);
+}
+
+@media (min-width: 1024px) {
+  .mainGrid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .trendCard {
+    grid-column: span 8;
+  }
+
+  .rail {
+    grid-column: span 4;
+  }
+
+  .skeletonTrend {
+    grid-column: span 8;
+  }
+
+  .skeletonRail {
+    grid-column: span 4;
+  }
+
+  .railCard {
+    flex: 1 1 0;
+  }
+}
+
+.trendCard {
+  min-width: 0;
+}
+
+.chartBody {
+  flex: 1;
+  min-height: 0;
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.chart {
+  color: var(--ink-1);
+  width: 100%;
+}
+
+.chart :global(.recharts-cartesian-grid-horizontal line) {
+  stroke: var(--border);
+}
+
+.chart :global(.recharts-cartesian-axis-tick-value) {
+  fill: var(--ink-meta);
+}
+
+.lineDotLast {
+  fill: var(--accent);
+  stroke: var(--ink-1);
+}
+
+.chartFooter {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px var(--card-pad);
+  border-top: 1px solid var(--glass-panel-border-soft);
+}
+
+.chartFooterLabel {
+  color: var(--ink-meta);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.chartFooterValue {
+  color: var(--ink-1);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.tooltipLabel {
+  color: var(--ink-2);
+}
+
+.tooltipValue {
+  color: var(--ink-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  min-width: 0;
+}
+
+.railCard {
+  min-width: 0;
+}
+
+/* ── Order status ───────────────────────────────────────────── */
+.statusList {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 4px 0;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 1;
+  min-height: 24px;
+  padding: 0 var(--card-pad);
+}
+
+.statusLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.attentionDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning-ink);
+  flex: none;
+}
+
+.statusMeta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.statusCount {
+  color: var(--ink-1);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusPct {
+  color: var(--ink-meta);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ── Low stock ──────────────────────────────────────────────── */
+.stockList {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 4px 0;
+}
+
+.stockRow {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+  min-height: 28px;
+  padding: 0 var(--card-pad);
+}
+
+.stockTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.stockName {
+  color: var(--ink-1);
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stockSku {
+  color: var(--ink-meta);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  flex: none;
+}
+
+.cardLink {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.cardLink:hover {
+  color: var(--ink-1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cardEmpty {
+  margin: 0;
+  min-height: 120px;
+  padding: 24px var(--card-pad);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+/* ── Top products ───────────────────────────────────────────── */
+.productName {
+  display: block;
+  color: var(--ink-1);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.productSku {
+  display: block;
+  color: var(--ink-meta);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.brandText {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.summaryError {
+  min-height: 92px;
+}
+
+/* ── Skeletons ──────────────────────────────────────────────── */
+.skeletonKpiStrip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background-color: var(--glass-panel-bg);
+  background-image: var(--glass-sheen);
+  border: 1px solid var(--glass-panel-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--glass-panel-highlight), var(--glass-panel-shadow);
+  -webkit-backdrop-filter: var(--glass-panel-filter);
+  backdrop-filter: var(--glass-panel-filter);
+  overflow: hidden;
+}
+
+@media (min-width: 641px) {
+  .skeletonKpiStrip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.skeletonKpiCell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--card-pad);
+  background: transparent;
+  min-height: 92px;
+  box-shadow: inset -1px 0 0 var(--glass-panel-border-soft), inset 0 -1px 0 var(--glass-panel-border-soft);
+}
+
+.skeletonKpiCellLead {
+  background: linear-gradient(145deg, var(--dark-surface) 0%, var(--dark-anchor-to) 100%);
+  box-shadow: inset -1px 0 0 var(--dark-border), var(--glass-rim);
+}
+
+.skeletonBarShort {
+  display: block;
+  width: 52%;
+  height: 10px;
+  border-radius: var(--radius-chip);
+  background: var(--glass-panel-border-soft);
+}
+
+.skeletonBar {
+  display: block;
+  width: 76%;
+  height: 22px;
+  border-radius: var(--radius-chip);
+  background: var(--glass-panel-border-soft);
+}
+
+.skeletonKpiCellLead .skeletonBarShort,
+.skeletonKpiCellLead .skeletonBar {
+  background: var(--dark-border-strong);
+}
+
+.skeletonCard {
+  background-color: var(--glass-panel-bg-strong);
+  border: 1px solid var(--glass-panel-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--glass-panel-highlight), var(--glass-panel-shadow);
+  -webkit-backdrop-filter: var(--glass-panel-filter);
+  backdrop-filter: var(--glass-panel-filter);
+}
+
+.skeletonTrend {
+  min-height: 340px;
+}
+
+.skeletonRail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+}
+
+.skeletonRail .skeletonCard {
+  flex: 1;
+  min-height: 150px;
+}
+
+.skeletonTable {
+  min-height: 320px;
+}
+
+@media (max-width: 640px) {
+  .skeletonKpiStrip[data-lead='true'] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .skeletonKpiStrip[data-lead='true'] .skeletonKpiCell:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .skeletonKpiCell {
+    padding: 10px;
+  }
+}

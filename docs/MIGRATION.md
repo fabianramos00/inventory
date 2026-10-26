@@ -118,8 +118,9 @@ For each module:
 | Products | `sku` is generated when omitted | Preserve |
 | Products | `size_value` is a string | Preserve |
 | Purchase order detail | Returns the order without items; items are a separate endpoint | Preserve |
-| Sales | Initial create accepts `delivered_quantity > quantity`; item add/update rejects it | Preserve; document |
 | Sales | `amount_paid > total_amount` is accepted and marks the sale paid | Preserve; document |
+| Enums | PostgreSQL stores uppercase enum labels; the API uses lowercase | Map explicitly in every Go read/filter/write |
+| Defaults | Several legacy defaults are Python-side only (`stock_quantity`, `low_stock_threshold`, `amount_paid`, `delivered_quantity`, `total_amount`) | Supply them explicitly in Go inserts |
 | Validation | FastAPI `422` detail is an array | Normalize to a string detail + code |
 | Frontend types | `Product` type uses `stock`/`min_stock`/`unit`; API returns `stock_quantity`/`low_stock_threshold`/related objects | Fix frontend to match API |
 | Locale | UI uses `es-PE` while backend uses Bogotá | New rule: `es-CO` / COP |

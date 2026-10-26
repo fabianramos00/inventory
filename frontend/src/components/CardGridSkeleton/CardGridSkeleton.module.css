@@ -1,0 +1,63 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: var(--page-gap);
+}
+
+@media (min-width: 768px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background-color: var(--glass-panel-bg);
+  border: 1px solid var(--glass-panel-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--glass-panel-highlight);
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.monogram {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--glass-panel-border-soft);
+}
+
+.name {
+  width: 48%;
+  height: 14px;
+  border-radius: var(--radius-chip);
+  background: var(--glass-panel-border-soft);
+}
+
+.line {
+  width: 72%;
+  height: 10px;
+  border-radius: var(--radius-chip);
+  background: var(--glass-panel-border-soft);
+}
+
+.lineShort {
+  width: 46%;
+  height: 10px;
+  border-radius: var(--radius-chip);
+  background: var(--glass-panel-border-soft);
+}

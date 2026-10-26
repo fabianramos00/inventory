@@ -1,0 +1,48 @@
+.tableSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.actionWrapper {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.newBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  height: var(--control-h);
+  background: var(--ink-1);
+  color: var(--surface);
+  border: none;
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.newBtn:hover {
+  background: var(--dark-surface-2);
+}
+
+.tableCard {
+  background-color: var(--glass-panel-bg-strong);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  border: 1px solid var(--glass-panel-border);
+  box-shadow: var(--glass-panel-highlight), var(--glass-panel-shadow);
+  -webkit-backdrop-filter: var(--glass-panel-filter);
+  backdrop-filter: var(--glass-panel-filter);
+}
+
+.actionButtons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}

@@ -1,0 +1,130 @@
+.colSale {
+  width: 11%;
+  min-width: 96px;
+}
+
+.colClient {
+  width: 22%;
+}
+
+.colCobro {
+  width: 220px;
+}
+
+.colStatus {
+  width: 150px;
+}
+
+.colUser {
+  width: 14%;
+}
+
+.colActions {
+  width: 88px;
+  white-space: nowrap;
+}
+
+.cellSubline {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-meta);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cobroCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  width: 190px;
+  margin-left: auto;
+}
+
+.cobroTotalRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.cobroTotal {
+  color: var(--ink-1);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.cobroLine {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--ink-meta);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cobroSep {
+  color: var(--ink-3);
+}
+
+.cobroDebt {
+  color: var(--destructive-ink);
+  font-size: 12px;
+}
+
+.cobroBar {
+  display: block;
+  width: 100%;
+  height: 3px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--border);
+  overflow: hidden;
+  appearance: none;
+}
+
+.cobroBar::-webkit-progress-bar {
+  background: var(--border);
+  border-radius: 9999px;
+}
+
+.cobroBar::-webkit-progress-value {
+  background: var(--ink-2);
+  border-radius: 9999px;
+}
+
+.cobroBar::-moz-progress-bar {
+  background: var(--ink-2);
+  border-radius: 9999px;
+}
+
+.statusCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.deliveryLine {
+  color: var(--ink-meta);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.userCell {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.rowActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.emptyCell {
+  color: var(--ink-2);
+}

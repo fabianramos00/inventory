@@ -55,26 +55,46 @@ desktop build. Bootstrap the base URL before rendering:
 
 ```ts
 // src/bootstrap.ts
-import { GetAPIBaseURL } from '../wailsjs/go/main/App'
-import { setApiBaseUrl } from './lib/apiBase'
-
-export async function bootstrap() {
-  const url =
-    typeof GetAPIBaseURL === 'function'
-      ? await GetAPIBaseURL()
-      : import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8787'
-  setApiBaseUrl(url)
+export async function resolveApiBaseUrl(options: { isProduction?: boolean } = {}) {
+  const isProduction = options.isProduction ?? !import.meta.env.DEV
+  const binding = window.go?.main?.App?.GetAPIBaseURL
+  // Call the binding and validate the result, then set it with setApiBaseUrl().
 }
 ```
 
-`main.tsx` awaits `bootstrap()` before creating the React root. The axios
-instance reads the configured base URL from `apiBase.ts`.
+The shipped build is fail-closed:
+
+- Production (`!import.meta.env.DEV`) requires the Wails
+  `GetAPIBaseURL` binding. If it is missing, throws, or returns an invalid
+  URL, `resolveApiBaseUrl()` throws and the app does not start.
+- A binding result is accepted only when it is exactly
+  `http://127.0.0.1:<port>/api/v1` or `http://localhost:<port>/api/v1`,
+  with a port, the `/api/v1` path, and no credentials, query, or hash.
+- Production never falls back to a fixed port or `VITE_API_URL`. A local
+  process listening on the old `8787` port cannot receive credentials.
+- Development may fall back to `VITE_API_URL` or
+  `DEFAULT_API_BASE_URL` (`http://127.0.0.1:8787/api/v1`) when the binding
+  is unavailable or invalid. `VITE_API_URL` must include the `/api/v1`
+  prefix.
+
+`main.tsx` awaits `bootstrap()` before creating the React root. If bootstrap
+fails, it renders the Spanish startup error into `#root` instead of a blank
+window and does not expose internal details. The axios instance reads the
+configured base URL from `apiBase.ts` on every request and reuses it for
+refresh. The generated `frontend/wailsjs` binding is optional at build time,
+so a missing binding cannot break `pnpm build`; it breaks the release at
+runtime by design.
 
 ### Routing
 
 Use `HashRouter` in the desktop build. The legacy route table stays the same;
 only the router wrapper changes. Browser dev may keep `BrowserRouter` behind
 `import.meta.env.DEV`, but the shipped build must be hash-based.
+
+Phase 2 routes only `/#/login` and the protected `/#/` Home placeholder. The
+remaining page files stay in `src/pages` without routes until Phase 3 restores
+the full table from [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Playwright specs must
+move to hash URLs when those routes return.
 
 ### Browser assumptions to review
 
@@ -104,11 +124,16 @@ only the router wrapper changes. Browser dev may keep `BrowserRouter` behind
 
 ## Auth
 
-- `AuthContext` keeps access token, refresh token, and user.
+- `AuthContext` keeps access token, refresh token, and the full user
+  (`id`, `full_name`, `email`, `is_active`, `is_superuser`); older partial
+  caches are normalized on read.
 - The axios request interceptor adds `Authorization: Bearer`.
 - The response interceptor handles one refresh at a time, queues concurrent
   401s, rotates the refresh token, and emits the auth-expired event on
   failure.
+- After a successful refresh, the interceptor stores the rotated tokens and
+  emits `auth:refreshed`; `AuthContext` listens and updates its token and
+  refresh-token state so logout sends the current refresh token.
 - Login uses `application/x-www-form-urlencoded` with `username` = email.
 - Never log tokens or passwords.
 - A 401 from login or refresh is not retried.

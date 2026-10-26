@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: inventory_desktop
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: inventory
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - inventory_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory -d inventory_desktop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  inventory_pgdata:

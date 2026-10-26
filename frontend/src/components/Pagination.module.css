@@ -1,0 +1,110 @@
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px var(--card-pad);
+  border-top: 1px solid var(--glass-panel-border-soft);
+  background: transparent;
+}
+
+.paginationBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: var(--control-h);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--ink-2);
+  font-size: 14px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+  min-width: 44px;
+  justify-content: center;
+}
+
+.paginationBtn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--ink-1);
+  border-color: var(--border-strong);
+}
+
+.paginationBtn:active:not(:disabled) {
+  background: var(--surface-press);
+}
+
+.paginationBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--ink-3);
+}
+
+.paginationBtn[aria-busy='true'] {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.btnText {
+  display: inline;
+}
+
+.paginationMeta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.paginationInfo {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.paginationRange {
+  color: var(--ink-meta);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .pagination {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    gap: 8px;
+    padding: 10px 12px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    background: var(--glass-panel-bg-strong);
+    border-top: 1px solid var(--glass-panel-border-soft);
+    z-index: 10;
+  }
+
+  .paginationBtn {
+    font-size: 14px;
+  }
+
+  .btnText {
+    display: none;
+  }
+
+  .paginationMeta {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .paginationInfo,
+  .paginationRange {
+    font-size: 12px;
+  }
+}

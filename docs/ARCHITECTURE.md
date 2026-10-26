@@ -61,7 +61,9 @@ pool. Wails window close is the trigger.
 - Authentication: `Authorization: Bearer <access_token>`.
 - Public endpoints: login, refresh, logout, and `GET /healthz`.
 - The server never binds `0.0.0.0`.
-- CORS allows only the Wails webview origin and the Vite dev origin.
+- CORS always allows the Wails webview origin. The Vite dev origin and the
+  Playwright preview origin (`:5173`, `:4173`) are allowed only when dev mode
+  is enabled (`APP_ENV=development` or `ALLOW_DEV_ORIGINS=true`).
 - The API is the only way React reads or writes business data. Wails bindings
   are limited to the base URL and window lifecycle.
 
@@ -83,7 +85,7 @@ main.tsx
 
 - In the Wails runtime, `GetAPIBaseURL()` is the source.
 - In browser dev, if the binding is unavailable, use `VITE_API_URL`, then
-  `http://127.0.0.1:8787`.
+  `http://127.0.0.1:8787/api/v1`.
 - The API base URL must be set before the first request. No component may
   import axios and fire a request during module evaluation.
 
@@ -115,12 +117,14 @@ Precedence: environment > OS config file > defaults.
 
 | Key | Default | Notes |
 |---|---|---|
-| `DATABASE_URL` | `postgresql://inventory:inventory@localhost:5432/inventory` | Required in production |
-| `SECRET_KEY` | generated on first run | Persisted with owner-only permissions |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Same as legacy |
-| `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Same as legacy |
+| `DATABASE_URL` | `postgresql://inventory:inventory@localhost:5433/inventory_desktop` | Dev default matching compose, which exposes PostgreSQL 17 on port `5433`; required in production |
+| `SECRET_KEY` | generated on first run | At least 32 bytes; known placeholders are rejected. Persisted with owner-only permissions |
+| `ACCESS_TOKEN_MINUTES` | `30` | `ACCESS_TOKEN_EXPIRE_MINUTES` is also accepted |
+| `REFRESH_TOKEN_DAYS` | `7` | `REFRESH_TOKEN_EXPIRE_DAYS` is also accepted |
 | `BCRYPT_ROUNDS` | `12` | Lower only in tests |
 | `AUTO_MIGRATE` | `true` | Run goose at startup |
+| `APP_ENV` | unset | `development` enables dev CORS origins |
+| `ALLOW_DEV_ORIGINS` | `false` | Enable Vite/Playwright CORS origins explicitly |
 | `LOG_LEVEL` | `info` | `slog` level |
 | `VITE_API_URL` | unset | Browser dev only |
 

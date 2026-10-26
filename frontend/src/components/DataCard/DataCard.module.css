@@ -1,0 +1,29 @@
+.card {
+  background-color: var(--glass-panel-bg-strong);
+  border: 1px solid var(--glass-panel-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--glass-panel-highlight), var(--glass-panel-shadow);
+  -webkit-backdrop-filter: var(--glass-panel-filter);
+  backdrop-filter: var(--glass-panel-filter);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px var(--card-pad);
+  border-bottom: 1px solid var(--glass-panel-border-soft);
+  background: transparent;
+}
+
+.title {
+  color: var(--ink-1);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}

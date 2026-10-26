@@ -1,0 +1,211 @@
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 100;
+  animation: modalScrimIn var(--motion-slow) var(--ease-out);
+}
+
+@keyframes modalScrimIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modalContent {
+  background: var(--glass-overlay-bg);
+  border: 1px solid var(--glass-panel-border);
+  border-radius: var(--radius-modal);
+  box-shadow: var(--glass-panel-highlight), var(--glass-overlay-shadow);
+  -webkit-backdrop-filter: var(--glass-overlay-filter);
+  backdrop-filter: var(--glass-overlay-filter);
+  padding: var(--card-pad);
+  max-width: 420px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: modalIn var(--motion-slow) var(--ease-out);
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.modalTitle {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-1);
+  letter-spacing: -0.005em;
+  margin: 0;
+}
+
+.modalCloseButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-meta);
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+  border-radius: var(--radius-control);
+}
+
+.modalCloseButton:hover {
+  background: var(--surface-hover);
+  color: var(--ink-1);
+}
+
+.modalError {
+  padding: 10px 12px;
+  background-color: var(--destructive-bg);
+  border: 1px solid var(--destructive-ink);
+  border-radius: var(--radius-control);
+  color: var(--destructive-ink);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.modalForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inputLabel {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+}
+
+.inputField {
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: 0 12px;
+  height: var(--control-h);
+  font-size: 14px;
+  font-family: var(--font-sans);
+  color: var(--ink-1);
+  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.inputField::placeholder {
+  color: var(--ink-meta);
+}
+
+.inputField:focus-visible {
+  border-color: var(--ink-2);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+textarea.inputField {
+  padding: 10px 12px;
+  height: auto;
+  resize: vertical;
+}
+
+.modalActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.modalCancelBtn {
+  flex: 1;
+  padding: 0 16px;
+  height: var(--control-h);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+
+.modalCancelBtn:hover {
+  background: var(--surface-hover);
+  color: var(--ink-1);
+  border-color: var(--border-strong);
+}
+
+.modalSaveBtn {
+  flex: 1;
+  padding: 0 16px;
+  height: var(--control-h);
+  background: var(--ink-1);
+  border: none;
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--surface);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.modalSaveBtn:hover:not(:disabled) {
+  background: var(--dark-surface-2);
+}
+
+.modalSaveBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 767px) {
+  .modalCloseButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .modalContent {
+    background: var(--glass-popover-bg);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

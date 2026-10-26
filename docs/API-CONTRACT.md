@@ -71,7 +71,7 @@ All user endpoints require a superuser.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/users` | `skip`, `limit`, `search`; paginated |
-| POST | `/users` | `email`, `password` (8–128), `full_name`, `is_active`, `is_superuser` |
+| POST | `/users` | `email`, `password` (8–128 characters, max 72 bytes), `full_name`, `is_active`, `is_superuser` |
 | GET | `/users/{id}` | |
 | PUT | `/users/{id}` | Partial update; optional password |
 | DELETE | `/users/{id}` | |
@@ -208,12 +208,12 @@ Creating a sale requires at least one item. One item per product per sale.
 `unit_price` defaults to the product price. The server calculates subtotals,
 total, payment status, and delivery status.
 
-Known legacy gaps to preserve in v1:
+Known legacy gap to preserve in v1:
 
-- The initial create path does not reject `delivered_quantity > quantity`;
-  only item add/update does.
 - `amount_paid > total_amount` is accepted and the sale becomes `paid`; the UI
-  prevents it but the API does not.
+  prevents it but the API does not. PostgreSQL does enforce
+  `delivered_quantity <= quantity`, so the create path must surface that
+  constraint as a readable error.
 
 ### Supply chain
 

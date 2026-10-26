@@ -1,0 +1,18 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "inventory-desktop",
+  "outputfilename": "inventory-desktop",
+  "frontend:install": "pnpm install",
+  "frontend:build": "pnpm build",
+  "frontend:dev:watcher": "pnpm dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Inventory Desktop"
+  },
+  "info": {
+    "companyName": "Inventory Desktop",
+    "productName": "Inventory Desktop",
+    "productVersion": "0.1.0",
+    "comments": "Inventory Desktop for the ferreteria"
+  }
+}

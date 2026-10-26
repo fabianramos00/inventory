@@ -1,0 +1,103 @@
+.root {
+  position: relative;
+  display: inline-flex;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--control-h);
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+
+.trigger:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  color: var(--ink-1);
+}
+
+.trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--ink-meta);
+  transition: transform var(--motion-base) var(--ease-standard);
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  width: max-content;
+  min-width: 100%;
+  max-height: 220px;
+  padding: 4px;
+  overflow-y: auto;
+  background: var(--glass-popover-bg);
+  border: 1px solid var(--glass-popover-border);
+  border-radius: var(--radius-control);
+  box-shadow: var(--glass-popover-shadow);
+  animation: calendarListIn var(--motion-base) var(--ease-out);
+}
+
+@keyframes calendarListIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+
+.option:hover {
+  background: var(--surface-hover);
+  color: var(--ink-1);
+}
+
+.option:focus-visible {
+  background: var(--surface-hover);
+  color: var(--ink-1);
+}
+
+.option:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.optionActive {
+  background: var(--surface-hover);
+  color: var(--ink-1);
+  font-weight: 500;
+}

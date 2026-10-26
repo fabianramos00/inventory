@@ -7,6 +7,7 @@ permission:
     "frontend/**/*.test.ts": allow
     "frontend/**/*.test.tsx": allow
     "frontend/e2e/**": allow
+    "frontend/playwright.config.ts": allow
     "frontend/src/test/**": allow
     "internal/**/*_test.go": allow
     "tests/**": allow

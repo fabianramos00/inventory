@@ -11,6 +11,8 @@ permission:
     "Makefile": allow
     "Dockerfile": allow
     "docker-compose.yml": allow
+    ".env.example": allow
+    "README.md": allow
     ".gitignore": allow
     "docs/*.md": allow
   bash:

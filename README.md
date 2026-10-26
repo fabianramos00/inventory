@@ -6,8 +6,10 @@ REST API backed by PostgreSQL.
 
 ## Status
 
-**Phase 1 — documentation, rules, and agents.** No application code exists
-yet. Phase 2 starts the Wails scaffold, the Go API, and the frontend copy.
+**Phase 2 — walking skeleton + auth.** Implemented: Wails shell, embedded
+React login/home, loopback Go API, PostgreSQL schema/migrations, JWT login,
+refresh rotation, logout, and the seed command. Inventory, products, clients,
+providers, sales, orders, dashboard, and user management are Phase 3.
 
 ## Why desktop
 
@@ -56,45 +58,51 @@ docs/                      architecture, domain, API, role docs
 docs/work/                 non-developer reports and specifications
 ```
 
-Phase 2 adds `main.go`, `app.go`, `wails.json`, `internal/`, `migrations/`,
-and `frontend/`.
+Implemented in Phase 2: `main.go`, `app.go`, `main_bindings.go`,
+`wails.json`, `internal/`, `migrations/`, `cmd/`, `frontend/`, and the
+development `docker-compose.yml`.
 
 ## Prerequisites
 
 - Go 1.26+
 - Wails CLI 2.16+
 - Node 22+ and pnpm 12+
-- Docker (development PostgreSQL)
+- Docker (development PostgreSQL 17 on `127.0.0.1:5433`)
 - PostgreSQL 17 (installed database or server for production)
 
 Wails also needs the platform webview dependencies. On Linux that is
-WebKitGTK; on Windows it is WebView2; on macOS it is the system WebKit.
+WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`); the Makefile passes
+`-tags webkit2_41`. On Windows it is WebView2; on macOS it is the system
+WebKit.
 
-## Planned commands
-
-These commands become available in Phase 2:
+## Commands
 
 ```bash
-# Development
-wails dev
+# Development database (PostgreSQL 17 on 127.0.0.1:5433)
+make db-up
+make db-down
 
-# Migrations (inside the Go app or via the goose CLI)
-go run ./cmd/migrate up
+# Seed the first superuser
+SEED_EMAIL=admin@example.com SEED_PASSWORD='change-me-now' make seed
 
-# Go checks
-go test ./...
-go vet ./...
+# Run the desktop app (Linux passes -tags webkit2_41)
+make dev
 
-# Frontend checks
-cd frontend
-pnpm install
-pnpm lint
-pnpm test
-pnpm build
+# Checks
+make test
+make lint
+go test -race ./...
+INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
+  go test -v ./internal/httpapi
+cd frontend && pnpm test:e2e
 
-# Desktop build
-wails build
+# Production build
+make build
 ```
+
+`make dev` and `make build` use `-tags webkit2_41` on Linux. The browser
+fallback API base is `http://127.0.0.1:8787/api/v1`; run
+`go run ./cmd/server` for headless dev or Playwright.
 
 ## Using the agents
 

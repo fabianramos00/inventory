@@ -7,6 +7,7 @@ permission:
     "main.go": allow
     "app.go": allow
     "internal/**": allow
+    "cmd/**": allow
     "migrations/**": allow
     "go.mod": allow
     "go.sum": allow

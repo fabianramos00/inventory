@@ -103,13 +103,36 @@ Transitioning to `received` is the only status change with stock side effects.
 | `pending` | Not paid |
 | `paid` | Paid |
 
+## Database representation
+
+PostgreSQL stores SQLAlchemy enum **names**, not values:
+
+| API/JSON | Database label |
+|---|---|
+| `cash` / `credit` / `debit` | `CASH` / `CREDIT` / `DEBIT` |
+| `pending` / `partial` / `paid` (sale payment) | `PENDING` / `PARTIAL` / `PAID` |
+| `pending` / `partial` / `delivered` (delivery) | `PENDING` / `PARTIAL` / `DELIVERED` |
+| `pending` / `sent` / `received` / `cancelled` (order) | `PENDING` / `SENT` / `RECEIVED` / `CANCELLED` |
+| `pending` / `paid` (order payment) | `PENDING` / `PAID` |
+
+Go must map API lowercase values to database labels on writes and filters,
+and map labels back to lowercase on reads. Filtering a cast enum with the
+wrong case returns an empty result instead of an error. Sale payment and
+purchase-order payment are different enum types; `PARTIAL` exists only for
+sales.
+
+Several legacy defaults are Python-side only and are absent from PostgreSQL:
+`products.stock_quantity` (0), `products.low_stock_threshold` (10),
+`sales.amount_paid` (0), `sale_items.delivered_quantity` (0), and
+`purchase_orders.total_amount` (0). Go inserts must supply them explicitly.
+
 ## Invariants
 
 1. `products.sku` is unique. `clients.identity_card` is unique when present.
 2. `sale_items.quantity > 0`; `delivered_quantity` is between 0 and
-   `quantity`. The legacy add/update item paths enforce this; the initial
-   create path does not. The UI validates it. Preserve the legacy behavior in
-   v1 and record the gap.
+   `quantity`. PostgreSQL enforces this with `ck_sale_items_delivered_valid`;
+   the legacy add/update item paths also validate it. The create path must map
+   the database constraint violation to a readable `400`/`422`.
 3. `amount_paid` is non-negative. The UI prevents overpayment. The legacy API
    accepts `amount_paid > total_amount` and marks the sale paid; preserve that
    behavior in v1 and record the gap.

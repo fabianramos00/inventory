@@ -20,9 +20,12 @@ behavior. They are not optional polish.
 # Go
 go test ./...
 go test -race ./...
-go test -tags=integration ./...
 go vet ./...
 gofmt -l .
+
+# Go integration (auth flow, real PostgreSQL 17)
+INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
+  go test -v ./internal/httpapi
 
 # Frontend
 cd frontend
@@ -63,12 +66,15 @@ Use `httptest.NewServer` with a real router and fake services.
 
 ## Go integration tests
 
-Use a dedicated PostgreSQL database:
+Use a dedicated PostgreSQL 17 database from `docker compose`:
 
 ```bash
-export TEST_DATABASE_URL="postgresql://inventory:inventory@localhost:5432/inventory_test"
-go test -tags=integration ./...
+export INVENTORY_TEST_DATABASE_URL="postgresql://inventory:inventory@localhost:5433/inventory_desktop_test"
+go test -v ./internal/httpapi
 ```
+
+The integration test is gated by the environment variable; without it the
+test skips instead of failing.
 
 Rules:
 
@@ -85,6 +91,34 @@ Rules:
   - Deleting a received order does not reverse stock (legacy behavior).
   - Unique SKU and identity card violations map to a readable error.
   - Dashboard queries return zero-filled 7-day data.
+
+## Phase 2 auth coverage
+
+The following is covered now:
+
+- JWT round-trip, signature failure, and expiry.
+- Refresh-token randomness, SHA-256 hashing, rotation, old-token rejection,
+  logout revocation, inactive-user rejection.
+- Login handler: form-urlencoded input, exact 401 details, rate limiting,
+  normalized error envelope, no password-hash serialization.
+- Bearer enforcement on protected routes, dev-mode CORS origin gating, and
+  rejection of dev origins when dev mode is off.
+- `Cache-Control: no-store` and `Pragma: no-cache` on login, refresh, and
+  logout responses.
+- Config: blank secret generation, placeholder rejection, short-secret
+  rejection, blank env fallback, config file mode hardening to `0600` on read,
+  and symlink rejection.
+- HTTP server: rejects non-loopback listen addresses and accepts
+  `127.0.0.1:0`.
+- Frontend: rotated refresh token storage, `auth:refreshed` state sync,
+  fail-closed production bootstrap, es-CO/COP formatters.
+- Playwright: real login → Home → logout against `cmd/server` and the test
+  database. The seed reads `SEED_EMAIL`/`SEED_PASSWORD`/`SEED_NAME` from the
+  environment so the password never appears in argv, and the test secret is
+  at least 32 bytes.
+
+Deferred until Phase 3: inventory CRUD, sales/stock, purchase orders,
+dashboard, user management, and the full 67-endpoint parity matrix.
 
 ## Frontend tests
 
@@ -163,7 +197,7 @@ fixtures in replay mode. Do not mark parity as passing without a run.
 
 | Module | Endpoints | Status |
 |---|---:|---|
-| Auth | 3 | Pending |
+| Auth | 3 | Covered (Phase 2) |
 | Users | 5 | Pending |
 | Inventory | 24 | Pending |
 | Sales + clients | 15 | Pending |
