@@ -4,14 +4,14 @@ import (
 	"log/slog"
 	"net/http"
 
-	"inventory-desktop/internal/application"
+	"inventory-desktop/internal/ports/inbound"
 )
 
-func NewRouter(authService *application.AuthService, logger *slog.Logger, devMode ...bool) http.Handler {
+func NewRouter(authService inbound.AuthUseCase, logger *slog.Logger, devMode ...bool) http.Handler {
 	return NewRouterWithBackend(authService, logger, "", devMode...)
 }
 
-func NewRouterWithBackend(authService *application.AuthService, logger *slog.Logger, backend string, devMode ...bool) http.Handler {
+func NewRouterWithBackend(authService inbound.AuthUseCase, logger *slog.Logger, backend string, devMode ...bool) http.Handler {
 	dev := len(devMode) > 0 && devMode[0]
 	if backend == "" {
 		backend = "unknown"

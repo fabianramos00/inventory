@@ -8,17 +8,21 @@ adapters.
 
 - Go 1.26.
 - Standard library `net/http` with `http.ServeMux` method patterns.
-- `pgx/v5` + `pgxpool` for PostgreSQL.
-- `database/sql` + `modernc.org/sqlite` for the local SQLite fallback.
-- `goose` for embedded SQL migrations.
+- GORM (`gorm.io/gorm`) behind outbound adapters, with
+  `gorm.io/driver/postgres` and pure-Go `github.com/glebarez/sqlite`.
+- `pgx/v5` underneath the PostgreSQL GORM driver.
+- `goose` for embedded SQL migrations, run on the `*sql.DB` GORM exposes.
 - `golang-jwt/jwt/v5` for access tokens.
 - `golang.org/x/crypto/bcrypt` for passwords.
 - `shopspring/decimal` for money.
 - `log/slog` for structured logs.
 - `testing` + `httptest` for tests.
 
-No ORM. No web framework. No new dependency without an entry in
-[DECISIONS.md](DECISIONS.md).
+GORM is limited to `internal/adapters/outbound/persistence/gormstore` and the DB open helpers in `internal/db`; it
+never leaks into domain, ports, application, or inbound HTTP. Migrations are
+always goose SQL, never GORM AutoMigrate. Raw SQL remains allowed inside the
+adapter for dashboard aggregates, stock locking, and complex queries. No web
+framework. No new dependency without an entry in [DECISIONS.md](DECISIONS.md).
 
 ## Layout
 
@@ -34,35 +38,42 @@ internal/
     dashboard.go
     users.go
   ports/
-    users.go            UserRepository interface
-    refresh_tokens.go   RefreshTokenRepository interface
+    inbound/
+      auth.go           AuthUseCase, LoginResult, TokenPair
+    outbound/
+      users.go          UserRepository interface
+      refresh_tokens.go RefreshTokenRepository interface
+      password_hasher.go
+      access_token_issuer.go
+      refresh_token_service.go
   domain/
-    user.go             User, RefreshToken
-    errors.go           ErrNotFound and other domain errors
+    user.go             User, RefreshToken (no JSON tags)
+    errors.go           ErrNotFound and auth sentinel errors
   adapters/
     inbound/
       httpapi/
         router.go       route table
         middleware.go   auth, CORS, recovery, request ID, logging
         response.go     JSON and error helpers
+        auth.go         auth handlers and HTTP DTOs
         handlers/       one file per module
     outbound/
       persistence/
-        postgres/
-          users.go
-          refresh_tokens.go
-        sqlite/
-          users.go
-          refresh_tokens.go
-  auth/
-    jwt.go
-    password.go
-    refresh.go
+        gormstore/
+          timestamp.go  fixed-width UTC Timestamp type
+          user_model.go
+          refresh_token_model.go
+          users.go      UserRepository
+          refresh_tokens.go RefreshTokenRepository
+      security/
+        jwt.go          AccessTokenIssuer
+        password.go     PasswordHasher
+        refresh.go      RefreshTokenService
   config/
     config.go
   db/
-    postgres.go         OpenPostgres, MigratePostgres
-    sqlite.go           OpenSQLite, MigrateSQLite
+    postgres.go         OpenPostgresGORM, MigratePostgres
+    sqlite.go           OpenSQLiteGORM, MigrateSQLite
   bootstrap/
     database.go         DB_MODE selection and store wiring
 migrations/
@@ -70,9 +81,11 @@ migrations/
   sqlite/
 ```
 
-Dependency direction: `adapters/inbound/httpapi → application → ports ← adapters/outbound/persistence → db`.
-The domain package is shared. Application services depend only on port
-interfaces. Handlers never issue SQL. Repositories never write HTTP responses.
+Dependency direction: `adapters/inbound/httpapi → ports/inbound ← application → ports/outbound ← adapters/outbound/{persistence,security}`.
+The domain package is shared. Application services depend only on inbound and
+outbound port interfaces. Inbound handlers depend on `inbound.AuthUseCase`, not
+on concrete services. Handlers never issue SQL. Repositories never write HTTP
+responses.
 
 ## HTTP layer
 
@@ -111,25 +124,31 @@ transaction.
 
 ## Repository adapters
 
-Ports live in `internal/ports` and are consumed by services. Each backend
-implements the same interfaces:
-
-- `internal/adapters/outbound/persistence/postgres` uses `pgxpool.Pool`,
-  `pgx.Tx`, and explicit SQL.
-- `internal/adapters/outbound/persistence/sqlite` uses `database/sql` and
-  `modernc.org/sqlite`.
+Ports live in `internal/ports`. `internal/ports/inbound` defines use cases
+consumed by inbound adapters; `internal/ports/outbound` defines repositories and
+security services consumed by application services. One GORM adapter,
+`internal/adapters/outbound/persistence/gormstore`, implements the same
+outbound interfaces for PostgreSQL and SQLite. Bootstrap selects the backend
+and injects the repositories.
 
 Rules:
 
-- Use `QueryRow`, `Query`, and `pgx.CollectRows` in PostgreSQL.
-- Use `pgx.Tx` for multi-statement writes; use `*sql.Tx` in SQLite.
+- Keep GORM types and imports inside `gormstore` and `internal/db`; return domain entities.
+- Use GORM for CRUD. Use raw SQL through the same `*gorm.DB` session
+  for dashboard aggregates, stock locking, `RETURNING` rotations, and other
+  complex statements.
 - Parameterized queries only. Never concatenate SQL values.
 - Pagination fetches `limit + 1` rows and returns `(items, hasNext)`.
 - Search uses the legacy columns and `ILIKE` semantics; cap input length.
 - Lock products with `SELECT ... FOR UPDATE` before stock changes.
-- Map `pgx.ErrNoRows` and `sql.ErrNoRows` to `domain.ErrNotFound`.
-- SQLite booleans are scanned as integers; timestamps are stored as fixed-width
-  UTC strings so comparisons and round-trips stay correct.
+- Map `gorm.ErrRecordNotFound` and `sql.ErrNoRows` to `domain.ErrNotFound`.
+- Multi-row writes use `db.Transaction` so both dialects commit atomically.
+- Configure GORM with the silent logger; never log SQL values, tokens,
+  passwords, or full rows.
+- `gormstore.Timestamp` stores fixed-width UTC text. PostgreSQL accepts the
+  same string for `timestamptz`, and SQLite keeps the lexical order used by
+  `expires_at > ?`.
+- SQLite booleans are stored as integers; GORM converts them on read.
 - Scan `NUMERIC` into a decimal, never into `float64`:
 
 ```go
@@ -138,13 +157,15 @@ if err := row.Scan(&raw); err != nil { ... }
 amount, err := decimal.NewFromString(raw)
 ```
 
-Use `pgtype.Numeric` only when a query needs its integer/scale parts. Add a
+Use `pgtype.Numeric` only when a raw query needs its integer/scale parts. Add a
 compile-time interface assertion when implementing a port.
 
 ## Data model
 
 Domain structs live in `internal/domain` and carry no database or HTTP
-coupling. Keep JSON tags aligned with [API-CONTRACT.md](API-CONTRACT.md).
+coupling, including JSON tags. The inbound HTTP adapter owns request/response
+DTOs and their JSON tags; behavior must match
+[API-CONTRACT.md](API-CONTRACT.md).
 
 Money fields are `decimal.Decimal`. JSON marshaling must emit a number.
 Implement a small `Money` wrapper only if both encoding and scanning are
@@ -163,6 +184,11 @@ Dates are `time.Time` in UTC. Format responses with `time.RFC3339`.
 - bcrypt cost from config, default 12; tests use 4.
 - Reject inactive users on login and on every authenticated request.
 - `is_superuser` is required for all `/users` routes.
+- JWT, bcrypt, and refresh-token crypto are outbound security adapters under
+  `internal/adapters/outbound/security`; the composition root injects them into
+  `application.AuthService` through the outbound ports.
+- Auth sentinel errors live in `internal/domain` and are mapped to HTTP
+  responses by the inbound adapter.
 
 Never log passwords, tokens, authorization headers, or full request bodies.
 
@@ -219,7 +245,9 @@ is used. Generate and persist `SECRET_KEY` when missing.
 - Every migration is forward-only unless a rollback is safe and tested.
 - Run at startup when `AUTO_MIGRATE=true`; otherwise expose an explicit
   migrate command.
-- Never edit a migration that has shipped.
+- The runner is goose on the `*sql.DB` returned by `OpenPostgresGORM` or
+  `OpenSQLiteGORM`. Never use GORM AutoMigrate, and never edit a migration that
+  has shipped.
 
 ## Errors
 

@@ -45,8 +45,8 @@ store counter, with no dependency on a remote web server.
 | Layer | Technology |
 |---|---|
 | Shell | Wails v2 / Go 1.26 |
-| API | `net/http`, `pgx/v5`, `goose` |
-| Database | PostgreSQL 17 primary; SQLite offline fallback |
+| API | `net/http`, GORM, `goose` |
+| Database | PostgreSQL 17 primary; GORM outbound adapters; SQLite offline fallback |
 | UI | React 19, TypeScript 6, Vite 8 |
 | Data | TanStack Query v5, axios |
 | Forms | react-hook-form, zod |
@@ -61,10 +61,12 @@ opencode.json              opencode config and legacy references
 docs/                      architecture, domain, API, role docs
 docs/work/                 non-developer reports and specifications
 internal/domain/           entities and domain errors
-internal/ports/            repository interfaces
+internal/ports/inbound/    use-case interfaces
+internal/ports/outbound/   repository and security interfaces
 internal/application/      use cases
 internal/adapters/inbound/httpapi/ inbound HTTP adapter
-internal/adapters/outbound/persistence/{postgres,sqlite}/ outbound adapters
+internal/adapters/outbound/persistence/gormstore/ GORM outbound adapter
+internal/adapters/outbound/security/ JWT, bcrypt, refresh tokens
 ```
 
 Implemented in Phase 2: `main.go`, `app.go`, `main_bindings.go`,

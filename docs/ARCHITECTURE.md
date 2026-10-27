@@ -107,16 +107,28 @@ cover the desktop router.
 
 ## Database
 
-Persistence sits behind ports/adapters. `internal/domain` holds entities and
-domain errors, `internal/ports` holds consumer-facing repository interfaces,
-`internal/application` depends only on those interfaces, and backend adapters
-live under `internal/adapters/outbound/persistence/{postgres,sqlite}`. See
-[DECISIONS.md](DECISIONS.md) ADR-0011.
+Persistence and security sit behind ports/adapters. `internal/domain` holds
+entities and domain errors, `internal/ports/inbound` holds use-case interfaces,
+`internal/ports/outbound` holds repository and security interfaces,
+`internal/application` depends only on those interfaces, and adapters live under
+`internal/adapters/{inbound,outbound}`. See [DECISIONS.md](DECISIONS.md)
+ADR-0011 and ADR-0014.
+
+One GORM store in `internal/adapters/outbound/persistence/gormstore` implements
+the outbound repository ports for both backends. GORM appears only in that
+adapter and in the DB open helpers under `internal/db`; domain, ports,
+application, and inbound HTTP stay GORM-free. `internal/bootstrap` may hold the
+opaque `*gorm.DB` handle while wiring. Migrations remain goose SQL, never GORM
+AutoMigrate. Raw SQL stays available inside the adapter for dashboard
+aggregates, stock locking, and any query where a hand-written statement is
+clearer or faster.
 
 PostgreSQL:
 
-- PostgreSQL 17, driver `pgx/v5` with `pgxpool`.
-- Migrations in `migrations/postgres/`, embedded in the binary.
+- PostgreSQL 17 with `gorm.io/driver/postgres`, which uses `pgx/v5` under
+  `database/sql`.
+- Migrations in `migrations/postgres/`, embedded in the binary and run through
+  goose on the same `*sql.DB` GORM exposes.
 - Schema is a faithful translation of the legacy Alembic schema.
 - Every write that spans rows uses a transaction.
 - Stock mutations lock product rows (`SELECT ... FOR UPDATE`) before changing
@@ -125,12 +137,13 @@ PostgreSQL:
 
 SQLite:
 
-- Driver `modernc.org/sqlite` (pure Go, no CGO).
-- Opened through `database/sql` with foreign keys, a 5-second busy timeout,
-  and WAL enabled. The parent directory is always tightened to `0700`, a
-  symlink at the database path is rejected, and the database file plus any
-  existing `-wal`/`-shm` sidecars are best-effort set to `0600`.
-- Migrations in `migrations/sqlite/`, embedded in the binary.
+- GORM driver `github.com/glebarez/sqlite` (pure Go, no CGO).
+- Opened through GORM with foreign keys, a 5-second busy timeout, and WAL
+  enabled. The parent directory is always tightened to `0700`, a symlink at the
+  database path is rejected, and the database file plus any existing
+  `-wal`/`-shm` sidecars are best-effort set to `0600`.
+- Migrations in `migrations/sqlite/`, embedded in the binary and run through
+  goose.
 - Only the auth tables exist today. The remaining business tables are Phase 3
   work; full-schema parity is not yet available offline.
 - Booleans are stored as `0`/`1`; timestamps are stored as fixed-width UTC
@@ -178,18 +191,19 @@ app.go                   Wails application bindings
 wails.json               Wails project config
 internal/
   application/           business rules and transactions
-  ports/                 repository interfaces consumed by services
+  ports/
+    inbound/             use-case interfaces consumed by inbound adapters
+    outbound/            repository and security interfaces consumed by services
   domain/                entities and domain errors
   adapters/
     inbound/
-      httpapi/           router, handlers, middleware (inbound adapter)
+      httpapi/           router, handlers, middleware, HTTP DTOs (inbound adapter)
     outbound/
       persistence/
-        postgres/        pgx repository implementations
-        sqlite/          database/sql repository implementations
-  auth/                  JWT, bcrypt, refresh tokens
+        gormstore/       GORM models and repository adapters
+      security/          JWT, bcrypt, refresh-token crypto
   config/                env and file config
-  db/                    backend-specific open and goose runners
+  db/                    GORM open + goose runners
   bootstrap/             backend selection and store wiring
 migrations/
   postgres/              PostgreSQL goose SQL files
@@ -197,9 +211,11 @@ migrations/
 frontend/                copied React application
 ```
 
-Dependency direction: `adapters/inbound/httpapi → application → ports ← adapters/outbound/persistence → db`.
-The domain package is shared by all layers. `application` never imports pgx,
-SQLite, or concrete adapters. `adapters/inbound/httpapi` never issues SQL.
+Dependency direction: `adapters/inbound/httpapi → ports/inbound ← application →
+ports/outbound ← adapters/outbound/{persistence,security}`. Persistence adapters
+sit on `db`. The domain package is shared by all layers. `application` never
+imports pgx, SQLite, concrete adapters, or security implementations.
+`adapters/inbound/httpapi` never issues SQL and never imports `application`.
 
 ## Failure modes
 

@@ -1,4 +1,4 @@
-package sqlite
+package gormstore
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 // whole-second and trailing-zero values instead of requiring nine digits.
 func TestRefreshTokenExpiryRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	conn, err := db.OpenSQLite(filepath.Join(t.TempDir(), "inventory.sqlite"))
+	gormDB, conn, err := db.OpenSQLiteGORM(filepath.Join(t.TempDir(), "inventory.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,8 +27,8 @@ func TestRefreshTokenExpiryRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	users := NewUserRepository(conn)
-	tokens := NewRefreshTokenRepository(conn)
+	users := NewUserStore(gormDB)
+	tokens := NewRefreshTokenStore(gormDB)
 	user := &domain.User{FullName: "Expiry User", Email: "expiry@sqlite.test", HashedPassword: "hash", IsActive: true}
 	if err := users.Create(ctx, user); err != nil {
 		t.Fatal(err)

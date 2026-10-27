@@ -5,36 +5,30 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	postgresmigrations "inventory-desktop/migrations/postgres"
 )
 
-func OpenPostgres(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	cfg, err := pgxpool.ParseConfig(dsn)
+func OpenPostgresGORM(dsn string) (*gorm.DB, *sql.DB, error) {
+	gormDB, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger:               logger.Default.LogMode(logger.Silent),
+		DisableAutomaticPing: true,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("parse database url: %w", err)
+		return nil, nil, fmt.Errorf("open postgres: %w", err)
 	}
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	conn, err := gormDB.DB()
 	if err != nil {
-		return nil, fmt.Errorf("open database pool: %w", err)
+		return nil, nil, fmt.Errorf("access postgres connection: %w", err)
 	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("ping database: %w", err)
-	}
-	return pool, nil
+	return gormDB, conn, nil
 }
 
-func MigratePostgres(ctx context.Context, dsn string) error {
-	conn, err := sql.Open("pgx", dsn)
-	if err != nil {
-		return fmt.Errorf("open migration connection: %w", err)
-	}
-	defer conn.Close()
-
+func MigratePostgres(ctx context.Context, conn *sql.DB) error {
 	provider, err := goose.NewProvider(goose.DialectPostgres, conn, postgresmigrations.FS)
 	if err != nil {
 		return fmt.Errorf("create migration provider: %w", err)

@@ -7,21 +7,29 @@ import (
 	"sync"
 	"time"
 
-	"inventory-desktop/internal/application"
 	"inventory-desktop/internal/domain"
+	"inventory-desktop/internal/ports/inbound"
 )
 
 type AuthHandler struct {
-	service *application.AuthService
+	service inbound.AuthUseCase
 	logger  *slog.Logger
 	limiter *loginLimiter
 }
 
+type userResponse struct {
+	ID          int64  `json:"id"`
+	FullName    string `json:"full_name"`
+	Email       string `json:"email"`
+	IsActive    bool   `json:"is_active"`
+	IsSuperuser bool   `json:"is_superuser"`
+}
+
 type loginResponse struct {
-	AccessToken  string       `json:"access_token"`
-	RefreshToken string       `json:"refresh_token"`
-	TokenType    string       `json:"token_type"`
-	User         *domain.User `json:"user"`
+	AccessToken  string        `json:"access_token"`
+	RefreshToken string        `json:"refresh_token"`
+	TokenType    string        `json:"token_type"`
+	User         *userResponse `json:"user"`
 }
 
 type refreshResponse struct {
@@ -34,7 +42,7 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func NewAuthHandler(authService *application.AuthService, logger *slog.Logger) *AuthHandler {
+func NewAuthHandler(authService inbound.AuthUseCase, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
 		service: authService,
 		logger:  logger,
@@ -71,7 +79,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
 		TokenType:    "bearer",
-		User:         result.User,
+		User: &userResponse{
+			ID:          result.User.ID,
+			FullName:    result.User.FullName,
+			Email:       result.User.Email,
+			IsActive:    result.User.IsActive,
+			IsSuperuser: result.User.IsSuperuser,
+		},
 	})
 }
 
@@ -117,11 +131,11 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) writeAuthError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, application.ErrInvalidCredentials):
+	case errors.Is(err, domain.ErrInvalidCredentials):
 		writeError(w, http.StatusUnauthorized, "Incorrect email or password", "INVALID_CREDENTIALS")
-	case errors.Is(err, application.ErrInactiveUser):
+	case errors.Is(err, domain.ErrInactiveUser):
 		writeError(w, http.StatusUnauthorized, "Inactive user", "INACTIVE_USER")
-	case errors.Is(err, application.ErrInvalidRefresh):
+	case errors.Is(err, domain.ErrInvalidRefresh):
 		writeError(w, http.StatusUnauthorized, "Invalid or expired refresh token", "INVALID_REFRESH_TOKEN")
 	default:
 		h.logger.Error("auth request failed", "error", err)

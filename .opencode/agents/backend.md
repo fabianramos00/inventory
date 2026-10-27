@@ -27,8 +27,9 @@ must match the existing `/api/v1` contract.
 
 - Wails v2 desktop app. Go starts an HTTP server on `127.0.0.1:0` and exposes
   the base URL through `GetAPIBaseURL`.
-- Go 1.26, standard library `net/http`, `pgx/v5`, `pgxpool`, `goose`,
+- Go 1.26, standard library `net/http`, GORM (`gorm.io/gorm`), `goose`,
   `golang-jwt/jwt/v5`, `x/crypto/bcrypt`, `shopspring/decimal`, `log/slog`.
+  GORM is only allowed in outbound persistence and the DB open helpers.
 - PostgreSQL 17 is the primary persistence layer. A local SQLite fallback uses `modernc.org/sqlite` when PostgreSQL is unreachable.
 - Legacy reference: `../inventory-api` (FastAPI + SQLAlchemy + Alembic).
 - Locale: UTC storage, `America/Bogota` for dashboard grouping. Money JSON
@@ -70,21 +71,20 @@ main.go, app.go, main_bindings.go
 cmd/server/, cmd/seed/
 internal/adapters/inbound/httpapi/   inbound HTTP adapter
 internal/application/                use cases; imports only domain + ports
-internal/ports/                      UserRepository, RefreshTokenRepository
+internal/ports/inbound/              AuthUseCase and result types
+internal/ports/outbound/             repository + security interfaces
 internal/domain/                     entities and domain errors
 internal/adapters/outbound/persistence/
-  postgres/                          pgx adapters
-  sqlite/                            modernc.org/sqlite adapters
-internal/bootstrap/               DB_MODE selection and store wiring
-internal/auth/                    JWT, bcrypt, refresh tokens
+  gormstore/                         GORM models + repository adapters
+internal/adapters/outbound/security/ JWT, bcrypt, refresh tokens
+internal/bootstrap/                  DB_MODE selection and store wiring
 internal/config/
-internal/db/                      Open/Migrate for each backend
+internal/db/                         Open/Migrate for each backend
 migrations/postgres/, migrations/sqlite/
 ```
 
-Dependency direction: `adapters/inbound/httpapi → application → ports ← adapters/outbound/persistence → db`.
-Application code must not import pgx, `database/sql`, the inbound HTTP adapter, or either
-outbound persistence adapter. Handlers never issue SQL; repositories never write HTTP.
+Dependency direction: `adapters/inbound/httpapi → ports/inbound ← application → ports/outbound ← adapters/outbound/{persistence,security}`.
+Application code must not import pgx, `database/sql`, JWT/bcrypt code, the inbound HTTP adapter, or either outbound adapter. Handlers never issue SQL; repositories never write HTTP.
 
 ### API
 
@@ -114,7 +114,7 @@ outbound persistence adapter. Handlers never issue SQL; repositories never write
 
 ### Database
 
-- `pgxpool` with explicit SQL and parameters.
+- GORM for CRUD inside `gormstore`; explicit SQL (`gorm.DB.Raw`) for locking, aggregates, and dialect-sensitive queries.
 - Transactions for multi-row writes.
 - `SELECT ... FOR UPDATE` before stock changes.
 - `pgx.CollectRows` for list queries.
@@ -150,7 +150,7 @@ wails build
   an ADR in `docs/DECISIONS.md`.
 - Keep use cases backend-agnostic. Add behavior to both adapters or explicitly
   document why a backend does not support it.
-- No ORM, no web framework, no speculative abstractions.
+- GORM only in outbound persistence/db; never in domain, ports, application, or inbound HTTP. No web framework, no speculative abstractions.
 - No comments unless explaining why.
 - Never log secrets, tokens, passwords, or full bodies.
 - Never trust client totals, statuses, or stock.

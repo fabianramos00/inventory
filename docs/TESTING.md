@@ -63,6 +63,28 @@ suite before release.
   - Password hashing and JWT claims.
 - Each non-trivial branch has at least one case.
 
+### Application-layer port tests
+
+`internal/application/auth_test.go` tests `AuthService` through fakes for every
+outbound port (`UserRepository`, `RefreshTokenRepository`, `PasswordHasher`,
+`AccessTokenIssuer`, `RefreshTokenService`). No database, HTTP server, JWT
+library, or bcrypt is involved.
+
+Covered:
+
+- Login success returns the pair and user, and persists the hashed refresh
+  token with the right user ID and a future expiry.
+- Login rejects a wrong password (`domain.ErrInvalidCredentials`) and an
+  inactive user (`domain.ErrInactiveUser`) without persisting a token.
+- Refresh rotates the old hash, returns the new pair, and keeps the rotation
+  expiry at `now + TTL`.
+- Refresh rejects unknown/expired tokens and inactive users with
+  `domain.ErrInvalidRefresh`, without rotating.
+- Logout revokes the hashed token; an empty token is a no-op.
+- `AuthenticateAccessToken` returns the user, and rejects bad tokens and
+  inactive users with `domain.ErrInvalidAccess`.
+- Compile-time assertion that `AuthService` satisfies `inbound.AuthUseCase`.
+
 ## Go handler tests
 
 Use `httptest.NewServer` with a real router and fake services.
@@ -104,14 +126,15 @@ Rules:
 
 ## Repository contract tests
 
-`internal/adapters/outbound/persistence/contract_test.go` runs one shared suite against
-both persistence adapters, so PostgreSQL and SQLite cannot drift behind the
-same `internal/ports` interfaces.
+`internal/adapters/outbound/persistence/contract_test.go` runs one shared suite
+through the GORM store against both backends, so PostgreSQL and SQLite cannot
+drift behind the same `internal/ports/outbound` interfaces.
 
-- PostgreSQL: uses `INVENTORY_TEST_DATABASE_URL`, applies goose migrations, and
-  truncates `refresh_tokens`/`users`. It skips when the variable is unset.
-- SQLite: uses a fresh database under `t.TempDir()`, applies the SQLite goose
-  migrations, and needs no external server.
+- PostgreSQL: opens `db.OpenPostgresGORM`, uses `INVENTORY_TEST_DATABASE_URL`,
+  applies goose migrations on the exposed `*sql.DB`, and truncates
+  `refresh_tokens`/`users`. It skips when the variable is unset.
+- SQLite: opens `db.OpenSQLiteGORM` on a fresh database under `t.TempDir()`,
+  applies the SQLite goose migrations, and needs no external server.
 - The contract suite and the `httpapi` auth integration test share the test
   database; both take the PostgreSQL advisory lock in `tests/testdb` so
   parallel package test binaries cannot truncate each other's fixtures.
@@ -130,19 +153,22 @@ SQLite currently only has the `users` and `refresh_tokens` tables. The rest of
 the business schema is Phase 3 work, so contract tests must not assume
 inventory, sales, orders, or dashboard tables exist on the SQLite adapter.
 
-Refresh-token timestamps are written with a fixed-width UTC format
-(`2006-01-02T15:04:05.000000000Z`) so the lexicographic `expires_at > ?`
-comparison stays chronological. The read path parses with `time.RFC3339Nano`
-and normalizes to UTC, so values with a zero fraction or trimmed trailing
-zeros are accepted instead of failing. Coverage:
+Refresh-token timestamps use `gormstore.Timestamp`, which writes a fixed-width
+UTC format (`2006-01-02T15:04:05.000000000Z`) so the lexicographic
+`expires_at > ?` comparison stays chronological on SQLite and PostgreSQL. The
+read path parses with `time.RFC3339Nano` and normalizes to UTC, so values with
+a zero fraction or trimmed trailing zeros are accepted instead of failing.
+Coverage:
 
-- `internal/adapters/outbound/persistence/sqlite/values_test.go` verifies the
-  fixed-width writer and round trip for 0, trailing-zero, and full
-  nanoseconds.
-- `internal/adapters/outbound/persistence/sqlite/refresh_tokens_test.go` runs
-  `FindValid`/`Rotate` against a temporary database with driver-normalized
-  expiry strings for those three shapes, and checks both validity and
+- `internal/adapters/outbound/persistence/gormstore/models_test.go` verifies
+  the fixed-width writer and round trip for 0, trailing-zero, and full
+  nanoseconds, plus driver-normalized strings.
+- `internal/adapters/outbound/persistence/gormstore/refresh_tokens_test.go`
+  runs `FindValid`/`Rotate` against a temporary database with normalized expiry
+  strings for those three shapes, and checks both validity and
   `domain.ErrNotFound` after expiry.
+- `internal/adapters/outbound/persistence/gormstore/users_test.go` checks that
+  a nullable `users.full_name` reads back as an empty string.
 
 ## Bootstrap and fallback tests
 

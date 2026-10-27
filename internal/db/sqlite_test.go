@@ -21,7 +21,7 @@ func TestOpenSQLiteTightensExistingParentDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	conn, err := OpenSQLite(filepath.Join(dir, "inventory.sqlite"))
+	_, conn, err := OpenSQLiteGORM(filepath.Join(dir, "inventory.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,10 +47,10 @@ func TestOpenSQLiteRejectsSymlink(t *testing.T) {
 		t.Skipf("symlinks are unavailable: %v", err)
 	}
 
-	conn, err := OpenSQLite(link)
+	_, conn, err := OpenSQLiteGORM(link)
 	if err == nil {
 		conn.Close()
-		t.Fatal("OpenSQLite accepted a symlink database path")
+		t.Fatal("OpenSQLiteGORM accepted a symlink database path")
 	}
 }
 
@@ -60,7 +60,7 @@ func TestOpenSQLiteFilePermissions(t *testing.T) {
 	}
 
 	path := filepath.Join(t.TempDir(), "inventory.sqlite")
-	conn, err := OpenSQLite(path)
+	_, conn, err := OpenSQLiteGORM(path)
 	if err != nil {
 		t.Fatal(err)
 	}

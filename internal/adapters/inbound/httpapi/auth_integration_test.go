@@ -15,19 +15,27 @@ import (
 	"time"
 
 	"inventory-desktop/internal/adapters/inbound/httpapi"
-	"inventory-desktop/internal/adapters/outbound/persistence/postgres"
+	"inventory-desktop/internal/adapters/outbound/persistence/gormstore"
+	"inventory-desktop/internal/adapters/outbound/security"
 	"inventory-desktop/internal/application"
-	"inventory-desktop/internal/auth"
 	"inventory-desktop/internal/db"
 	"inventory-desktop/internal/domain"
 	"inventory-desktop/tests/testdb"
 )
 
+type authUser struct {
+	ID          int64  `json:"id"`
+	FullName    string `json:"full_name"`
+	Email       string `json:"email"`
+	IsActive    bool   `json:"is_active"`
+	IsSuperuser bool   `json:"is_superuser"`
+}
+
 type authResponse struct {
-	AccessToken  string       `json:"access_token"`
-	RefreshToken string       `json:"refresh_token"`
-	TokenType    string       `json:"token_type"`
-	User         *domain.User `json:"user"`
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	TokenType    string    `json:"token_type"`
+	User         *authUser `json:"user"`
 }
 
 type errorResponse struct {
@@ -49,20 +57,24 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer release()
-	if err := db.MigratePostgres(ctx, dsn); err != nil {
-		t.Fatal(err)
-	}
-	pool, err := db.OpenPostgres(ctx, dsn)
+	gormDB, conn, err := db.OpenPostgresGORM(dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pool.Close()
-	if _, err := pool.Exec(ctx, "TRUNCATE refresh_tokens, users RESTART IDENTITY CASCADE"); err != nil {
+	defer conn.Close()
+	if err := conn.PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MigratePostgres(ctx, conn); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, "TRUNCATE refresh_tokens, users RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatal(err)
 	}
 
-	users := postgres.NewUserRepository(pool)
-	hash, err := auth.HashPassword("admin12345", 4)
+	users := gormstore.NewUserStore(gormDB)
+	passwords := security.NewPasswordHasher(4)
+	hash, err := passwords.Hash("admin12345")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +82,7 @@ func TestAuthFlow(t *testing.T) {
 	if err := users.Create(ctx, admin); err != nil {
 		t.Fatal(err)
 	}
-	inactiveHash, err := auth.HashPassword("inactive123", 4)
+	inactiveHash, err := passwords.Hash("inactive123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +91,14 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	authService := application.NewAuthService(users, postgres.NewRefreshTokenRepository(pool), "test-secret", "postgres", 30*time.Minute, 7*24*time.Hour)
+	authService := application.NewAuthService(
+		users,
+		gormstore.NewRefreshTokenStore(gormDB),
+		passwords,
+		security.NewAccessTokenIssuer("test-secret", 30*time.Minute, "inventory-desktop/postgres"),
+		security.NewRefreshTokenService(),
+		7*24*time.Hour,
+	)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := httptest.NewServer(httpapi.NewRouter(authService, logger, true))
 	defer server.Close()
@@ -95,9 +114,6 @@ func TestAuthFlow(t *testing.T) {
 		}
 		if response.User == nil || response.User.Email != "admin@example.com" || !response.User.IsSuperuser {
 			t.Fatalf("unexpected user: %+v", response.User)
-		}
-		if response.User.HashedPassword != "" {
-			t.Fatal("hashed password must never be serialized")
 		}
 	})
 
@@ -253,6 +269,9 @@ func login(t *testing.T, baseURL, email, password string) (authResponse, http.He
 	status, raw, header := postFormRaw(t, baseURL+"/api/v1/auth/login", email, password)
 	if status != http.StatusOK {
 		t.Fatalf("login status = %d body = %s", status, raw)
+	}
+	if bytes.Contains(raw, []byte("hashed_password")) || bytes.Contains(raw, []byte("HashedPassword")) {
+		t.Fatal("hashed password must never be serialized")
 	}
 	var response authResponse
 	if err := json.Unmarshal(raw, &response); err != nil {

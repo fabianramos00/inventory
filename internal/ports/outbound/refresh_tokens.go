@@ -1,4 +1,4 @@
-package ports
+package outbound
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"inventory-desktop/internal/domain"
 )
 
+// RefreshTokenRepository is the outbound port for refresh-token persistence.
 type RefreshTokenRepository interface {
 	Create(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error
 	FindValid(ctx context.Context, tokenHash string, now time.Time) (*domain.RefreshToken, error)

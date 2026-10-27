@@ -156,16 +156,22 @@ repositories. The remaining modules will target PostgreSQL and may need a
 local fallback. The user asked for the architecture to be settled before
 porting them.
 
-**Decision:** Put entities and domain errors in `internal/domain`, define
-consumer-facing repository interfaces in `internal/ports`, keep use cases in
-`internal/application`, and implement persistence in
-`internal/adapters/outbound/persistence/{postgres,sqlite}`. The inbound HTTP
-adapter lives in `internal/adapters/inbound/httpapi`.
+**Decision:** Put entities and domain errors in `internal/domain`. Define
+use-case interfaces in `internal/ports/inbound` and repository/security
+interfaces in `internal/ports/outbound`. Keep use cases in
+`internal/application`; they implement the inbound port and depend only on
+domain plus outbound ports. Implement persistence in
+`internal/adapters/outbound/persistence/{postgres,sqlite}` and JWT, bcrypt, and
+refresh-token crypto in `internal/adapters/outbound/security`. The inbound HTTP
+adapter lives in `internal/adapters/inbound/httpapi`, depends on the inbound
+port, and owns its HTTP DTOs.
 
-**Consequences:** Application services compile without pgx, SQLite, or
-`database/sql`. Backends can be swapped by bootstrap wiring and tested
-independently. New modules must follow the same port/adapter direction;
-adapter-specific types do not leak into services.
+**Consequences:** Application services compile without pgx, SQLite,
+`database/sql`, concrete security implementations, or any concrete adapter.
+Backends and security implementations can be swapped by bootstrap wiring and
+tested independently. Domain entities carry no HTTP tags. New modules must
+follow the same port/adapter direction; adapter-specific types do not leak into
+services.
 
 ## ADR-0012 — Automatic PostgreSQL to SQLite fallback
 
@@ -205,3 +211,30 @@ HS256. The backend name is passed to the auth service during bootstrap.
 datasets, even when user IDs collide. Tokens issued before this change are
 rejected. A future multi-backend design with shared identities must replace
 the simple backend issuer with a stable installation/tenant identifier.
+
+## ADR-0014 — GORM limited to outbound persistence adapters
+
+**Status:** Accepted
+
+**Context:** The remaining business modules are mostly CRUD over the legacy
+schema. Hand-written SQL for every table is slow to port and easy to drift, but
+letting an ORM into services or handlers would break the ports/adapters
+direction and make the PostgreSQL/SQLite contract harder to guarantee.
+
+**Decision:** Add `gorm.io/gorm`, `gorm.io/driver/postgres`, and the pure-Go
+`github.com/glebarez/sqlite` driver. Both backends are implemented by one
+outbound adapter, `internal/adapters/outbound/persistence/gormstore`, behind
+the existing `internal/ports/outbound` interfaces. GORM does not appear in
+domain, ports, application, or inbound HTTP; `internal/db` owns the open
+helpers, and `internal/bootstrap` may hold the opaque `*gorm.DB` handle during
+wiring. Migrations stay on goose SQL and run against the `*sql.DB` that GORM
+exposes; GORM AutoMigrate is forbidden. Raw SQL remains allowed inside the adapter for dashboard
+aggregates, stock locking, and complex statements.
+
+**Consequences:** CRUD ports share one implementation and one contract suite
+across PostgreSQL and SQLite. The PostgreSQL driver reuses `pgx/v5`. SQLite
+keeps its pragmas, permission hardening, and fixed-width UTC timestamp text
+through `gormstore.Timestamp`. GORM is configured with a silent logger so SQL
+values and token material never reach logs. Queries that need precise locking
+or aggregation may still be written by hand without introducing a second
+persistence abstraction.

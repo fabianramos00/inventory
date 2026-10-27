@@ -2,24 +2,24 @@ package bootstrap
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"gorm.io/gorm"
 
-	"inventory-desktop/internal/adapters/outbound/persistence/postgres"
-	"inventory-desktop/internal/adapters/outbound/persistence/sqlite"
+	"inventory-desktop/internal/adapters/outbound/persistence/gormstore"
 	"inventory-desktop/internal/config"
 	"inventory-desktop/internal/db"
-	"inventory-desktop/internal/ports"
+	"inventory-desktop/internal/ports/outbound"
 )
 
 const postgresProbeTimeout = 3 * time.Second
 
 type Stores struct {
-	Users         ports.UserRepository
-	RefreshTokens ports.RefreshTokenRepository
+	Users         outbound.UserRepository
+	RefreshTokens outbound.RefreshTokenRepository
 	Closer        func() error
 	Backend       string
 }
@@ -32,10 +32,16 @@ func Open(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Stores
 		return openSQLite(ctx, cfg, logger)
 	case "auto":
 		probeCtx, cancel := context.WithTimeout(ctx, postgresProbeTimeout)
-		pool, err := db.OpenPostgres(probeCtx, cfg.DatabaseURL)
+		gormDB, conn, err := db.OpenPostgresGORM(cfg.DatabaseURL)
+		if err == nil {
+			err = conn.PingContext(probeCtx)
+		}
 		cancel()
 		if err == nil {
-			return finishPostgres(ctx, cfg, logger, pool)
+			return finishPostgres(ctx, cfg, logger, gormDB, conn)
+		}
+		if conn != nil {
+			conn.Close()
 		}
 		logger.Warn("postgres unavailable, falling back to sqlite", "error", err, "path", cfg.SQLitePath)
 		return openSQLite(ctx, cfg, logger)
@@ -45,34 +51,35 @@ func Open(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Stores
 }
 
 func openPostgres(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Stores, error) {
-	pool, err := db.OpenPostgres(ctx, cfg.DatabaseURL)
+	gormDB, conn, err := db.OpenPostgresGORM(cfg.DatabaseURL)
 	if err != nil {
 		return nil, err
 	}
-	return finishPostgres(ctx, cfg, logger, pool)
+	if err := conn.PingContext(ctx); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ping database: %w", err)
+	}
+	return finishPostgres(ctx, cfg, logger, gormDB, conn)
 }
 
-func finishPostgres(ctx context.Context, cfg *config.Config, logger *slog.Logger, pool *pgxpool.Pool) (*Stores, error) {
+func finishPostgres(ctx context.Context, cfg *config.Config, logger *slog.Logger, gormDB *gorm.DB, conn *sql.DB) (*Stores, error) {
 	if cfg.AutoMigrate {
-		if err := db.MigratePostgres(ctx, cfg.DatabaseURL); err != nil {
-			pool.Close()
+		if err := db.MigratePostgres(ctx, conn); err != nil {
+			conn.Close()
 			return nil, err
 		}
 	}
 	logger.Info("database ready", "backend", "postgres")
 	return &Stores{
-		Users:         postgres.NewUserRepository(pool),
-		RefreshTokens: postgres.NewRefreshTokenRepository(pool),
-		Closer: func() error {
-			pool.Close()
-			return nil
-		},
-		Backend: "postgres",
+		Users:         gormstore.NewUserStore(gormDB),
+		RefreshTokens: gormstore.NewRefreshTokenStore(gormDB),
+		Closer:        conn.Close,
+		Backend:       "postgres",
 	}, nil
 }
 
 func openSQLite(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Stores, error) {
-	conn, err := db.OpenSQLite(cfg.SQLitePath)
+	gormDB, conn, err := db.OpenSQLiteGORM(cfg.SQLitePath)
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +91,8 @@ func openSQLite(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*
 	}
 	logger.Info("database ready", "backend", "sqlite", "path", cfg.SQLitePath)
 	return &Stores{
-		Users:         sqlite.NewUserRepository(conn),
-		RefreshTokens: sqlite.NewRefreshTokenRepository(conn),
+		Users:         gormstore.NewUserStore(gormDB),
+		RefreshTokens: gormstore.NewRefreshTokenStore(gormDB),
 		Closer:        conn.Close,
 		Backend:       "sqlite",
 	}, nil

@@ -8,18 +8,17 @@ import (
 	"testing"
 	"time"
 
-	"inventory-desktop/internal/adapters/outbound/persistence/postgres"
-	"inventory-desktop/internal/adapters/outbound/persistence/sqlite"
+	"inventory-desktop/internal/adapters/outbound/persistence/gormstore"
 	"inventory-desktop/internal/db"
 	"inventory-desktop/internal/domain"
-	"inventory-desktop/internal/ports"
+	"inventory-desktop/internal/ports/outbound"
 	"inventory-desktop/tests/testdb"
 )
 
 // repositories is one backend wired to the port interfaces services consume.
 type repositories struct {
-	users  ports.UserRepository
-	tokens ports.RefreshTokenRepository
+	users  outbound.UserRepository
+	tokens outbound.RefreshTokenRepository
 }
 
 func TestRepositoryContract(t *testing.T) {
@@ -43,7 +42,7 @@ func openSQLiteRepositories(t *testing.T) *repositories {
 	t.Helper()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "inventory.sqlite")
-	conn, err := db.OpenSQLite(path)
+	gormDB, conn, err := db.OpenSQLiteGORM(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,8 +51,8 @@ func openSQLiteRepositories(t *testing.T) *repositories {
 		t.Fatal(err)
 	}
 	return &repositories{
-		users:  sqlite.NewUserRepository(conn),
-		tokens: sqlite.NewRefreshTokenRepository(conn),
+		users:  gormstore.NewUserStore(gormDB),
+		tokens: gormstore.NewRefreshTokenStore(gormDB),
 	}
 }
 
@@ -71,20 +70,23 @@ func openPostgresRepositories(t *testing.T) *repositories {
 	}
 	t.Cleanup(release)
 
-	if err := db.MigratePostgres(ctx, dsn); err != nil {
-		t.Fatal(err)
-	}
-	pool, err := db.OpenPostgres(ctx, dsn)
+	gormDB, conn, err := db.OpenPostgresGORM(dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(pool.Close)
-	if _, err := pool.Exec(ctx, "TRUNCATE refresh_tokens, users RESTART IDENTITY CASCADE"); err != nil {
+	t.Cleanup(func() { conn.Close() })
+	if err := conn.PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MigratePostgres(ctx, conn); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, "TRUNCATE refresh_tokens, users RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatal(err)
 	}
 	return &repositories{
-		users:  postgres.NewUserRepository(pool),
-		tokens: postgres.NewRefreshTokenRepository(pool),
+		users:  gormstore.NewUserStore(gormDB),
+		tokens: gormstore.NewRefreshTokenStore(gormDB),
 	}
 }
 

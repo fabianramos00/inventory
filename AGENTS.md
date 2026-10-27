@@ -27,7 +27,7 @@ auth, migrations, seed, and tests. Business modules are Phase 3.
 |---|---|
 | Desktop shell | Wails v2 (Go) |
 | Backend | Go 1.26, standard library `net/http` |
-| Database | PostgreSQL 17 (`pgx/v5`) primary; SQLite (`modernc.org/sqlite`) offline fallback; `goose` migrations |
+| Database | PostgreSQL 17 primary; SQLite offline fallback; GORM in outbound adapters; `goose` migrations |
 | Auth | JWT access + refresh tokens, bcrypt |
 | Money | `shopspring/decimal` in Go, `NUMERIC(12,2)` in PostgreSQL |
 | Frontend | React 19, TypeScript 6, Vite 8, pnpm |
@@ -44,9 +44,9 @@ auth, migrations, seed, and tests. Business modules are Phase 3.
 - Only the base URL is delivered through a Wails binding (`GetAPIBaseURL`).
   In browser dev mode, `VITE_API_URL` is the fallback.
 - The API prefix is `/api/v1` and must match `docs/API-CONTRACT.md`.
-- Persistence is behind ports/adapters: services depend on `internal/ports`,
-  never on pgx or SQLite. Adapters live under
-  `internal/adapters/outbound/persistence/{postgres,sqlite}`; inbound adapters
+- Persistence and security are behind ports/adapters: services depend on
+  `internal/ports/{inbound,outbound}`, never on GORM, pgx, SQLite, JWT, or bcrypt.
+  Outbound adapters live under `internal/adapters/outbound/`; inbound adapters
   live under `internal/adapters/inbound/`.
 - `DB_MODE=auto` probes PostgreSQL, then falls back to local SQLite. Use
   `postgres` or `sqlite` to force a backend.

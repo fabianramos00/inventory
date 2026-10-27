@@ -8,38 +8,46 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/glebarez/sqlite"
 	"github.com/pressly/goose/v3"
-	_ "modernc.org/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	sqlitemigrations "inventory-desktop/migrations/sqlite"
 )
 
-func OpenSQLite(path string) (*sql.DB, error) {
+func OpenSQLiteGORM(path string) (*gorm.DB, *sql.DB, error) {
 	if err := rejectSymlink(path); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("create sqlite directory: %w", err)
+		return nil, nil, fmt.Errorf("create sqlite directory: %w", err)
 	}
 	if err := os.Chmod(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("secure sqlite directory: %w", err)
+		return nil, nil, fmt.Errorf("secure sqlite directory: %w", err)
 	}
 
 	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)", path)
-	conn, err := sql.Open("sqlite", dsn)
+	gormDB, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite database: %w", err)
+		return nil, nil, fmt.Errorf("open sqlite database: %w", err)
+	}
+	conn, err := gormDB.DB()
+	if err != nil {
+		return nil, nil, fmt.Errorf("access sqlite connection: %w", err)
 	}
 	// ponytail: one connection avoids SQLITE_BUSY; raise when desktop concurrency needs it.
 	conn.SetMaxOpenConns(1)
 	if err := conn.Ping(); err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("ping sqlite database: %w", err)
+		return nil, nil, fmt.Errorf("ping sqlite database: %w", err)
 	}
 	secureSQLiteFiles(path)
-	return conn, nil
+	return gormDB, conn, nil
 }
 
 func rejectSymlink(path string) error {

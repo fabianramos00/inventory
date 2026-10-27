@@ -17,9 +17,10 @@ migration. You never modify code, migrations, or the database.
 
 - PostgreSQL 17 is the primary database; local SQLite is the offline fallback.
 - Go persistence is behind `internal/ports`; adapters live under
-  `internal/adapters/outbound/persistence/{postgres,sqlite}`.
-- PostgreSQL uses `pgx/v5` and `migrations/postgres/`; SQLite uses
-  `modernc.org/sqlite` and `migrations/sqlite/`.
+  `internal/adapters/outbound/persistence/gormstore`.
+- PostgreSQL uses GORM (`gorm.io/driver/postgres`, pgx underneath) and
+  `migrations/postgres/`; SQLite uses GORM (`github.com/glebarez/sqlite`) and
+  `migrations/sqlite/`. GORM stays inside `gormstore` and `internal/db`.
 - Legacy schema: `../inventory-api/app/models/` and
   `../inventory-api/alembic/versions/`.
 - The Postgres goose migration is a faithful translation of the legacy schema.

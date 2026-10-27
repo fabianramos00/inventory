@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"inventory-desktop/internal/adapters/inbound/httpapi"
-	sqlitestore "inventory-desktop/internal/adapters/outbound/persistence/sqlite"
+	"inventory-desktop/internal/adapters/outbound/persistence/gormstore"
+	"inventory-desktop/internal/adapters/outbound/security"
 	"inventory-desktop/internal/application"
-	"inventory-desktop/internal/auth"
 	"inventory-desktop/internal/db"
 	"inventory-desktop/internal/domain"
 )
@@ -24,7 +24,7 @@ import (
 // differs, so a rejection cannot be explained by a missing user row.
 func TestAccessTokensAreBoundToBackendIssuer(t *testing.T) {
 	ctx := context.Background()
-	conn, err := db.OpenSQLite(filepath.Join(t.TempDir(), "issuer.sqlite"))
+	gormDB, conn, err := db.OpenSQLiteGORM(filepath.Join(t.TempDir(), "issuer.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,10 +33,11 @@ func TestAccessTokensAreBoundToBackendIssuer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	users := sqlitestore.NewUserRepository(conn)
-	tokens := sqlitestore.NewRefreshTokenRepository(conn)
+	users := gormstore.NewUserStore(gormDB)
+	tokens := gormstore.NewRefreshTokenStore(gormDB)
 	password := "password123"
-	hash, err := auth.HashPassword(password, 4)
+	passwords := security.NewPasswordHasher(4)
+	hash, err := passwords.Hash(password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,8 +47,17 @@ func TestAccessTokensAreBoundToBackendIssuer(t *testing.T) {
 	}
 
 	const secret = "shared-test-secret"
-	sqliteService := application.NewAuthService(users, tokens, secret, "sqlite", 30*time.Minute, 24*time.Hour)
-	postgresService := application.NewAuthService(users, tokens, secret, "postgres", 30*time.Minute, 24*time.Hour)
+	refreshTokens := security.NewRefreshTokenService()
+	sqliteService := application.NewAuthService(
+		users, tokens, passwords,
+		security.NewAccessTokenIssuer(secret, 30*time.Minute, "inventory-desktop/sqlite"),
+		refreshTokens, 24*time.Hour,
+	)
+	postgresService := application.NewAuthService(
+		users, tokens, passwords,
+		security.NewAccessTokenIssuer(secret, 30*time.Minute, "inventory-desktop/postgres"),
+		refreshTokens, 24*time.Hour,
+	)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	sqliteServer := httptest.NewServer(httpapi.NewRouterWithBackend(sqliteService, logger, "sqlite"))

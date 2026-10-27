@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"inventory-desktop/internal/auth"
+	"inventory-desktop/internal/adapters/outbound/security"
 	"inventory-desktop/internal/bootstrap"
 	"inventory-desktop/internal/config"
 	"inventory-desktop/internal/domain"
@@ -55,6 +55,7 @@ func main() {
 	}
 	defer stores.Closer()
 
+	passwords := security.NewPasswordHasher(cfg.BcryptRounds)
 	users := stores.Users
 	existing, err := users.GetByEmail(ctx, *email)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {
@@ -66,7 +67,7 @@ func main() {
 		if *password == "" {
 			fail("password is required when creating a user (use -password or SEED_PASSWORD)")
 		}
-		hash, err := auth.HashPassword(*password, cfg.BcryptRounds)
+		hash, err := passwords.Hash(*password)
 		if err != nil {
 			fail("hash password: " + err.Error())
 		}
@@ -89,7 +90,7 @@ func main() {
 		existing.FullName = strings.TrimSpace(*name)
 	}
 	if *password != "" {
-		hash, err := auth.HashPassword(*password, cfg.BcryptRounds)
+		hash, err := passwords.Hash(*password)
 		if err != nil {
 			fail("hash password: " + err.Error())
 		}

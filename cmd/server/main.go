@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"inventory-desktop/internal/adapters/inbound/httpapi"
+	"inventory-desktop/internal/adapters/outbound/security"
 	"inventory-desktop/internal/application"
 	"inventory-desktop/internal/bootstrap"
 	"inventory-desktop/internal/config"
@@ -31,12 +32,15 @@ func main() {
 	}
 	defer stores.Closer()
 
+	passwords := security.NewPasswordHasher(cfg.BcryptRounds)
+	accessTokens := security.NewAccessTokenIssuer(cfg.SecretKey, cfg.AccessTokenTTL(), "inventory-desktop/"+stores.Backend)
+	refreshTokens := security.NewRefreshTokenService()
 	authService := application.NewAuthService(
 		stores.Users,
 		stores.RefreshTokens,
-		cfg.SecretKey,
-		stores.Backend,
-		cfg.AccessTokenTTL(),
+		passwords,
+		accessTokens,
+		refreshTokens,
 		cfg.RefreshTokenTTL(),
 	)
 	handler := httpapi.NewRouterWithBackend(authService, logger, stores.Backend, true)
