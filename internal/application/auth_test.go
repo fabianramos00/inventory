@@ -43,6 +43,12 @@ func (f *fakeUserRepository) GetByEmail(_ context.Context, email string) (*domai
 
 func (f *fakeUserRepository) Create(context.Context, *domain.User) error { return nil }
 func (f *fakeUserRepository) Update(context.Context, *domain.User) error { return nil }
+func (f *fakeUserRepository) List(context.Context, int, int, string) ([]*domain.User, bool, error) {
+	return nil, false, nil
+}
+func (f *fakeUserRepository) Delete(context.Context, int64) (*domain.User, error) {
+	return nil, domain.ErrNotFound
+}
 
 type createdRefreshToken struct {
 	userID    int64

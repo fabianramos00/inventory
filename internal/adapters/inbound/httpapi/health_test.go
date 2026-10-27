@@ -20,12 +20,12 @@ func TestHealthzReportsBackend(t *testing.T) {
 	}{
 		{
 			name:         "explicit backend",
-			handler:      httpapi.NewRouterWithBackend(nil, logger, "sqlite"),
+			handler:      httpapi.NewRouterWithBackend(nil, nil, logger, "sqlite"),
 			wantDatabase: "sqlite",
 		},
 		{
 			name:         "no backend keeps the fallback shape",
-			handler:      httpapi.NewRouter(nil, logger),
+			handler:      httpapi.NewRouter(nil, nil, logger),
 			wantDatabase: "unknown",
 		},
 	}

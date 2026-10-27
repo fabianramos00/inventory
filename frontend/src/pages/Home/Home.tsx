@@ -16,7 +16,7 @@ export default function Home() {
   }
 
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <section className={styles.card} aria-labelledby="home-title">
         <div className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true">GS</span>
@@ -46,6 +46,6 @@ export default function Home() {
           Cerrar sesión
         </button>
       </section>
-    </main>
+    </div>
   )
 }

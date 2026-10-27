@@ -91,10 +91,11 @@ Use `HashRouter` in the desktop build. The legacy route table stays the same;
 only the router wrapper changes. Browser dev may keep `BrowserRouter` behind
 `import.meta.env.DEV`, but the shipped build must be hash-based.
 
-Phase 2 routes only `/#/login` and the protected `/#/` Home placeholder. The
-remaining page files stay in `src/pages` without routes until Phase 3 restores
-the full table from [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Playwright specs must
-move to hash URLs when those routes return.
+Phase 2 routes `/#/login`, the protected `/#/` Home placeholder, and the
+superuser-only `/#/users` page, all under `AppLayout`. The remaining page files
+stay in `src/pages` without routes until Phase 3 restores the full table from
+[DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Playwright specs must move to hash URLs
+when those routes return.
 
 ### Browser assumptions to review
 

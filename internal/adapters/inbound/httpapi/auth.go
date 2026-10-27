@@ -17,14 +17,6 @@ type AuthHandler struct {
 	limiter *loginLimiter
 }
 
-type userResponse struct {
-	ID          int64  `json:"id"`
-	FullName    string `json:"full_name"`
-	Email       string `json:"email"`
-	IsActive    bool   `json:"is_active"`
-	IsSuperuser bool   `json:"is_superuser"`
-}
-
 type loginResponse struct {
 	AccessToken  string        `json:"access_token"`
 	RefreshToken string        `json:"refresh_token"`
@@ -79,13 +71,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
 		TokenType:    "bearer",
-		User: &userResponse{
-			ID:          result.User.ID,
-			FullName:    result.User.FullName,
-			Email:       result.User.Email,
-			IsActive:    result.User.IsActive,
-			IsSuperuser: result.User.IsSuperuser,
-		},
+		User:         newUserResponse(result.User),
 	})
 }
 

@@ -34,7 +34,7 @@ must match the existing `/api/v1` contract.
 - Legacy reference: `../inventory-api` (FastAPI + SQLAlchemy + Alembic).
 - Locale: UTC storage, `America/Bogota` for dashboard grouping. Money JSON
   numbers, COP display handled by the frontend.
-- Current phase: Phase 2. Auth, migrations, seed, and the PostgreSQL/SQLite ports/adapters are implemented. Business modules are Phase 3.
+- Current phase: Phase 3. Auth, migrations, seed, the PostgreSQL/SQLite ports/adapters, and superuser Users CRUD are implemented. Remaining business modules are next.
 
 ## Your scope
 

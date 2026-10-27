@@ -43,7 +43,8 @@ func main() {
 		refreshTokens,
 		cfg.RefreshTokenTTL(),
 	)
-	handler := httpapi.NewRouterWithBackend(authService, logger, stores.Backend, cfg.DevMode)
+	userService := application.NewUserService(stores.Users, passwords)
+	handler := httpapi.NewRouterWithBackend(authService, userService, logger, stores.Backend, cfg.DevMode)
 	server, err := httpapi.NewServer("127.0.0.1:0", handler, logger)
 	if err != nil {
 		_ = stores.Closer()

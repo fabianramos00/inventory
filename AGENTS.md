@@ -17,9 +17,10 @@ The Go API mirrors the legacy FastAPI `/api/v1` contract. PostgreSQL is the
 primary database; when it is unreachable, the app can run on local SQLite in
 offline mode.
 
-Current phase: **Phase 2 — walking skeleton + auth + hexagonal refactor.**
-Implemented: Wails shell, Go API, PostgreSQL/SQLite persistence behind ports,
-auth, migrations, seed, and tests. Business modules are Phase 3.
+Current phase: **Phase 3 — business modules.** Implemented: Wails shell, Go
+API, PostgreSQL/SQLite persistence behind ports, auth, migrations, seed,
+tests, and superuser-only Users CRUD. Inventory, products, clients, providers,
+sales, orders, and dashboard remain.
 
 ## Stack
 

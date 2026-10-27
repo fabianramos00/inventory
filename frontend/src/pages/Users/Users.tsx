@@ -58,7 +58,7 @@ export default function Users() {
 
   const debouncedSearch = useDebouncedValue(search, 300, () => setPage(1))
 
-  const { users, totalPages, isLoading, isFetching, isError, refetch, toggleActiveMutation, deleteMutation, invalidate } = useUsers({ page, search: debouncedSearch })
+  const { users, hasNext, isLoading, isFetching, isError, refetch, toggleActiveMutation, deleteMutation, invalidate } = useUsers({ page, search: debouncedSearch })
 
   async function deleteUser(id: number) {
     try {
@@ -154,7 +154,7 @@ export default function Users() {
             emptyText="No se encontraron usuarios."
             minWidth="900px"
             currentPage={page}
-            totalPages={totalPages}
+            hasNext={hasNext}
             skeletonRows={5}
             skeletonColumns={5}
             stickyFirstColumn

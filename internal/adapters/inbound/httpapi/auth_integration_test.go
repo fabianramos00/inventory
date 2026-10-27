@@ -99,8 +99,9 @@ func TestAuthFlow(t *testing.T) {
 		security.NewRefreshTokenService(),
 		7*24*time.Hour,
 	)
+	userService := application.NewUserService(users, passwords)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := httptest.NewServer(httpapi.NewRouter(authService, logger, true))
+	server := httptest.NewServer(httpapi.NewRouter(authService, userService, logger, true))
 	defer server.Close()
 
 	t.Run("login", func(t *testing.T) {
@@ -186,8 +187,8 @@ func TestAuthFlow(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer response.Body.Close()
-		if response.StatusCode != http.StatusNotFound {
-			t.Fatalf("got status %d, want 404 for an unimplemented protected route", response.StatusCode)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("got status %d, want 200 for an implemented protected route", response.StatusCode)
 		}
 	})
 
@@ -225,7 +226,7 @@ func TestAuthFlow(t *testing.T) {
 	})
 
 	t.Run("dev origins are rejected when dev mode is off", func(t *testing.T) {
-		strict := httptest.NewServer(httpapi.NewRouter(authService, logger))
+		strict := httptest.NewServer(httpapi.NewRouter(authService, userService, logger))
 		defer strict.Close()
 
 		originHeader := func(origin string) http.Header {

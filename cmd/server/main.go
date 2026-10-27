@@ -43,7 +43,8 @@ func main() {
 		refreshTokens,
 		cfg.RefreshTokenTTL(),
 	)
-	handler := httpapi.NewRouterWithBackend(authService, logger, stores.Backend, true)
+	userService := application.NewUserService(stores.Users, passwords)
+	handler := httpapi.NewRouterWithBackend(authService, userService, logger, stores.Backend, true)
 
 	port := os.Getenv("PORT")
 	if port == "" {

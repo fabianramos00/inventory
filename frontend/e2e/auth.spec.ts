@@ -18,7 +18,9 @@ test('logs in against the real API and logs out', async ({ page }) => {
   await expect(page.getByText('Sesión iniciada')).toBeVisible()
   await expect(page.getByRole('heading', { name: `Hola, ${admin.fullName}` })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Cerrar sesión' }).click()
+  const homeCard = page.getByRole('region', { name: `Hola, ${admin.fullName}` })
+  await expect(homeCard).toBeVisible()
+  await homeCard.getByRole('button', { name: 'Cerrar sesión' }).click()
 
   await expect(page).toHaveURL(/#\/login$/)
   await expect(page.getByRole('heading', { name: 'Bienvenido' })).toBeVisible()

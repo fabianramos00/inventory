@@ -32,7 +32,10 @@ func TestRepositoryContract(t *testing.T) {
 	for _, backend := range backends {
 		t.Run(backend.name, func(t *testing.T) {
 			repos := backend.setup(t)
-			t.Run("users", func(t *testing.T) { testUsers(t, repos) })
+			t.Run("users", func(t *testing.T) {
+				testUsers(t, repos)
+				testUserListAndDelete(t, repos)
+			})
 			t.Run("refresh tokens", func(t *testing.T) { testRefreshTokens(t, repos) })
 		})
 	}
@@ -144,6 +147,174 @@ func testUsers(t *testing.T, repos *repositories) {
 	missing := &domain.User{ID: user.ID + 1000, FullName: "Ghost", Email: "ghost@contract.test", HashedPassword: "hash"}
 	if err := repos.users.Update(ctx, missing); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("Update missing row error = %v, want ErrNotFound", err)
+	}
+}
+
+func testUserListAndDelete(t *testing.T, repos *repositories) {
+	t.Helper()
+	ctx := context.Background()
+
+	grace := createUser(t, repos, "grace@contract.test")
+	grace.FullName = "Grace Hopper"
+	if err := repos.users.Update(ctx, grace); err != nil {
+		t.Fatal(err)
+	}
+	linus := createUser(t, repos, "linus@contract.test")
+	barbara := createUser(t, repos, "barbara@contract.test")
+	jose := createUser(t, repos, "jose@contract.test")
+	jose.FullName = "José Pérez"
+	if err := repos.users.Update(ctx, jose); err != nil {
+		t.Fatal(err)
+	}
+	// Ada already exists from testUsers with a lower id.
+	all := []*domain.User{grace, linus, barbara, jose}
+
+	ordered, hasNext, err := repos.users.List(ctx, 0, 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasNext {
+		t.Fatal("full list has_next = true, want false")
+	}
+	if len(ordered) < len(all)+1 {
+		t.Fatalf("full list returned %d users, want at least %d", len(ordered), len(all)+1)
+	}
+	for i := 1; i < len(ordered); i++ {
+		if ordered[i-1].ID >= ordered[i].ID {
+			t.Fatalf("list is not ordered by id: %d then %d", ordered[i-1].ID, ordered[i].ID)
+		}
+	}
+
+	page, hasNext, err := repos.users.List(ctx, 1, 2, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasNext {
+		t.Fatal("limited list has_next = false, want true")
+	}
+	if len(page) != 2 {
+		t.Fatalf("limited list returned %d users, want 2", len(page))
+	}
+	if page[0].ID != ordered[1].ID || page[1].ID != ordered[2].ID {
+		t.Fatalf("page ids = [%d %d], want [%d %d]", page[0].ID, page[1].ID, ordered[1].ID, ordered[2].ID)
+	}
+
+	lastPage, hasNext, err := repos.users.List(ctx, len(ordered), 2, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasNext || len(lastPage) != 0 {
+		t.Fatalf("past-the-end list = %d items has_next=%v, want 0 and false", len(lastPage), hasNext)
+	}
+
+	searches := []struct {
+		name  string
+		query string
+		want  *domain.User
+	}{
+		{name: "lowercase name", query: "grace", want: grace},
+		{name: "uppercase name", query: "HOPPER", want: grace},
+		{name: "lowercase email", query: "linus@contract", want: linus},
+		{name: "uppercase email", query: "LINUS@CONTRACT.TEST", want: linus},
+		{name: "lowercase accented name", query: "josé", want: jose},
+		{name: "uppercase accented name", query: "JOSÉ PÉREZ", want: jose},
+	}
+	for _, tt := range searches {
+		t.Run("search "+tt.name, func(t *testing.T) {
+			items, hasNext, err := repos.users.List(ctx, 0, 10, tt.query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasNext || len(items) != 1 {
+				t.Fatalf("search %q = %d items has_next=%v, want 1 and false", tt.query, len(items), hasNext)
+			}
+			assertUser(t, items[0], tt.want)
+		})
+	}
+
+	none, hasNext, err := repos.users.List(ctx, 0, 10, "nobody-matches-this")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasNext || len(none) != 0 {
+		t.Fatalf("no-match search = %d items has_next=%v, want 0 and false", len(none), hasNext)
+	}
+
+	duplicate := &domain.User{
+		FullName:       "Grace Copy",
+		Email:          grace.Email,
+		HashedPassword: "hash-copy",
+		IsActive:       true,
+	}
+	if err := repos.users.Create(ctx, duplicate); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("duplicate email error = %v, want ErrConflict", err)
+	}
+
+	deleted, err := repos.users.Delete(ctx, grace.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertUser(t, deleted, grace)
+	if _, err := repos.users.GetByID(ctx, grace.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("GetByID after delete error = %v, want ErrNotFound", err)
+	}
+	if _, err := repos.users.Delete(ctx, grace.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("second delete error = %v, want ErrNotFound", err)
+	}
+	if _, err := repos.users.Delete(ctx, grace.ID+1000); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("delete missing row error = %v, want ErrNotFound", err)
+	}
+}
+
+// TestPostgresUserDeleteForeignKeyViolation covers the adapter-specific FK
+// mapping. SQLite's offline schema has no non-cascading reference to users, so
+// only PostgreSQL can exercise it.
+func TestPostgresUserDeleteForeignKeyViolation(t *testing.T) {
+	dsn := os.Getenv("INVENTORY_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set INVENTORY_TEST_DATABASE_URL to run the postgres FK test")
+	}
+
+	ctx := context.Background()
+	release, err := testdb.Lock(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+
+	gormDB, conn, err := db.OpenPostgresGORM(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := conn.PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MigratePostgres(ctx, conn); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, "TRUNCATE refresh_tokens, providers, users RESTART IDENTITY CASCADE"); err != nil {
+		t.Fatal(err)
+	}
+
+	users := gormstore.NewUserStore(gormDB)
+	user := createUser(t, &repositories{users: users}, "referenced@contract.test")
+
+	if _, err := conn.ExecContext(ctx,
+		"INSERT INTO providers (name, created_by_id) VALUES ($1, $2)",
+		"Proveedor con usuario", user.ID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = conn.ExecContext(context.Background(), "DELETE FROM providers WHERE created_by_id = $1", user.ID)
+	})
+
+	if _, err := users.Delete(ctx, user.ID); !errors.Is(err, domain.ErrForeignKeyViolation) {
+		t.Fatalf("delete referenced user error = %v, want ErrForeignKeyViolation", err)
+	}
+	if _, err := users.GetByID(ctx, user.ID); err != nil {
+		t.Fatalf("referenced user must survive the failed delete: %v", err)
 	}
 }
 

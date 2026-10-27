@@ -3,8 +3,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
-  // ponytail: Phase 2 auth only; restore the full legacy suite in Phase 3.
-  testMatch: 'auth.spec.ts',
+  // ponytail: full-stack specs only; the legacy mocked suite still runs manually.
+  testMatch: ['auth.spec.ts', 'users.spec.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,

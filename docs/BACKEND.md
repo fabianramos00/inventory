@@ -40,6 +40,7 @@ internal/
   ports/
     inbound/
       auth.go           AuthUseCase, LoginResult, TokenPair
+      users.go          UserUseCase, UserList, create/update inputs
     outbound/
       users.go          UserRepository interface
       refresh_tokens.go RefreshTokenRepository interface
@@ -48,15 +49,16 @@ internal/
       refresh_token_service.go
   domain/
     user.go             User, RefreshToken (no JSON tags)
-    errors.go           ErrNotFound and auth sentinel errors
+    errors.go           domain sentinel errors (not found, conflict, validation, auth)
   adapters/
     inbound/
       httpapi/
         router.go       route table
         middleware.go   auth, CORS, recovery, request ID, logging
         response.go     JSON and error helpers
-        auth.go         auth handlers and HTTP DTOs
-        handlers/       one file per module
+        auth.go         auth handlers
+        user_dto.go     shared user response DTO and mapper
+        users.go        user CRUD handlers and superuser guard
     outbound/
       persistence/
         gormstore/
@@ -189,6 +191,18 @@ Dates are `time.Time` in UTC. Format responses with `time.RFC3339`.
   `application.AuthService` through the outbound ports.
 - Auth sentinel errors live in `internal/domain` and are mapped to HTTP
   responses by the inbound adapter.
+
+## Users
+
+- All `/users` routes require an authenticated superuser; other users get `403`.
+- List supports `skip`, `limit` (default 100, max 200), and `search` (max 256)
+  over `full_name` and `email`, case-insensitive on both backends.
+- Email is trimmed and validated with `net/mail`; password is 8–128 characters
+  and at most 72 bytes.
+- `POST /users` returns `200` to match legacy behavior. Update is partial; an
+  empty password means unchanged.
+- Duplicate email maps to `400` with the legacy detail. Missing users map to
+  `404`. Foreign-key conflicts map to `400` with `FOREIGN_KEY_VIOLATION`.
 
 Never log passwords, tokens, authorization headers, or full request bodies.
 

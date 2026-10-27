@@ -1,5 +1,5 @@
 import api from '@/lib/axios'
-import type { PaginatedResponse, User } from '@/types'
+import type { CursorPaginatedResponse, User } from '@/types'
 
 export interface CreateUserInput {
   full_name: string
@@ -21,7 +21,7 @@ export interface UsersParams {
 
 export const usersApi = {
   getUsers: (params?: UsersParams) =>
-    api.get<PaginatedResponse<User>>('/users', { params }),
+    api.get<CursorPaginatedResponse<User>>('/users', { params }),
 
   createUser: (data: CreateUserInput) =>
     api.post<User>('/users', data),

@@ -31,7 +31,8 @@ func OpenSQLiteGORM(path string) (*gorm.DB, *sql.DB, error) {
 
 	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)", path)
 	gormDB, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
+		Logger:         logger.Default.LogMode(logger.Silent),
+		TranslateError: true,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("open sqlite database: %w", err)

@@ -6,12 +6,12 @@ REST API backed by PostgreSQL.
 
 ## Status
 
-**Phase 2 — walking skeleton + auth + hexagonal refactor.** Implemented:
-Wails shell, embedded React login/home, loopback Go API, PostgreSQL and SQLite
-persistence behind ports/adapters, JWT login, refresh rotation, logout, and
-the seed command. Inventory, products, clients, providers, sales, orders,
-dashboard, and user management are Phase 3. SQLite currently contains only
-the auth tables; full offline business data is Phase 3 work.
+**Phase 2 complete; Phase 3 in progress.** Implemented: Wails shell, embedded
+React app shell, loopback Go API, PostgreSQL and SQLite persistence behind
+ports/adapters, JWT auth, seed command, and superuser-only Users CRUD
+(list/create/get/update/delete). Inventory, products, clients, providers,
+sales, orders, and dashboard remain. SQLite currently contains only the auth
+tables; full offline business data is still Phase 3 work.
 
 ## Why desktop
 

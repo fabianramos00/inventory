@@ -1,9 +1,6 @@
 .page {
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: linear-gradient(180deg, var(--auth-ground-top) 0%, var(--auth-ground-mid) 48%, var(--auth-ground-low) 100%);
+  display: flex;
+  justify-content: center;
 }
 
 .card {
@@ -120,10 +117,6 @@
 }
 
 @media (max-width: 480px) {
-  .page {
-    padding: 16px;
-  }
-
   .card {
     padding: 24px;
   }
@@ -144,10 +137,6 @@
 }
 
 @media (forced-colors: active) {
-  .page {
-    background: Canvas;
-  }
-
   .card {
     background: Canvas;
     border-color: CanvasText;

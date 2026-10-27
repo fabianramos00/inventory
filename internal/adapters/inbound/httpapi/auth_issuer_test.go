@@ -60,9 +60,10 @@ func TestAccessTokensAreBoundToBackendIssuer(t *testing.T) {
 	)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	sqliteServer := httptest.NewServer(httpapi.NewRouterWithBackend(sqliteService, logger, "sqlite"))
+	userService := application.NewUserService(users, passwords)
+	sqliteServer := httptest.NewServer(httpapi.NewRouterWithBackend(sqliteService, userService, logger, "sqlite"))
 	defer sqliteServer.Close()
-	postgresServer := httptest.NewServer(httpapi.NewRouterWithBackend(postgresService, logger, "postgres"))
+	postgresServer := httptest.NewServer(httpapi.NewRouterWithBackend(postgresService, userService, logger, "postgres"))
 	defer postgresServer.Close()
 
 	sqliteLogin, err := sqliteService.Login(ctx, user.Email, password)
@@ -81,10 +82,10 @@ func TestAccessTokensAreBoundToBackendIssuer(t *testing.T) {
 		assertProtectedStatus(t, sqliteServer.URL, postgresLogin.AccessToken, http.StatusUnauthorized)
 	})
 	t.Run("own tokens still authenticate", func(t *testing.T) {
-		// /api/v1/users is not implemented yet; reaching 404 proves the auth
+		// The test user is not a superuser, so reaching 403 proves the auth
 		// middleware accepted the token instead of rejecting it with 401.
-		assertProtectedStatus(t, sqliteServer.URL, sqliteLogin.AccessToken, http.StatusNotFound)
-		assertProtectedStatus(t, postgresServer.URL, postgresLogin.AccessToken, http.StatusNotFound)
+		assertProtectedStatus(t, sqliteServer.URL, sqliteLogin.AccessToken, http.StatusForbidden)
+		assertProtectedStatus(t, postgresServer.URL, postgresLogin.AccessToken, http.StatusForbidden)
 	})
 }
 

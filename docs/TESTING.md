@@ -143,6 +143,13 @@ Cases:
 
 - User create, get by ID, get by email, update, and `domain.ErrNotFound` for
   unknown ID/email and for updating a missing row.
+- User list orders by ID, computes `has_next` from `limit + 1`, honors
+  `skip`, and searches names/emails case-insensitively on both backends.
+- User delete returns the deleted row, and a later get or delete returns
+  `domain.ErrNotFound`.
+- Duplicate email maps to `domain.ErrConflict`.
+- PostgreSQL only: deleting a user referenced by a provider row maps to
+  `domain.ErrForeignKeyViolation` and leaves the user in place.
 - Refresh-token create, find-valid, rotation, and revocation.
 - The old token is rejected after rotation; an already-rotated or expired token
   cannot be rotated again.
@@ -183,6 +190,22 @@ PostgreSQL server:
 - SQLite creates its parent directory with mode `0700` and the database file
   with mode `0600`.
 
+### Users CRUD slice
+
+`internal/application/users_test.go` covers `UserService` through fake
+`UserRepository`/`PasswordHasher` ports: list pass-through, create defaults
+and password hashing, duplicate email, email/password validation, partial
+update (empty password preserves the hash), update conflict, delete result,
+and not-found paths.
+
+`internal/adapters/inbound/httpapi/users_test.go` covers superuser-only access
+on all five routes, the exact legacy `403` detail, list cursor pagination,
+CRUD success, duplicate email `400`, `404 User not found`, and the
+`FOREIGN_KEY_VIOLATION` code on delete.
+
+`frontend/e2e/users.spec.ts` runs the full stack: real login, create a unique
+user from the Usuarios page, search, rename, toggle active, and delete.
+
 ## Phase 2 auth coverage
 
 The following is covered now:
@@ -209,7 +232,8 @@ The following is covered now:
   at least 32 bytes.
 
 Deferred until Phase 3: inventory CRUD, sales/stock, purchase orders,
-dashboard, user management, and the full 67-endpoint parity matrix.
+dashboard, and the full 67-endpoint parity matrix. The Users CRUD slice is
+covered now (application, handler, repository contract, and full-stack E2E).
 
 ## Frontend tests
 
@@ -232,6 +256,8 @@ Playwright:
 - Sale item edit and deletion restore stock.
 - Purchase order receiving.
 - User creation and role visibility.
+- Users CRUD against the real API: create, search, rename, toggle active,
+  delete.
 - Keyboard-only dialog and dropdown flows.
 
 Use hash URLs (`/#/inventory`) for the desktop router. Run against Vite dev
@@ -289,7 +315,7 @@ fixtures in replay mode. Do not mark parity as passing without a run.
 | Module | Endpoints | Status |
 |---|---:|---|
 | Auth | 3 | Covered (Phase 2) |
-| Users | 5 | Pending |
+| Users | 5 | Covered (this slice) |
 | Inventory | 24 | Pending |
 | Sales + clients | 15 | Pending |
 | Supply chain | 16 | Pending |
