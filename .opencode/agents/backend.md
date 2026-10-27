@@ -68,8 +68,8 @@ Read only the module being ported.
 ```text
 main.go, app.go, main_bindings.go
 cmd/server/, cmd/seed/
-internal/httpapi/                 inbound HTTP adapter
-internal/service/                 use cases; imports only domain + ports
+internal/adapters/httpapi/        inbound HTTP adapter
+internal/application/             use cases; imports only domain + ports
 internal/ports/                   UserRepository, RefreshTokenRepository
 internal/domain/                  entities and domain errors
 internal/adapters/persistence/
@@ -82,9 +82,9 @@ internal/db/                      Open/Migrate for each backend
 migrations/postgres/, migrations/sqlite/
 ```
 
-Dependency direction: `httpapi → service → ports ← adapters → db`. Services
-must not import pgx, `database/sql`, or either adapter. Handlers never issue
-SQL; repositories never write HTTP.
+Dependency direction: `adapters/httpapi → application → ports ← adapters/persistence → db`.
+Application code must not import pgx, `database/sql`, the HTTP adapter, or either
+persistence adapter. Handlers never issue SQL; repositories never write HTTP.
 
 ### API
 

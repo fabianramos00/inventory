@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"inventory-desktop/internal/adapters/httpapi"
 	sqlitestore "inventory-desktop/internal/adapters/persistence/sqlite"
+	"inventory-desktop/internal/application"
 	"inventory-desktop/internal/auth"
 	"inventory-desktop/internal/db"
 	"inventory-desktop/internal/domain"
-	"inventory-desktop/internal/httpapi"
-	"inventory-desktop/internal/service"
 )
 
 // TestAccessTokensAreBoundToBackendIssuer proves that an access token minted
@@ -46,8 +46,8 @@ func TestAccessTokensAreBoundToBackendIssuer(t *testing.T) {
 	}
 
 	const secret = "shared-test-secret"
-	sqliteService := service.NewAuthService(users, tokens, secret, "sqlite", 30*time.Minute, 24*time.Hour)
-	postgresService := service.NewAuthService(users, tokens, secret, "postgres", 30*time.Minute, 24*time.Hour)
+	sqliteService := application.NewAuthService(users, tokens, secret, "sqlite", 30*time.Minute, 24*time.Hour)
+	postgresService := application.NewAuthService(users, tokens, secret, "postgres", 30*time.Minute, 24*time.Hour)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	sqliteServer := httptest.NewServer(httpapi.NewRouterWithBackend(sqliteService, logger, "sqlite"))

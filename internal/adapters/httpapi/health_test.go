@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"inventory-desktop/internal/httpapi"
+	"inventory-desktop/internal/adapters/httpapi"
 )
 
 func TestHealthzReportsBackend(t *testing.T) {

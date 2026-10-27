@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"inventory-desktop/internal/adapters/httpapi"
 	"inventory-desktop/internal/adapters/persistence/postgres"
+	"inventory-desktop/internal/application"
 	"inventory-desktop/internal/auth"
 	"inventory-desktop/internal/db"
 	"inventory-desktop/internal/domain"
-	"inventory-desktop/internal/httpapi"
-	"inventory-desktop/internal/service"
 	"inventory-desktop/tests/testdb"
 )
 
@@ -79,7 +79,7 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	authService := service.NewAuthService(users, postgres.NewRefreshTokenRepository(pool), "test-secret", "postgres", 30*time.Minute, 7*24*time.Hour)
+	authService := application.NewAuthService(users, postgres.NewRefreshTokenRepository(pool), "test-secret", "postgres", 30*time.Minute, 7*24*time.Hour)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := httptest.NewServer(httpapi.NewRouter(authService, logger, true))
 	defer server.Close()

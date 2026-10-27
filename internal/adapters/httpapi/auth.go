@@ -7,12 +7,12 @@ import (
 	"sync"
 	"time"
 
+	"inventory-desktop/internal/application"
 	"inventory-desktop/internal/domain"
-	"inventory-desktop/internal/service"
 )
 
 type AuthHandler struct {
-	service *service.AuthService
+	service *application.AuthService
 	logger  *slog.Logger
 	limiter *loginLimiter
 }
@@ -34,7 +34,7 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func NewAuthHandler(authService *service.AuthService, logger *slog.Logger) *AuthHandler {
+func NewAuthHandler(authService *application.AuthService, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
 		service: authService,
 		logger:  logger,
@@ -117,11 +117,11 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) writeAuthError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, service.ErrInvalidCredentials):
+	case errors.Is(err, application.ErrInvalidCredentials):
 		writeError(w, http.StatusUnauthorized, "Incorrect email or password", "INVALID_CREDENTIALS")
-	case errors.Is(err, service.ErrInactiveUser):
+	case errors.Is(err, application.ErrInactiveUser):
 		writeError(w, http.StatusUnauthorized, "Inactive user", "INACTIVE_USER")
-	case errors.Is(err, service.ErrInvalidRefresh):
+	case errors.Is(err, application.ErrInvalidRefresh):
 		writeError(w, http.StatusUnauthorized, "Invalid or expired refresh token", "INVALID_REFRESH_TOKEN")
 	default:
 		h.logger.Error("auth request failed", "error", err)

@@ -27,7 +27,7 @@ gofmt -l .
 
 # Go integration (auth flow, real PostgreSQL 17)
 INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
-  go test -v ./internal/httpapi
+  go test -v ./internal/adapters/httpapi
 
 # Go repository contract (PostgreSQL case skips when the env var is unset)
 INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
@@ -80,7 +80,7 @@ Use a dedicated PostgreSQL 17 database from `docker compose`:
 
 ```bash
 export INVENTORY_TEST_DATABASE_URL="postgresql://inventory:inventory@localhost:5433/inventory_desktop_test"
-go test -v ./internal/httpapi
+go test -v ./internal/adapters/httpapi
 ```
 
 The integration test is gated by the environment variable; without it the

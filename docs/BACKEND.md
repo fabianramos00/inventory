@@ -26,12 +26,7 @@ No ORM. No web framework. No new dependency without an entry in
 main.go                 Wails entry and server lifecycle
 app.go                  Wails bindings (GetAPIBaseURL)
 internal/
-  httpapi/
-    router.go           route table
-    middleware.go       auth, CORS, recovery, request ID, logging
-    response.go         JSON and error helpers
-    handlers/           one file per module
-  service/
+  application/
     auth.go             auth use cases
     inventory.go
     sales.go
@@ -45,6 +40,11 @@ internal/
     user.go             User, RefreshToken
     errors.go           ErrNotFound and other domain errors
   adapters/
+    httpapi/
+      router.go         route table
+      middleware.go     auth, CORS, recovery, request ID, logging
+      response.go       JSON and error helpers
+      handlers/         one file per module
     persistence/
       postgres/
         users.go
@@ -68,9 +68,9 @@ migrations/
   sqlite/
 ```
 
-Dependency direction: `httpapi → service → ports ← adapters → db`. The
-domain package is shared. Services depend only on port interfaces. Handlers
-never issue SQL. Repositories never write HTTP responses.
+Dependency direction: `adapters/httpapi → application → ports ← adapters/persistence → db`.
+The domain package is shared. Application services depend only on port
+interfaces. Handlers never issue SQL. Repositories never write HTTP responses.
 
 ## HTTP layer
 

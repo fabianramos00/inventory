@@ -109,8 +109,8 @@ cover the desktop router.
 
 Persistence sits behind ports/adapters. `internal/domain` holds entities and
 domain errors, `internal/ports` holds consumer-facing repository interfaces,
-`internal/service` depends only on those interfaces, and backend adapters live
-under `internal/adapters/persistence/{postgres,sqlite}`. See
+`internal/application` depends only on those interfaces, and backend adapters
+live under `internal/adapters/persistence/{postgres,sqlite}`. See
 [DECISIONS.md](DECISIONS.md) ADR-0011.
 
 PostgreSQL:
@@ -177,11 +177,11 @@ main.go                  Wails entry, server lifecycle
 app.go                   Wails application bindings
 wails.json               Wails project config
 internal/
-  httpapi/               router, handlers, middleware (inbound adapter)
-  service/               business rules and transactions
+  application/           business rules and transactions
   ports/                 repository interfaces consumed by services
   domain/                entities and domain errors
   adapters/
+    httpapi/             router, handlers, middleware (inbound adapter)
     persistence/
       postgres/          pgx repository implementations
       sqlite/            database/sql repository implementations
@@ -195,9 +195,9 @@ migrations/
 frontend/                copied React application
 ```
 
-Dependency direction: `httpapi → service → ports ← adapters → db`. The domain
-package is shared by all layers. `service` never imports pgx, SQLite, or
-concrete adapters. `httpapi` never issues SQL.
+Dependency direction: `adapters/httpapi → application → ports ← adapters/persistence → db`.
+The domain package is shared by all layers. `application` never imports pgx,
+SQLite, or concrete adapters. `adapters/httpapi` never issues SQL.
 
 ## Failure modes
 

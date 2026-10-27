@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"inventory-desktop/internal/application"
 	"inventory-desktop/internal/domain"
-	"inventory-desktop/internal/service"
 )
 
 type contextKey int
@@ -112,7 +112,7 @@ func bodyLimitMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func authMiddleware(authService *service.AuthService, next http.Handler) http.Handler {
+func authMiddleware(authService *application.AuthService, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimSuffix(r.URL.Path, "/")
 		if path == "/healthz" || publicPaths[path] || !strings.HasPrefix(path, "/api/v1") {
@@ -128,7 +128,7 @@ func authMiddleware(authService *service.AuthService, next http.Handler) http.Ha
 
 		user, err := authService.AuthenticateAccessToken(r.Context(), token)
 		if err != nil {
-			if errors.Is(err, service.ErrInvalidAccess) {
+			if errors.Is(err, application.ErrInvalidAccess) {
 				writeError(w, http.StatusUnauthorized, "Could not validate credentials", "INVALID_TOKEN")
 				return
 			}

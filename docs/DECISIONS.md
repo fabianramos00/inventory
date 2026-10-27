@@ -158,14 +158,14 @@ porting them.
 
 **Decision:** Put entities and domain errors in `internal/domain`, define
 consumer-facing repository interfaces in `internal/ports`, keep use cases in
-`internal/service`, and implement persistence in
-`internal/adapters/persistence/{postgres,sqlite}`. `internal/httpapi` remains
-the inbound HTTP adapter.
+`internal/application`, and implement persistence in
+`internal/adapters/persistence/{postgres,sqlite}`. The inbound HTTP adapter
+lives in `internal/adapters/httpapi`.
 
-**Consequences:** Services compile without pgx, SQLite, or `database/sql`.
-Backends can be swapped by bootstrap wiring and tested independently. New
-modules must follow the same port/adapter direction; adapter-specific types do
-not leak into services.
+**Consequences:** Application services compile without pgx, SQLite, or
+`database/sql`. Backends can be swapped by bootstrap wiring and tested
+independently. New modules must follow the same port/adapter direction;
+adapter-specific types do not leak into services.
 
 ## ADR-0012 — Automatic PostgreSQL to SQLite fallback
 

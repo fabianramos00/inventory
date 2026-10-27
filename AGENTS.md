@@ -85,11 +85,11 @@ Current code (Phase 2):
 main.go, app.go, main_bindings.go, wails.json
 cmd/             # server, seed
 internal/
-  httpapi/       # inbound HTTP adapter
-  service/       # use cases; depends only on ports
-  ports/         # repository interfaces
   domain/        # entities and domain errors
+  ports/         # repository interfaces
+  application/   # use cases; depends only on ports
   adapters/
+    httpapi/     # inbound HTTP adapter
     persistence/
       postgres/  # pgx implementations
       sqlite/    # modernc.org/sqlite implementations
