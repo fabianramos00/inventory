@@ -27,12 +27,12 @@ gofmt -l .
 
 # Go integration (auth flow, real PostgreSQL 17)
 INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
-  go test -v ./internal/adapters/httpapi
+  go test -v ./internal/adapters/inbound/httpapi
 
 # Go repository contract (PostgreSQL case skips when the env var is unset)
 INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
-  go test -v ./internal/adapters/persistence
-go test -v ./internal/adapters/persistence   # SQLite contract only
+  go test -v ./internal/adapters/outbound/persistence
+go test -v ./internal/adapters/outbound/persistence   # SQLite contract only
 
 # Go bootstrap and DB_MODE fallback
 go test -v ./internal/bootstrap
@@ -80,7 +80,7 @@ Use a dedicated PostgreSQL 17 database from `docker compose`:
 
 ```bash
 export INVENTORY_TEST_DATABASE_URL="postgresql://inventory:inventory@localhost:5433/inventory_desktop_test"
-go test -v ./internal/adapters/httpapi
+go test -v ./internal/adapters/inbound/httpapi
 ```
 
 The integration test is gated by the environment variable; without it the
@@ -104,7 +104,7 @@ Rules:
 
 ## Repository contract tests
 
-`internal/adapters/persistence/contract_test.go` runs one shared suite against
+`internal/adapters/outbound/persistence/contract_test.go` runs one shared suite against
 both persistence adapters, so PostgreSQL and SQLite cannot drift behind the
 same `internal/ports` interfaces.
 
@@ -136,10 +136,10 @@ comparison stays chronological. The read path parses with `time.RFC3339Nano`
 and normalizes to UTC, so values with a zero fraction or trimmed trailing
 zeros are accepted instead of failing. Coverage:
 
-- `internal/adapters/persistence/sqlite/values_test.go` verifies the
+- `internal/adapters/outbound/persistence/sqlite/values_test.go` verifies the
   fixed-width writer and round trip for 0, trailing-zero, and full
   nanoseconds.
-- `internal/adapters/persistence/sqlite/refresh_tokens_test.go` runs
+- `internal/adapters/outbound/persistence/sqlite/refresh_tokens_test.go` runs
   `FindValid`/`Rotate` against a temporary database with driver-normalized
   expiry strings for those three shapes, and checks both validity and
   `domain.ErrNotFound` after expiry.

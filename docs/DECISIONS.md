@@ -159,8 +159,8 @@ porting them.
 **Decision:** Put entities and domain errors in `internal/domain`, define
 consumer-facing repository interfaces in `internal/ports`, keep use cases in
 `internal/application`, and implement persistence in
-`internal/adapters/persistence/{postgres,sqlite}`. The inbound HTTP adapter
-lives in `internal/adapters/httpapi`.
+`internal/adapters/outbound/persistence/{postgres,sqlite}`. The inbound HTTP
+adapter lives in `internal/adapters/inbound/httpapi`.
 
 **Consequences:** Application services compile without pgx, SQLite, or
 `database/sql`. Backends can be swapped by bootstrap wiring and tested

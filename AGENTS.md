@@ -46,7 +46,8 @@ auth, migrations, seed, and tests. Business modules are Phase 3.
 - The API prefix is `/api/v1` and must match `docs/API-CONTRACT.md`.
 - Persistence is behind ports/adapters: services depend on `internal/ports`,
   never on pgx or SQLite. Adapters live under
-  `internal/adapters/persistence/{postgres,sqlite}`.
+  `internal/adapters/outbound/persistence/{postgres,sqlite}`; inbound adapters
+  live under `internal/adapters/inbound/`.
 - `DB_MODE=auto` probes PostgreSQL, then falls back to local SQLite. Use
   `postgres` or `sqlite` to force a backend.
 - Business data is never stored in browser storage.

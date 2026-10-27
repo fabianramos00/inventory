@@ -63,8 +63,8 @@ docs/work/                 non-developer reports and specifications
 internal/domain/           entities and domain errors
 internal/ports/            repository interfaces
 internal/application/      use cases
-internal/adapters/httpapi/ inbound HTTP adapter
-internal/adapters/persistence/{postgres,sqlite}/ outbound adapters
+internal/adapters/inbound/httpapi/ inbound HTTP adapter
+internal/adapters/outbound/persistence/{postgres,sqlite}/ outbound adapters
 ```
 
 Implemented in Phase 2: `main.go`, `app.go`, `main_bindings.go`,
@@ -105,7 +105,7 @@ make test
 make lint
 go test -race ./...
 INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
-  go test -v ./internal/adapters/httpapi
+  go test -v ./internal/adapters/inbound/httpapi
 cd frontend && pnpm test:e2e
 
 # Production build

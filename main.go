@@ -10,7 +10,7 @@ import (
 
 	"github.com/wailsapp/wails/v2"
 
-	"inventory-desktop/internal/adapters/httpapi"
+	"inventory-desktop/internal/adapters/inbound/httpapi"
 	"inventory-desktop/internal/application"
 	"inventory-desktop/internal/bootstrap"
 	"inventory-desktop/internal/config"

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"inventory-desktop/internal/adapters/httpapi"
-	sqlitestore "inventory-desktop/internal/adapters/persistence/sqlite"
+	"inventory-desktop/internal/adapters/inbound/httpapi"
+	sqlitestore "inventory-desktop/internal/adapters/outbound/persistence/sqlite"
 	"inventory-desktop/internal/application"
 	"inventory-desktop/internal/auth"
 	"inventory-desktop/internal/db"

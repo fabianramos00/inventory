@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"inventory-desktop/internal/adapters/httpapi"
+	"inventory-desktop/internal/adapters/inbound/httpapi"
 )
 
 func TestNewServerRejectsNonLoopbackAddresses(t *testing.T) {

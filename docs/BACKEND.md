@@ -40,18 +40,20 @@ internal/
     user.go             User, RefreshToken
     errors.go           ErrNotFound and other domain errors
   adapters/
-    httpapi/
-      router.go         route table
-      middleware.go     auth, CORS, recovery, request ID, logging
-      response.go       JSON and error helpers
-      handlers/         one file per module
-    persistence/
-      postgres/
-        users.go
-        refresh_tokens.go
-      sqlite/
-        users.go
-        refresh_tokens.go
+    inbound/
+      httpapi/
+        router.go       route table
+        middleware.go   auth, CORS, recovery, request ID, logging
+        response.go     JSON and error helpers
+        handlers/       one file per module
+    outbound/
+      persistence/
+        postgres/
+          users.go
+          refresh_tokens.go
+        sqlite/
+          users.go
+          refresh_tokens.go
   auth/
     jwt.go
     password.go
@@ -68,7 +70,7 @@ migrations/
   sqlite/
 ```
 
-Dependency direction: `adapters/httpapi → application → ports ← adapters/persistence → db`.
+Dependency direction: `adapters/inbound/httpapi → application → ports ← adapters/outbound/persistence → db`.
 The domain package is shared. Application services depend only on port
 interfaces. Handlers never issue SQL. Repositories never write HTTP responses.
 
@@ -112,9 +114,9 @@ transaction.
 Ports live in `internal/ports` and are consumed by services. Each backend
 implements the same interfaces:
 
-- `internal/adapters/persistence/postgres` uses `pgxpool.Pool`, `pgx.Tx`, and
-  explicit SQL.
-- `internal/adapters/persistence/sqlite` uses `database/sql` and
+- `internal/adapters/outbound/persistence/postgres` uses `pgxpool.Pool`,
+  `pgx.Tx`, and explicit SQL.
+- `internal/adapters/outbound/persistence/sqlite` uses `database/sql` and
   `modernc.org/sqlite`.
 
 Rules:

@@ -25,7 +25,7 @@ You do not implement code, migrations, tests, or build changes.
 - Architecture: hexagonal ports/adapters. Wails embeds React; Go runs a
   loopback REST API on `127.0.0.1`; `internal/domain` and `internal/ports` are
   the center, `internal/application` holds use cases, and
-  `internal/adapters/{httpapi,persistence}` are the edges. PostgreSQL 17 is
+  `internal/adapters/{inbound/httpapi,outbound/persistence}` are the edges. PostgreSQL 17 is
   primary with an automatic local SQLite fallback for offline auth.
 - Legacy references: `../inventory-api` (FastAPI contract) and
   `../inventory-app` (React UI). Both are read-only.

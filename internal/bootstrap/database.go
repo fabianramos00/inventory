@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"inventory-desktop/internal/adapters/persistence/postgres"
-	"inventory-desktop/internal/adapters/persistence/sqlite"
+	"inventory-desktop/internal/adapters/outbound/persistence/postgres"
+	"inventory-desktop/internal/adapters/outbound/persistence/sqlite"
 	"inventory-desktop/internal/config"
 	"inventory-desktop/internal/db"
 	"inventory-desktop/internal/ports"

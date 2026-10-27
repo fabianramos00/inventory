@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"inventory-desktop/internal/adapters/persistence/postgres"
-	"inventory-desktop/internal/adapters/persistence/sqlite"
+	"inventory-desktop/internal/adapters/outbound/persistence/postgres"
+	"inventory-desktop/internal/adapters/outbound/persistence/sqlite"
 	"inventory-desktop/internal/db"
 	"inventory-desktop/internal/domain"
 	"inventory-desktop/internal/ports"

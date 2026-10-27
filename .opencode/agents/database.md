@@ -17,7 +17,7 @@ migration. You never modify code, migrations, or the database.
 
 - PostgreSQL 17 is the primary database; local SQLite is the offline fallback.
 - Go persistence is behind `internal/ports`; adapters live under
-  `internal/adapters/persistence/{postgres,sqlite}`.
+  `internal/adapters/outbound/persistence/{postgres,sqlite}`.
 - PostgreSQL uses `pgx/v5` and `migrations/postgres/`; SQLite uses
   `modernc.org/sqlite` and `migrations/sqlite/`.
 - Legacy schema: `../inventory-api/app/models/` and

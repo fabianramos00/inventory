@@ -110,7 +110,7 @@ cover the desktop router.
 Persistence sits behind ports/adapters. `internal/domain` holds entities and
 domain errors, `internal/ports` holds consumer-facing repository interfaces,
 `internal/application` depends only on those interfaces, and backend adapters
-live under `internal/adapters/persistence/{postgres,sqlite}`. See
+live under `internal/adapters/outbound/persistence/{postgres,sqlite}`. See
 [DECISIONS.md](DECISIONS.md) ADR-0011.
 
 PostgreSQL:
@@ -181,10 +181,12 @@ internal/
   ports/                 repository interfaces consumed by services
   domain/                entities and domain errors
   adapters/
-    httpapi/             router, handlers, middleware (inbound adapter)
-    persistence/
-      postgres/          pgx repository implementations
-      sqlite/            database/sql repository implementations
+    inbound/
+      httpapi/           router, handlers, middleware (inbound adapter)
+    outbound/
+      persistence/
+        postgres/        pgx repository implementations
+        sqlite/          database/sql repository implementations
   auth/                  JWT, bcrypt, refresh tokens
   config/                env and file config
   db/                    backend-specific open and goose runners
@@ -195,9 +197,9 @@ migrations/
 frontend/                copied React application
 ```
 
-Dependency direction: `adapters/httpapi → application → ports ← adapters/persistence → db`.
+Dependency direction: `adapters/inbound/httpapi → application → ports ← adapters/outbound/persistence → db`.
 The domain package is shared by all layers. `application` never imports pgx,
-SQLite, or concrete adapters. `adapters/httpapi` never issues SQL.
+SQLite, or concrete adapters. `adapters/inbound/httpapi` never issues SQL.
 
 ## Failure modes
 

@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"inventory-desktop/internal/adapters/httpapi"
-	"inventory-desktop/internal/adapters/persistence/postgres"
+	"inventory-desktop/internal/adapters/inbound/httpapi"
+	"inventory-desktop/internal/adapters/outbound/persistence/postgres"
 	"inventory-desktop/internal/application"
 	"inventory-desktop/internal/auth"
 	"inventory-desktop/internal/db"
