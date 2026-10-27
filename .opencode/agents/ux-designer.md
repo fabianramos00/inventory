@@ -23,6 +23,9 @@ a desktop inventory app used at a hardware store counter.
 - Existing pages: Login, Dashboard, Inventory, Product form, Sales, Sale form,
   Orders, Order form, Providers, Clients, Users.
 - Desktop and narrow-window layouts both matter; the window can be resized.
+- The app may run on local SQLite when PostgreSQL is unreachable. Design an
+  offline/backend indicator only when the feature that exposes it is scoped;
+  do not invent sync states.
 
 ## Your scope
 

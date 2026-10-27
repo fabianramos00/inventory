@@ -1,4 +1,4 @@
-package migrations
+package sqlitemigrations
 
 import "embed"
 

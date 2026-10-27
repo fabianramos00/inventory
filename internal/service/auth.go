@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"inventory-desktop/internal/auth"
-	"inventory-desktop/internal/model"
-	"inventory-desktop/internal/repository"
+	"inventory-desktop/internal/domain"
+	"inventory-desktop/internal/ports"
 )
 
 var (
@@ -21,7 +21,7 @@ var (
 type LoginResult struct {
 	AccessToken  string
 	RefreshToken string
-	User         *model.User
+	User         *domain.User
 }
 
 type TokenPair struct {
@@ -30,24 +30,24 @@ type TokenPair struct {
 }
 
 type AuthService struct {
-	users      *repository.UserRepository
-	tokens     *repository.RefreshTokenRepository
+	users      ports.UserRepository
+	tokens     ports.RefreshTokenRepository
 	jwt        *auth.JWTManager
 	refreshTTL time.Duration
 }
 
-func NewAuthService(users *repository.UserRepository, tokens *repository.RefreshTokenRepository, secret string, accessTTL, refreshTTL time.Duration) *AuthService {
+func NewAuthService(users ports.UserRepository, tokens ports.RefreshTokenRepository, secret, backend string, accessTTL, refreshTTL time.Duration) *AuthService {
 	return &AuthService{
 		users:      users,
 		tokens:     tokens,
-		jwt:        auth.NewJWTManager(secret, accessTTL),
+		jwt:        auth.NewJWTManager(secret, accessTTL, "inventory-desktop/"+backend),
 		refreshTTL: refreshTTL,
 	}
 }
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (*LoginResult, error) {
 	user, err := s.users.GetByEmail(ctx, email)
-	if errors.Is(err, repository.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		return nil, ErrInvalidCredentials
 	}
 	if err != nil {
@@ -83,7 +83,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawToken string) (*TokenPair,
 
 	oldHash := auth.HashRefreshToken(rawToken)
 	stored, err := s.tokens.FindValid(ctx, oldHash, time.Now())
-	if errors.Is(err, repository.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		return nil, ErrInvalidRefresh
 	}
 	if err != nil {
@@ -91,7 +91,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawToken string) (*TokenPair,
 	}
 
 	user, err := s.users.GetByID(ctx, stored.UserID)
-	if errors.Is(err, repository.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		return nil, ErrInvalidRefresh
 	}
 	if err != nil {
@@ -107,7 +107,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawToken string) (*TokenPair,
 	}
 	now := time.Now()
 	if err := s.tokens.Rotate(ctx, oldHash, auth.HashRefreshToken(newToken), now, now.Add(s.refreshTTL)); err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			return nil, ErrInvalidRefresh
 		}
 		return nil, err
@@ -127,13 +127,13 @@ func (s *AuthService) Logout(ctx context.Context, rawToken string) error {
 	return s.tokens.Revoke(ctx, auth.HashRefreshToken(rawToken))
 }
 
-func (s *AuthService) AuthenticateAccessToken(ctx context.Context, rawToken string) (*model.User, error) {
+func (s *AuthService) AuthenticateAccessToken(ctx context.Context, rawToken string) (*domain.User, error) {
 	userID, err := s.jwt.Parse(rawToken)
 	if err != nil {
 		return nil, ErrInvalidAccess
 	}
 	user, err := s.users.GetByID(ctx, userID)
-	if errors.Is(err, repository.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		return nil, ErrInvalidAccess
 	}
 	if err != nil {

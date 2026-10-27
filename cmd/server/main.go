@@ -9,10 +9,9 @@ import (
 	"syscall"
 	"time"
 
+	"inventory-desktop/internal/bootstrap"
 	"inventory-desktop/internal/config"
-	"inventory-desktop/internal/db"
 	"inventory-desktop/internal/httpapi"
-	"inventory-desktop/internal/repository"
 	"inventory-desktop/internal/service"
 )
 
@@ -25,28 +24,22 @@ func main() {
 	logger := cfg.Logger()
 
 	ctx := context.Background()
-	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	stores, err := bootstrap.Open(ctx, cfg, logger)
 	if err != nil {
-		logger.Error("database connection failed", "error", err)
+		logger.Error("database startup failed", "error", err)
 		os.Exit(1)
 	}
-
-	if cfg.AutoMigrate {
-		if err := db.Migrate(ctx, cfg.DatabaseURL); err != nil {
-			pool.Close()
-			logger.Error("migration failed", "error", err)
-			os.Exit(1)
-		}
-	}
+	defer stores.Closer()
 
 	authService := service.NewAuthService(
-		repository.NewUserRepository(pool),
-		repository.NewRefreshTokenRepository(pool),
+		stores.Users,
+		stores.RefreshTokens,
 		cfg.SecretKey,
+		stores.Backend,
 		cfg.AccessTokenTTL(),
 		cfg.RefreshTokenTTL(),
 	)
-	handler := httpapi.NewRouter(authService, logger, true)
+	handler := httpapi.NewRouterWithBackend(authService, logger, stores.Backend, true)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -54,12 +47,10 @@ func main() {
 	}
 	server, err := httpapi.NewServer(net.JoinHostPort("127.0.0.1", port), handler, logger)
 	if err != nil {
-		pool.Close()
 		logger.Error("http server failed to start", "error", err)
 		os.Exit(1)
 	}
 	if err := server.Start(); err != nil {
-		pool.Close()
 		logger.Error("http server failed to start", "error", err)
 		os.Exit(1)
 	}
@@ -74,5 +65,4 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("http server shutdown failed", "error", err)
 	}
-	pool.Close()
 }

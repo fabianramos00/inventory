@@ -44,15 +44,22 @@ WebView (React) ── HTTP loopback ── Go API ── PostgreSQL
 - Bind to `127.0.0.1` only. Never `0.0.0.0`, never a LAN address.
 - Use an OS-assigned ephemeral port.
 - Do not print the API URL in release logs.
-- CORS allows only the Wails webview origin, the Vite dev origin, and the
-  Playwright preview origin (`http://localhost:4173`,
-  `http://127.0.0.1:4173`). Do not use `*` with credentials.
+- CORS always allows the Wails webview origin. The Vite `:5173` and Playwright
+  `:4173` origins are allowed only when dev mode is enabled
+  (`APP_ENV=development` or `ALLOW_DEV_ORIGINS=true`). Do not use `*` with
+  credentials.
 - Close the HTTP server on app shutdown.
-- `GET /healthz` is unauthenticated and returns no business data.
+- `GET /healthz` is unauthenticated and returns no business data. It reports
+  the active database backend (`{"status":"ok","database":"postgres|sqlite"}`)
+  so a fallback is visible to the client.
 
 ### Authentication
 
 - Bearer JWT, HS256, 30-minute access token.
+- Access tokens carry `iss`, `iat`, and a random `jti`. The issuer is bound to
+  the backend (`inventory-desktop/<backend>`), and parsing requires the
+  expected issuer and HS256. A token minted for the SQLite dataset is rejected
+  by PostgreSQL and vice versa, even when user IDs collide.
 - Refresh token: 32 random bytes, stored as a SHA-256 hash, rotated on every
   use, revoked on logout.
 - bcrypt cost 12 in production; 4 only in tests.
@@ -107,6 +114,28 @@ WebView (React) ── HTTP loopback ── Go API ── PostgreSQL
 - Migrations run with a dedicated role where possible.
 - No `echo`/query logging in production.
 
+### Local SQLite
+
+- The SQLite parent directory is always tightened to `0700`, including when it
+  already exists.
+- A symlink at the database path is rejected before opening.
+- The database file and any existing `-wal`/`-shm` sidecars are best-effort
+  set to `0600` after open.
+- These modes are Unix permissions. Windows relies on the per-user profile
+  directory because `os.Chmod` does not set an ACL.
+- SQLite is **not encrypted at rest**. Local business data must be protected by
+  OS account separation and full-disk encryption. Encryption is not
+  implemented.
+- The offline dataset is separate from PostgreSQL. A user or token from one
+  backend does not imply that the same user exists in the other. The JWT
+  issuer binding prevents token crossover; local users must be provisioned
+  per backend.
+- `DB_MODE=auto` can hide a misconfigured PostgreSQL DSN. The fallback logs a
+  warning and `/healthz` reports the active backend. Use `DB_MODE=postgres`
+  when the deployment must fail hard.
+- Back up the SQLite file with the app stopped, or use SQLite's backup API.
+  Copying a live WAL database without its sidecars can lose data.
+
 ### Logging and errors
 
 - `slog` with request ID, method, path, status, and duration.
@@ -150,7 +179,8 @@ WebView (React) ── HTTP loopback ── Go API ── PostgreSQL
 - [ ] Stock changes are transactional and row-locked.
 - [ ] No raw SQL, `eval`, or `dangerouslySetInnerHTML`.
 - [ ] No secrets or tokens in logs, docs, fixtures, or error messages.
-- [ ] CORS is not wildcard in release.
+- [ ] CORS is not wildcard in release and dev origins are disabled.
+- [ ] SQLite file/dir permissions and backend selection are verified.
 - [ ] Loopback binding is enforced in code and tested.
 - [ ] Body size, search length, and pagination bounds are enforced.
 - [ ] Rate limiting works on login and logout.

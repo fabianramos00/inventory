@@ -34,20 +34,21 @@ Wails binding.
 local attack surface, addressed by bearer auth, a random port, and
 loopback-only binding. CORS is restricted to the webview origin.
 
-## ADR-0003 — PostgreSQL remains the database
+## ADR-0003 — PostgreSQL remains the primary database
 
-**Status:** Accepted
+**Status:** Accepted; extended by ADR-0012
 
 **Context:** The legacy schema, Alembic migrations, dashboard queries, and
 business rules are built on PostgreSQL. SQLite would require translating the
 schema and query semantics.
 
-**Decision:** Keep PostgreSQL 17 and the existing schema. The desktop app
-connects with a configurable `DATABASE_URL`.
+**Decision:** Keep PostgreSQL 17 and the existing schema as the primary
+database. The desktop app connects with a configurable `DATABASE_URL`.
 
-**Consequences:** The installer requires a reachable PostgreSQL instance. The
-development environment provides one through Docker. Offline use is not
-supported in this phase. Bundling a server is deferred.
+**Consequences:** The installer requires a reachable PostgreSQL instance for
+full functionality. The development environment provides one through Docker.
+Standalone use is covered by the auth-only SQLite fallback in ADR-0012;
+bundling a PostgreSQL server is deferred.
 
 ## ADR-0004 — Full Go port with contract parity
 
@@ -145,3 +146,62 @@ explicit environment value overrides the stored value.
 **Consequences:** Tokens are valid only for the installation that issued
 them. A shared database used by several counters requires a shared secret
 configured explicitly.
+
+## ADR-0011 — Hexagonal ports/adapters for the auth slice
+
+**Status:** Accepted
+
+**Context:** The first auth slice coupled services directly to pgx
+repositories. The remaining modules will target PostgreSQL and may need a
+local fallback. The user asked for the architecture to be settled before
+porting them.
+
+**Decision:** Put entities and domain errors in `internal/domain`, define
+consumer-facing repository interfaces in `internal/ports`, keep use cases in
+`internal/service`, and implement persistence in
+`internal/adapters/persistence/{postgres,sqlite}`. `internal/httpapi` remains
+the inbound HTTP adapter.
+
+**Consequences:** Services compile without pgx, SQLite, or `database/sql`.
+Backends can be swapped by bootstrap wiring and tested independently. New
+modules must follow the same port/adapter direction; adapter-specific types do
+not leak into services.
+
+## ADR-0012 — Automatic PostgreSQL to SQLite fallback
+
+**Status:** Accepted
+
+**Context:** The desktop app must remain usable when PostgreSQL is not
+reachable, and a future sync feature needs a local source of truth. Shipping
+CGO or an embedded PostgreSQL server adds packaging and operational cost.
+
+**Decision:** Add `DB_MODE` with `auto` (default), `postgres`, and `sqlite`.
+In `auto`, probe PostgreSQL with a 3-second timeout; on failure log a warning
+and open SQLite through `modernc.org/sqlite` (pure Go). SQLite enables foreign
+keys, a busy timeout, and WAL, stores data under the OS config directory, and
+currently contains only the auth tables. PostgreSQL remains the full-feature
+backend.
+
+**Consequences:** Standalone installs can authenticate and persist sessions
+without PostgreSQL. Business modules are not available offline until the full
+SQLite schema and parity tests land in Phase 3. Automatic fallback can hide a
+misconfigured DSN, so the warning is logged and `DB_MODE=postgres` is
+available for deployments that must fail hard. Sync is not implemented; it
+will require stable sync IDs, reliable timestamps, tombstones, and an outbox.
+
+## ADR-0013 — Bind access tokens to the active backend
+
+**Status:** Accepted
+
+**Context:** PostgreSQL and SQLite user IDs both start at 1. With a shared
+`SECRET_KEY`, a token minted while the app was running on SQLite could be
+accepted by a PostgreSQL-backed process as a different user with the same ID.
+
+**Decision:** Access tokens carry `iss` = `inventory-desktop/<backend>`, plus
+`iat` and a random `jti`. Token parsing requires the expected issuer and
+HS256. The backend name is passed to the auth service during bootstrap.
+
+**Consequences:** Tokens cannot cross between the SQLite and PostgreSQL
+datasets, even when user IDs collide. Tokens issued before this change are
+rejected. A future multi-backend design with shared identities must replace
+the simple backend issuer with a stable installation/tenant identifier.

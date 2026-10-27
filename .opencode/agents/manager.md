@@ -23,7 +23,8 @@ You do not implement code, migrations, tests, or build changes.
 - Current phase: Phase 1 — documentation, rules, and agents. Phase 2 builds
   the Wails app, Go API, and frontend copy.
 - Architecture: Wails embeds React; Go runs a loopback REST API on
-  `127.0.0.1`; PostgreSQL 17 is the database.
+  `127.0.0.1`; PostgreSQL 17 is primary with an automatic local SQLite
+  fallback for offline auth.
 - Legacy references: `../inventory-api` (FastAPI contract) and
   `../inventory-app` (React UI). Both are read-only.
 - Locale: `es-CO`, COP, `America/Bogota`. UI Spanish; code/docs English.

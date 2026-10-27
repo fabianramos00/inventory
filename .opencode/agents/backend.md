@@ -29,16 +29,16 @@ must match the existing `/api/v1` contract.
   the base URL through `GetAPIBaseURL`.
 - Go 1.26, standard library `net/http`, `pgx/v5`, `pgxpool`, `goose`,
   `golang-jwt/jwt/v5`, `x/crypto/bcrypt`, `shopspring/decimal`, `log/slog`.
-- PostgreSQL 17 is the only persistence layer.
+- PostgreSQL 17 is the primary persistence layer. A local SQLite fallback uses `modernc.org/sqlite` when PostgreSQL is unreachable.
 - Legacy reference: `../inventory-api` (FastAPI + SQLAlchemy + Alembic).
 - Locale: UTC storage, `America/Bogota` for dashboard grouping. Money JSON
   numbers, COP display handled by the frontend.
-- Current phase: Phase 1 docs only. Phase 2 scaffolds the Go app.
+- Current phase: Phase 2. Auth, migrations, seed, and the PostgreSQL/SQLite ports/adapters are implemented. Business modules are Phase 3.
 
 ## Your scope
 
-- Own `main.go`, `app.go`, `internal/**`, `migrations/**`, `go.mod`,
-  `go.sum`, and backend-related docs.
+- Own `main.go`, `app.go`, `main_bindings.go`, `internal/**`, `cmd/**`,
+  `migrations/**`, `go.mod`, `go.sum`, and backend-related docs.
 - Never edit `frontend/**`, `wails.json`, build scripts, CI, or release
   configuration. Request those from `frontend` or `devops`.
 - Schema changes are proposed by `database`; you implement the migration and
@@ -66,19 +66,25 @@ Read only the module being ported.
 ### Layout
 
 ```text
-main.go, app.go
-internal/httpapi/{router.go,middleware.go,response.go,handlers/}
-internal/service/
-internal/repository/
-internal/model/
-internal/auth/
+main.go, app.go, main_bindings.go
+cmd/server/, cmd/seed/
+internal/httpapi/                 inbound HTTP adapter
+internal/service/                 use cases; imports only domain + ports
+internal/ports/                   UserRepository, RefreshTokenRepository
+internal/domain/                  entities and domain errors
+internal/adapters/persistence/
+  postgres/                       pgx adapters
+  sqlite/                         modernc.org/sqlite adapters
+internal/bootstrap/               DB_MODE selection and store wiring
+internal/auth/                    JWT, bcrypt, refresh tokens
 internal/config/
-internal/db/
-migrations/
+internal/db/                      Open/Migrate for each backend
+migrations/postgres/, migrations/sqlite/
 ```
 
-Dependency direction: `httpapi → service → repository → db`. Handlers never
-issue SQL; repositories never write HTTP.
+Dependency direction: `httpapi → service → ports ← adapters → db`. Services
+must not import pgx, `database/sql`, or either adapter. Handlers never issue
+SQL; repositories never write HTTP.
 
 ### API
 
@@ -142,6 +148,8 @@ wails build
 
 - Standard library and installed dependencies first. New dependency requires
   an ADR in `docs/DECISIONS.md`.
+- Keep use cases backend-agnostic. Add behavior to both adapters or explicitly
+  document why a backend does not support it.
 - No ORM, no web framework, no speculative abstractions.
 - No comments unless explaining why.
 - Never log secrets, tokens, passwords, or full bodies.

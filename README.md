@@ -6,10 +6,12 @@ REST API backed by PostgreSQL.
 
 ## Status
 
-**Phase 2 — walking skeleton + auth.** Implemented: Wails shell, embedded
-React login/home, loopback Go API, PostgreSQL schema/migrations, JWT login,
-refresh rotation, logout, and the seed command. Inventory, products, clients,
-providers, sales, orders, dashboard, and user management are Phase 3.
+**Phase 2 — walking skeleton + auth + hexagonal refactor.** Implemented:
+Wails shell, embedded React login/home, loopback Go API, PostgreSQL and SQLite
+persistence behind ports/adapters, JWT login, refresh rotation, logout, and
+the seed command. Inventory, products, clients, providers, sales, orders,
+dashboard, and user management are Phase 3. SQLite currently contains only
+the auth tables; full offline business data is Phase 3 work.
 
 ## Why desktop
 
@@ -34,7 +36,9 @@ store counter, with no dependency on a remote web server.
 - The API mirrors the legacy FastAPI `/api/v1` contract.
 - The React app is reused and keeps axios, TanStack Query, and existing tests.
 - The API binds to loopback only; the port is chosen at startup.
-- PostgreSQL is required; the development database runs in Docker.
+- PostgreSQL is the primary database; the development one runs in Docker.
+- `DB_MODE=auto` falls back to a local SQLite database when PostgreSQL is
+  unreachable. `DB_MODE=postgres` and `DB_MODE=sqlite` force a backend.
 
 ## Target stack
 
@@ -42,7 +46,7 @@ store counter, with no dependency on a remote web server.
 |---|---|
 | Shell | Wails v2 / Go 1.26 |
 | API | `net/http`, `pgx/v5`, `goose` |
-| Database | PostgreSQL 17 |
+| Database | PostgreSQL 17 primary; SQLite offline fallback |
 | UI | React 19, TypeScript 6, Vite 8 |
 | Data | TanStack Query v5, axios |
 | Forms | react-hook-form, zod |
@@ -56,6 +60,10 @@ opencode.json              opencode config and legacy references
 .opencode/agents/          specialized agents
 docs/                      architecture, domain, API, role docs
 docs/work/                 non-developer reports and specifications
+internal/domain/           entities and domain errors
+internal/ports/            repository interfaces
+internal/service/          use cases
+internal/adapters/         PostgreSQL and SQLite persistence adapters
 ```
 
 Implemented in Phase 2: `main.go`, `app.go`, `main_bindings.go`,
@@ -68,7 +76,7 @@ development `docker-compose.yml`.
 - Wails CLI 2.16+
 - Node 22+ and pnpm 12+
 - Docker (development PostgreSQL 17 on `127.0.0.1:5433`)
-- PostgreSQL 17 (installed database or server for production)
+- PostgreSQL 17 (recommended primary; optional for auth-only offline mode)
 
 Wails also needs the platform webview dependencies. On Linux that is
 WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`); the Makefile passes
@@ -87,6 +95,9 @@ SEED_EMAIL=admin@example.com SEED_PASSWORD='change-me-now' make seed
 
 # Run the desktop app (Linux passes -tags webkit2_41)
 make dev
+
+# Force the offline/local backend
+DB_MODE=sqlite make dev
 
 # Checks
 make test
@@ -130,6 +141,7 @@ opencode so the configuration reloads.
 | [docs/RELEASE.md](docs/RELEASE.md) | Build, packaging, release |
 | [docs/DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md) | Visual system |
 | [docs/MIGRATION.md](docs/MIGRATION.md) | FastAPI → Go migration plan |
+| [docs/SYNC.md](docs/SYNC.md) | Future offline/sync design constraints |
 
 ## Legacy references
 

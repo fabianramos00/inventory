@@ -10,6 +10,8 @@ behavior. They are not optional polish.
 | Go unit | `testing` | Services, decimal math, status derivation, validation |
 | Go handler | `httptest` | Routing, auth, status codes, JSON shape |
 | Go integration | `testing` + PostgreSQL | Transactions, stock locking, migrations |
+| Go repository contract | `testing` + PostgreSQL/SQLite | Same port cases against both adapters |
+| Go bootstrap | `testing` | `DB_MODE` selection and SQLite fallback |
 | Frontend unit | Vitest | Hooks, formatters, utilities, components |
 | Frontend E2E | Playwright | Login, inventory, sales, orders, users, keyboard |
 | Contract parity | Go test | Same fixtures against FastAPI and Go |
@@ -26,6 +28,14 @@ gofmt -l .
 # Go integration (auth flow, real PostgreSQL 17)
 INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
   go test -v ./internal/httpapi
+
+# Go repository contract (PostgreSQL case skips when the env var is unset)
+INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
+  go test -v ./internal/adapters/persistence
+go test -v ./internal/adapters/persistence   # SQLite contract only
+
+# Go bootstrap and DB_MODE fallback
+go test -v ./internal/bootstrap
 
 # Frontend
 cd frontend
@@ -91,6 +101,61 @@ Rules:
   - Deleting a received order does not reverse stock (legacy behavior).
   - Unique SKU and identity card violations map to a readable error.
   - Dashboard queries return zero-filled 7-day data.
+
+## Repository contract tests
+
+`internal/adapters/persistence/contract_test.go` runs one shared suite against
+both persistence adapters, so PostgreSQL and SQLite cannot drift behind the
+same `internal/ports` interfaces.
+
+- PostgreSQL: uses `INVENTORY_TEST_DATABASE_URL`, applies goose migrations, and
+  truncates `refresh_tokens`/`users`. It skips when the variable is unset.
+- SQLite: uses a fresh database under `t.TempDir()`, applies the SQLite goose
+  migrations, and needs no external server.
+- The contract suite and the `httpapi` auth integration test share the test
+  database; both take the PostgreSQL advisory lock in `tests/testdb` so
+  parallel package test binaries cannot truncate each other's fixtures.
+
+Cases:
+
+- User create, get by ID, get by email, update, and `domain.ErrNotFound` for
+  unknown ID/email and for updating a missing row.
+- Refresh-token create, find-valid, rotation, and revocation.
+- The old token is rejected after rotation; an already-rotated or expired token
+  cannot be rotated again.
+- An expired token is rejected by `FindValid`.
+- Token rows return the user ID they were created for (two users checked).
+
+SQLite currently only has the `users` and `refresh_tokens` tables. The rest of
+the business schema is Phase 3 work, so contract tests must not assume
+inventory, sales, orders, or dashboard tables exist on the SQLite adapter.
+
+Refresh-token timestamps are written with a fixed-width UTC format
+(`2006-01-02T15:04:05.000000000Z`) so the lexicographic `expires_at > ?`
+comparison stays chronological. The read path parses with `time.RFC3339Nano`
+and normalizes to UTC, so values with a zero fraction or trimmed trailing
+zeros are accepted instead of failing. Coverage:
+
+- `internal/adapters/persistence/sqlite/values_test.go` verifies the
+  fixed-width writer and round trip for 0, trailing-zero, and full
+  nanoseconds.
+- `internal/adapters/persistence/sqlite/refresh_tokens_test.go` runs
+  `FindValid`/`Rotate` against a temporary database with driver-normalized
+  expiry strings for those three shapes, and checks both validity and
+  `domain.ErrNotFound` after expiry.
+
+## Bootstrap and fallback tests
+
+`internal/bootstrap/database_test.go` checks the `DB_MODE` contract without a
+PostgreSQL server:
+
+- `DB_MODE=sqlite` opens a temp database, applies migrations, and returns
+  `Backend "sqlite"` with working repositories.
+- `DB_MODE=postgres` with an unreachable DSN returns an error and no stores.
+- `DB_MODE=auto` with an unreachable DSN falls back to SQLite and returns
+  `Backend "sqlite"`.
+- SQLite creates its parent directory with mode `0700` and the database file
+  with mode `0600`.
 
 ## Phase 2 auth coverage
 

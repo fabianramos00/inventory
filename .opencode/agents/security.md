@@ -18,6 +18,8 @@ remediation. You do not modify code or configuration.
 - Wails v2 desktop app. Go API bound to `127.0.0.1` with an ephemeral port.
 - React WebView stores JWT access and refresh tokens in `localStorage`.
 - PostgreSQL 17 holds customer, staff, pricing, and stock data.
+- Local SQLite may hold auth data offline; it is protected by file permissions,
+  not encryption at rest. Future sync is not implemented.
 - Legacy app used the same bearer-token model; the desktop app adds a local
   HTTP surface and a local config file.
 - Current phase: Phase 1 docs only. Phase 2 implements the API.
@@ -87,6 +89,8 @@ Main risks:
 - Devtools and external navigation disabled in release.
 - Dependency scan and `pnpm audit` clean of Critical/High.
 - Backups and restore tested.
+- SQLite file/dir permissions and fallback behavior reviewed.
+- Sync is not assumed; `docs/SYNC.md` constraints are respected.
 - `localStorage` risk documented with mitigations.
 
 ## Workflow

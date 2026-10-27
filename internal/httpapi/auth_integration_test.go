@@ -14,19 +14,20 @@ import (
 	"testing"
 	"time"
 
+	"inventory-desktop/internal/adapters/persistence/postgres"
 	"inventory-desktop/internal/auth"
 	"inventory-desktop/internal/db"
+	"inventory-desktop/internal/domain"
 	"inventory-desktop/internal/httpapi"
-	"inventory-desktop/internal/model"
-	"inventory-desktop/internal/repository"
 	"inventory-desktop/internal/service"
+	"inventory-desktop/tests/testdb"
 )
 
 type authResponse struct {
-	AccessToken  string      `json:"access_token"`
-	RefreshToken string      `json:"refresh_token"`
-	TokenType    string      `json:"token_type"`
-	User         *model.User `json:"user"`
+	AccessToken  string       `json:"access_token"`
+	RefreshToken string       `json:"refresh_token"`
+	TokenType    string       `json:"token_type"`
+	User         *domain.User `json:"user"`
 }
 
 type errorResponse struct {
@@ -41,10 +42,17 @@ func TestAuthFlow(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := db.Migrate(ctx, dsn); err != nil {
+	// The contract suite truncates the same test database; serialize the two
+	// test binaries so neither deletes the other's fixture rows mid-test.
+	release, err := testdb.Lock(ctx, dsn)
+	if err != nil {
 		t.Fatal(err)
 	}
-	pool, err := db.Open(ctx, dsn)
+	defer release()
+	if err := db.MigratePostgres(ctx, dsn); err != nil {
+		t.Fatal(err)
+	}
+	pool, err := db.OpenPostgres(ctx, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,12 +61,12 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	users := repository.NewUserRepository(pool)
+	users := postgres.NewUserRepository(pool)
 	hash, err := auth.HashPassword("admin12345", 4)
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin := &model.User{FullName: "Admin User", Email: "admin@example.com", HashedPassword: hash, IsActive: true, IsSuperuser: true}
+	admin := &domain.User{FullName: "Admin User", Email: "admin@example.com", HashedPassword: hash, IsActive: true, IsSuperuser: true}
 	if err := users.Create(ctx, admin); err != nil {
 		t.Fatal(err)
 	}
@@ -66,12 +74,12 @@ func TestAuthFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inactive := &model.User{FullName: "Inactive User", Email: "inactive@example.com", HashedPassword: inactiveHash, IsActive: false}
+	inactive := &domain.User{FullName: "Inactive User", Email: "inactive@example.com", HashedPassword: inactiveHash, IsActive: false}
 	if err := users.Create(ctx, inactive); err != nil {
 		t.Fatal(err)
 	}
 
-	authService := service.NewAuthService(users, repository.NewRefreshTokenRepository(pool), "test-secret", 30*time.Minute, 7*24*time.Hour)
+	authService := service.NewAuthService(users, postgres.NewRefreshTokenRepository(pool), "test-secret", "postgres", 30*time.Minute, 7*24*time.Hour)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := httptest.NewServer(httpapi.NewRouter(authService, logger, true))
 	defer server.Close()

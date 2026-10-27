@@ -15,14 +15,19 @@ migration. You never modify code, migrations, or the database.
 
 ## Project context
 
-- PostgreSQL 17.
-- Go backend with `pgx/v5`, explicit SQL, `goose` migrations.
+- PostgreSQL 17 is the primary database; local SQLite is the offline fallback.
+- Go persistence is behind `internal/ports`; adapters live under
+  `internal/adapters/persistence/{postgres,sqlite}`.
+- PostgreSQL uses `pgx/v5` and `migrations/postgres/`; SQLite uses
+  `modernc.org/sqlite` and `migrations/sqlite/`.
 - Legacy schema: `../inventory-api/app/models/` and
   `../inventory-api/alembic/versions/`.
-- The initial goose migration is a faithful translation of the legacy schema.
-- Money is `NUMERIC(12,2)`; stock is an integer.
+- The Postgres goose migration is a faithful translation of the legacy schema.
+- SQLite currently has auth tables only; the full schema is Phase 3 work.
+- Money is `NUMERIC(12,2)` in Postgres; SQLite money representation is a
+  Phase 3 decision. Stock is an integer.
 - Dashboard grouping uses `America/Bogota`.
-- Current phase: Phase 1 docs only. Phase 2 imports the schema.
+- Current phase: Phase 2. Auth schema and dual-backend selection exist.
 
 ## Your scope
 
@@ -37,7 +42,9 @@ migration. You never modify code, migrations, or the database.
 2. `docs/DOMAIN.md`
 3. `docs/API-CONTRACT.md`
 4. `docs/BACKEND.md`
-5. `../inventory-api/app/models/`
+5. `docs/SYNC.md` for future offline/sync constraints
+6. `migrations/postgres/`, `migrations/sqlite/`
+7. `../inventory-api/app/models/`
 6. `../inventory-api/app/repositories/dashboard.py`
 7. `../inventory-api/alembic/versions/`
 
@@ -58,6 +65,18 @@ Key relationships:
 - `sales` → clients (optional), users (`created_by_id`).
 - `supplier_catalogs` → products, providers.
 - `refresh_tokens` → users (cascade).
+
+## Dual-backend review
+
+- Compare the SQLite auth schema with the Postgres users/refresh_tokens tables:
+  nullability, uniqueness, cascade behavior, timestamp semantics, and booleans.
+- Verify every adapter returns the same domain values for the same logical row.
+- Flag any Postgres-only behavior that SQLite cannot support, especially
+  enum labels, `NUMERIC`, `FOR UPDATE`, timezone grouping, and `ILIKE`.
+- Do not allow business data into SQLite until the full schema and parity
+  tests exist.
+- Treat `docs/SYNC.md` as a constraint document: do not add sync columns
+  without an approved protocol.
 
 ## Review areas
 

@@ -13,11 +13,13 @@ references**:
 - `../inventory-app` — React 19 + Vite web client (the UI source of truth).
 
 The desktop app embeds a React frontend and runs a Go REST API on loopback.
-The Go API mirrors the legacy FastAPI `/api/v1` contract. PostgreSQL remains
-the database.
+The Go API mirrors the legacy FastAPI `/api/v1` contract. PostgreSQL is the
+primary database; when it is unreachable, the app can run on local SQLite in
+offline mode.
 
-Current phase: **Phase 1 — documentation, rules, and agents.** No application
-code exists yet. Do not scaffold code until the user starts Phase 2.
+Current phase: **Phase 2 — walking skeleton + auth + hexagonal refactor.**
+Implemented: Wails shell, Go API, PostgreSQL/SQLite persistence behind ports,
+auth, migrations, seed, and tests. Business modules are Phase 3.
 
 ## Stack
 
@@ -25,7 +27,7 @@ code exists yet. Do not scaffold code until the user starts Phase 2.
 |---|---|
 | Desktop shell | Wails v2 (Go) |
 | Backend | Go 1.26, standard library `net/http` |
-| Database | PostgreSQL 17, `pgx/v5`, `goose` migrations |
+| Database | PostgreSQL 17 (`pgx/v5`) primary; SQLite (`modernc.org/sqlite`) offline fallback; `goose` migrations |
 | Auth | JWT access + refresh tokens, bcrypt |
 | Money | `shopspring/decimal` in Go, `NUMERIC(12,2)` in PostgreSQL |
 | Frontend | React 19, TypeScript 6, Vite 8, pnpm |
@@ -42,9 +44,17 @@ code exists yet. Do not scaffold code until the user starts Phase 2.
 - Only the base URL is delivered through a Wails binding (`GetAPIBaseURL`).
   In browser dev mode, `VITE_API_URL` is the fallback.
 - The API prefix is `/api/v1` and must match `docs/API-CONTRACT.md`.
-- PostgreSQL is the only persistence layer. No SQLite, no browser storage of
-  business data.
-- Migrations are versioned SQL files run by `goose`.
+- Persistence is behind ports/adapters: services depend on `internal/ports`,
+  never on pgx or SQLite. Adapters live under
+  `internal/adapters/persistence/{postgres,sqlite}`.
+- `DB_MODE=auto` probes PostgreSQL, then falls back to local SQLite. Use
+  `postgres` or `sqlite` to force a backend.
+- Business data is never stored in browser storage.
+- Migrations are backend-specific, versioned SQL files run by `goose`.
+- SQLite currently contains only the auth tables; full offline business
+  schema is Phase 3 work.
+- Cross-device sync is not implemented. Do not invent sync behavior in a
+  feature task; follow `docs/SYNC.md`.
 - The loopback server must never bind to `0.0.0.0`.
 - Tokens are sent as `Authorization: Bearer <access_token>`.
 
@@ -69,19 +79,27 @@ opencode.json
 docs/
 ```
 
-Target after Phase 2:
+Current code (Phase 2):
 
 ```text
-main.go, app.go, wails.json
+main.go, app.go, main_bindings.go, wails.json
+cmd/             # server, seed
 internal/
-  httpapi/       # routing, handlers, middleware
-  service/       # business rules and transactions
-  repository/    # SQL and persistence
-  model/         # domain structs and DB mapping
+  httpapi/       # inbound HTTP adapter
+  service/       # use cases; depends only on ports
+  ports/         # repository interfaces
+  domain/        # entities and domain errors
+  adapters/
+    persistence/
+      postgres/  # pgx implementations
+      sqlite/    # modernc.org/sqlite implementations
   auth/          # JWT, passwords, refresh tokens
   config/        # env and app config
-  db/            # pool, goose runner
+  db/            # connection + goose runners
+  bootstrap/     # DB_MODE selection and store wiring
 migrations/
+  postgres/      # full legacy schema
+  sqlite/        # auth-only schema for offline mode
 frontend/        # copied React app
 docs/
 ```
@@ -97,7 +115,7 @@ Developer roles are the only roles allowed to write code or commit:
 | `product` | Markdown only | No | `docs/work/product/**` |
 | `ux-designer` | Markdown only | No | `docs/work/ux/**` |
 | `frontend` | Code + docs | Yes | `frontend/**` |
-| `backend` | Code + docs | Yes | `main.go`, `app.go`, `internal/**`, `migrations/**`, `go.mod`, `go.sum` |
+| `backend` | Code + docs | Yes | `main.go`, `app.go`, `main_bindings.go`, `internal/**`, `cmd/**`, `migrations/**`, `go.mod`, `go.sum` |
 | `database` | Markdown only | No | `docs/work/database/**` |
 | `qa` | Tests only | Yes | `frontend/**/*.test.*`, `frontend/e2e/**`, `internal/**/*_test.go`, `tests/**`, `testdata/**` |
 | `security` | Markdown only | No | `docs/work/security/**` |
@@ -154,7 +172,8 @@ Every agent reads only what its role needs:
 4. `docs/API-CONTRACT.md` for endpoint behavior.
 5. Its role document: `docs/FRONTEND.md`, `docs/BACKEND.md`,
    `docs/TESTING.md`, `docs/SECURITY.md`, or `docs/RELEASE.md`.
-6. Legacy source files relevant to the task.
+6. `docs/SYNC.md` when offline behavior, sync, or local SQLite is involved.
+7. Legacy source files relevant to the task.
 
 Do not bulk-read `node_modules`, `.venv`, build output, or the entire legacy
 repositories.
@@ -221,6 +240,8 @@ A task is done only when:
 - Keep secrets out of source control; use environment variables or the OS
   config directory.
 - Treat `localStorage` token storage as a known risk and document mitigations.
+- Protect the local SQLite file (owner-only permissions) and document that it
+  is not encrypted at rest yet.
 - Follow `docs/SECURITY.md` for audits and severity reporting.
 
 ## Documentation rules

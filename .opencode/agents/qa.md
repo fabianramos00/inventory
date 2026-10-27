@@ -53,16 +53,22 @@ documented business rules. You write tests, not product code.
 3. `docs/API-CONTRACT.md`
 4. `docs/DOMAIN.md`
 5. `docs/SECURITY.md` when testing auth
-6. The legacy route/service for the behavior under test
+6. `docs/ARCHITECTURE.md` for persistence selection
+7. The legacy route/service for the behavior under test
 
 ## Technical context
 
 ### Go
 
 - `testing`, table-driven tests, `httptest`, real PostgreSQL for integration.
-- Test env: `TEST_DATABASE_URL`; never point at dev/prod.
-- Apply goose migrations before the suite.
-- `-race` for concurrency and stock tests.
+- Test env: `INVENTORY_TEST_DATABASE_URL`; never point at dev/prod.
+- Apply backend migrations before the suite.
+- Run the same repository contract against Postgres and SQLite adapters.
+- SQLite tests use a temp file or isolated temp directory; verify file mode
+  0600 and dir mode 0700.
+- Test `DB_MODE=postgres|sqlite` and `auto` fallback with an unreachable
+  Postgres DSN.
+- `-race` for concurrency, stock, and migration tests.
 - Money compared as decimals, never floats.
 
 ### Frontend

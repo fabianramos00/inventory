@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -9,8 +9,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"inventory-desktop/internal/model"
+	"inventory-desktop/internal/domain"
+	"inventory-desktop/internal/ports"
 )
+
+var _ ports.RefreshTokenRepository = (*RefreshTokenRepository)(nil)
 
 type RefreshTokenRepository struct {
 	pool *pgxpool.Pool
@@ -32,8 +35,8 @@ func (r *RefreshTokenRepository) Create(ctx context.Context, userID int64, token
 	return nil
 }
 
-func (r *RefreshTokenRepository) FindValid(ctx context.Context, tokenHash string, now time.Time) (*model.RefreshToken, error) {
-	var token model.RefreshToken
+func (r *RefreshTokenRepository) FindValid(ctx context.Context, tokenHash string, now time.Time) (*domain.RefreshToken, error) {
+	var token domain.RefreshToken
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, user_id, token_hash, expires_at, COALESCE(revoked, false)
 		FROM refresh_tokens
@@ -41,7 +44,7 @@ func (r *RefreshTokenRepository) FindValid(ctx context.Context, tokenHash string
 		tokenHash, now,
 	).Scan(&token.ID, &token.UserID, &token.TokenHash, &token.ExpiresAt, &token.Revoked)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, domain.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find refresh token: %w", err)
@@ -65,7 +68,7 @@ func (r *RefreshTokenRepository) Rotate(ctx context.Context, oldHash, newHash st
 		oldHash, now,
 	).Scan(&userID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
+		return domain.ErrNotFound
 	}
 	if err != nil {
 		return fmt.Errorf("revoke rotated refresh token: %w", err)

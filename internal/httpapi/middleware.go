@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"inventory-desktop/internal/model"
+	"inventory-desktop/internal/domain"
 	"inventory-desktop/internal/service"
 )
 
@@ -139,8 +139,8 @@ func authMiddleware(authService *service.AuthService, next http.Handler) http.Ha
 	})
 }
 
-func UserFromContext(ctx context.Context) *model.User {
-	user, _ := ctx.Value(userKey).(*model.User)
+func UserFromContext(ctx context.Context) *domain.User {
+	user, _ := ctx.Value(userKey).(*domain.User)
 	return user
 }
 

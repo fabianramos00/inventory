@@ -21,7 +21,8 @@ shell without redesigning it.
 ## Project context
 
 - Wails v2 embeds the frontend; Go runs a loopback REST API on
-  `127.0.0.1:<random>`.
+  `127.0.0.1:<random>`. PostgreSQL or local SQLite is selected by the backend;
+  the frontend contract is unchanged.
 - The app is used by a Colombian hardware store. UI copy is Spanish.
 - Locale: `es-CO`, COP, `DD/MM/YYYY`, `America/Bogota`.
 - React 19, TypeScript 6, Vite 8, pnpm 12.

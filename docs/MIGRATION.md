@@ -51,6 +51,34 @@ the API module by module and proves parity before cutover.
 
 Seed data for development and parity tests is separate from migrations.
 
+## Storage backends and SQLite
+
+Persistence now follows the ports/adapters layout. PostgreSQL is the primary
+backend and keeps the full legacy schema:
+
+```text
+migrations/postgres/00001_initial_schema.sql
+```
+
+SQLite is the offline/standalone fallback:
+
+```text
+migrations/sqlite/00001_auth.sql
+```
+
+The SQLite migration currently creates only `users` and `refresh_tokens`.
+The remaining 15 business tables are **Phase 3** work and must land as one
+coherent SQLite schema with parity fixtures, not as ad-hoc per-module tables.
+
+`DB_MODE=auto` (default) probes PostgreSQL with a 3-second timeout and falls
+back to SQLite on failure. `DB_MODE=postgres` fails hard. `DB_MODE=sqlite`
+opens the local database directly. `SQLITE_PATH` defaults to
+`<OS config dir>/inventory-desktop/data/inventory.sqlite`.
+
+Future sync is not implemented. A later sync design will require stable sync
+IDs, reliable timestamps, tombstones, and an outbox for local changes; do not
+build that protocol yet.
+
 ## Module order
 
 | Order | Module | Endpoints | Why |
@@ -88,12 +116,23 @@ For each module:
    `.git`, `node_modules`, `dist`, `test-results`, `playwright-report`,
    `.env`.
 2. Add the Wails scaffold: `main.go`, `app.go`, `wails.json`, `build/`.
-3. Add `internal/` packages and `migrations/`.
+3. Add `internal/` packages and `migrations/{postgres,sqlite}/`.
 4. Add `docker-compose.yml` for PostgreSQL 17.
-5. Implement config, pool, goose, health, and the loopback server.
+5. Implement config, backend bootstrap, goose, health, and the loopback
+   server.
 6. Add the Wails `GetAPIBaseURL` binding and the frontend bootstrap.
 7. Implement auth and the login screen.
 8. Continue with the module order above.
+
+## Phase 3 — SQLite business schema
+
+1. Translate the remaining 15 business tables to `migrations/sqlite/`.
+2. Preserve integer stock, decimal money semantics, and UTC timestamps.
+3. Add adapter contract tests that run the same fixtures against PostgreSQL
+   and SQLite.
+4. Document any SQL-semantic differences (`ILIKE`, enums, `RETURNING`,
+   aggregation) and gate features that cannot reach parity.
+5. Do not implement sync in this phase.
 
 ## Frontend migration tasks
 
@@ -148,4 +187,5 @@ For each module:
 | Stock race conditions | Row locks and concurrency tests |
 | Wails webview differences | HashRouter, manual platform smoke tests |
 | Shared Postgres with multiple counters | Shared `SECRET_KEY` and documented deployment |
+| SQLite fallback diverges from PostgreSQL | Auth-only schema today; Phase 3 full-schema parity tests before exposing business modules |
 | Legacy service unavailable | Snapshot fixtures and replay locally |

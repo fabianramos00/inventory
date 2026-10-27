@@ -11,10 +11,9 @@ import (
 	"unicode/utf8"
 
 	"inventory-desktop/internal/auth"
+	"inventory-desktop/internal/bootstrap"
 	"inventory-desktop/internal/config"
-	"inventory-desktop/internal/db"
-	"inventory-desktop/internal/model"
-	"inventory-desktop/internal/repository"
+	"inventory-desktop/internal/domain"
 )
 
 func main() {
@@ -49,28 +48,21 @@ func main() {
 	logger := cfg.Logger()
 
 	ctx := context.Background()
-	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	stores, err := bootstrap.Open(ctx, cfg, logger)
 	if err != nil {
-		logger.Error("database connection failed", "error", err)
+		logger.Error("database startup failed", "error", err)
 		os.Exit(1)
 	}
-	defer pool.Close()
+	defer stores.Closer()
 
-	if cfg.AutoMigrate {
-		if err := db.Migrate(ctx, cfg.DatabaseURL); err != nil {
-			logger.Error("migration failed", "error", err)
-			os.Exit(1)
-		}
-	}
-
-	users := repository.NewUserRepository(pool)
+	users := stores.Users
 	existing, err := users.GetByEmail(ctx, *email)
-	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+	if err != nil && !errors.Is(err, domain.ErrNotFound) {
 		logger.Error("look up user failed", "error", err)
 		os.Exit(1)
 	}
 
-	if errors.Is(err, repository.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		if *password == "" {
 			fail("password is required when creating a user (use -password or SEED_PASSWORD)")
 		}
@@ -78,7 +70,7 @@ func main() {
 		if err != nil {
 			fail("hash password: " + err.Error())
 		}
-		user := &model.User{
+		user := &domain.User{
 			FullName:       strings.TrimSpace(*name),
 			Email:          *email,
 			HashedPassword: hash,

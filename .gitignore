@@ -38,6 +38,9 @@ playwright-report/
 # Local database and dumps
 *.dump
 *.sql.gz
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 pgdata/
 
 # Editor and OS

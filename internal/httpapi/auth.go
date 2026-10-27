@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"inventory-desktop/internal/model"
+	"inventory-desktop/internal/domain"
 	"inventory-desktop/internal/service"
 )
 
@@ -18,10 +18,10 @@ type AuthHandler struct {
 }
 
 type loginResponse struct {
-	AccessToken  string      `json:"access_token"`
-	RefreshToken string      `json:"refresh_token"`
-	TokenType    string      `json:"token_type"`
-	User         *model.User `json:"user"`
+	AccessToken  string       `json:"access_token"`
+	RefreshToken string       `json:"refresh_token"`
+	TokenType    string       `json:"token_type"`
+	User         *domain.User `json:"user"`
 }
 
 type refreshResponse struct {

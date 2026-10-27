@@ -1,13 +1,15 @@
 # Backend
 
 The backend is a Go REST API embedded in the Wails process. It mirrors the
-legacy FastAPI contract and owns PostgreSQL access.
+legacy FastAPI contract and owns database access through backend-specific
+adapters.
 
 ## Stack
 
 - Go 1.26.
 - Standard library `net/http` with `http.ServeMux` method patterns.
-- `pgx/v5` + `pgxpool`.
+- `pgx/v5` + `pgxpool` for PostgreSQL.
+- `database/sql` + `modernc.org/sqlite` for the local SQLite fallback.
 - `goose` for embedded SQL migrations.
 - `golang-jwt/jwt/v5` for access tokens.
 - `golang.org/x/crypto/bcrypt` for passwords.
@@ -30,22 +32,26 @@ internal/
     response.go         JSON and error helpers
     handlers/           one file per module
   service/
+    auth.go             auth use cases
     inventory.go
     sales.go
     supply_chain.go
     dashboard.go
     users.go
-  repository/
-    inventory.go
-    sales.go
-    supply_chain.go
-    dashboard.go
-    users.go
-  model/
-    inventory.go
-    sales.go
-    supply_chain.go
-    users.go
+  ports/
+    users.go            UserRepository interface
+    refresh_tokens.go   RefreshTokenRepository interface
+  domain/
+    user.go             User, RefreshToken
+    errors.go           ErrNotFound and other domain errors
+  adapters/
+    persistence/
+      postgres/
+        users.go
+        refresh_tokens.go
+      sqlite/
+        users.go
+        refresh_tokens.go
   auth/
     jwt.go
     password.go
@@ -53,13 +59,18 @@ internal/
   config/
     config.go
   db/
-    pool.go
-    migrate.go
+    postgres.go         OpenPostgres, MigratePostgres
+    sqlite.go           OpenSQLite, MigrateSQLite
+  bootstrap/
+    database.go         DB_MODE selection and store wiring
 migrations/
+  postgres/
+  sqlite/
 ```
 
-Dependency direction: `httpapi → service → repository → db`. Handlers never
-issue SQL. Repositories never write HTTP responses.
+Dependency direction: `httpapi → service → ports ← adapters → db`. The
+domain package is shared. Services depend only on port interfaces. Handlers
+never issue SQL. Repositories never write HTTP responses.
 
 ## HTTP layer
 
@@ -96,15 +107,27 @@ Do not put business rules in handlers or repositories. Do not start a
 transaction in a repository method that is called inside a service
 transaction.
 
-## Repository layer
+## Repository adapters
 
-- Use `pgxpool.Pool` and explicit SQL.
-- Use `QueryRow`, `Query`, and `pgx.CollectRows`.
-- Use `pgx.Tx` for multi-statement writes.
+Ports live in `internal/ports` and are consumed by services. Each backend
+implements the same interfaces:
+
+- `internal/adapters/persistence/postgres` uses `pgxpool.Pool`, `pgx.Tx`, and
+  explicit SQL.
+- `internal/adapters/persistence/sqlite` uses `database/sql` and
+  `modernc.org/sqlite`.
+
+Rules:
+
+- Use `QueryRow`, `Query`, and `pgx.CollectRows` in PostgreSQL.
+- Use `pgx.Tx` for multi-statement writes; use `*sql.Tx` in SQLite.
 - Parameterized queries only. Never concatenate SQL values.
 - Pagination fetches `limit + 1` rows and returns `(items, hasNext)`.
 - Search uses the legacy columns and `ILIKE` semantics; cap input length.
 - Lock products with `SELECT ... FOR UPDATE` before stock changes.
+- Map `pgx.ErrNoRows` and `sql.ErrNoRows` to `domain.ErrNotFound`.
+- SQLite booleans are scanned as integers; timestamps are stored as fixed-width
+  UTC strings so comparisons and round-trips stay correct.
 - Scan `NUMERIC` into a decimal, never into `float64`:
 
 ```go
@@ -113,13 +136,13 @@ if err := row.Scan(&raw); err != nil { ... }
 amount, err := decimal.NewFromString(raw)
 ```
 
-Use `pgtype.Numeric` only when a query needs its integer/scale parts.
+Use `pgtype.Numeric` only when a query needs its integer/scale parts. Add a
+compile-time interface assertion when implementing a port.
 
 ## Data model
 
-Use explicit structs with `db`-free domain fields and separate scan targets
-when the SQL shape differs. Keep JSON tags aligned with
-[API-CONTRACT.md](API-CONTRACT.md).
+Domain structs live in `internal/domain` and carry no database or HTTP
+coupling. Keep JSON tags aligned with [API-CONTRACT.md](API-CONTRACT.md).
 
 Money fields are `decimal.Decimal`. JSON marshaling must emit a number.
 Implement a small `Money` wrapper only if both encoding and scanning are
@@ -175,13 +198,22 @@ Status and totals are derived on the server. Never trust client totals.
 ## Configuration
 
 Load from environment, then the OS config file, then defaults. See
-[ARCHITECTURE.md](ARCHITECTURE.md). Validate the DSN at startup. Generate and
-persist `SECRET_KEY` when missing.
+[ARCHITECTURE.md](ARCHITECTURE.md). `DB_MODE` selects `auto` (default),
+`postgres`, or `sqlite`. In `auto`, PostgreSQL is probed with a 3-second
+timeout and SQLite is opened on failure. Validate the DSN at startup when it
+is used. Generate and persist `SECRET_KEY` when missing.
 
 ## Migrations
 
-- SQL files in `migrations/`, embedded with `embed.FS`.
+- SQL files live under `migrations/postgres/` and `migrations/sqlite/`, each
+  embedded with `embed.FS`.
 - Naming: `00001_initial_schema.sql`, `00002_add_index.sql`.
+- PostgreSQL keeps the legacy version at `1` so existing databases do not
+  re-run it.
+- SQLite uses goose dialect `sqlite3` and currently contains only the auth
+  tables.
+- Full SQLite business-schema parity is Phase 3 work; do not translate the
+  remaining tables piecemeal while porting modules.
 - Every migration is forward-only unless a rollback is safe and tested.
 - Run at startup when `AUTO_MIGRATE=true`; otherwise expose an explicit
   migrate command.

@@ -22,7 +22,9 @@ const (
 )
 
 type Config struct {
+	DBMode             string
 	DatabaseURL        string
+	SQLitePath         string
 	SecretKey          string
 	AccessTokenMinutes int
 	RefreshTokenDays   int
@@ -131,8 +133,28 @@ func Load() (*Config, error) {
 		databaseURL = defaultDatabaseURL
 	}
 
+	dbMode := strings.ToLower(strings.TrimSpace(lookup("DB_MODE")))
+	if dbMode == "" {
+		dbMode = "auto"
+	}
+	switch dbMode {
+	case "auto", "postgres", "sqlite":
+	default:
+		return nil, fmt.Errorf("DB_MODE must be auto, postgres, or sqlite, got %q", dbMode)
+	}
+
+	sqlitePath := lookup("SQLITE_PATH")
+	if sqlitePath == "" {
+		sqlitePath, err = defaultSQLitePath()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &Config{
+		DBMode:             dbMode,
 		DatabaseURL:        databaseURL,
+		SQLitePath:         sqlitePath,
 		SecretKey:          secret,
 		AccessTokenMinutes: accessMinutes,
 		RefreshTokenDays:   refreshDays,
@@ -174,6 +196,14 @@ func configPath() (string, error) {
 		return "", fmt.Errorf("locate user config directory: %w", err)
 	}
 	return filepath.Join(dir, "inventory-desktop", "config.env"), nil
+}
+
+func defaultSQLitePath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("locate user config directory: %w", err)
+	}
+	return filepath.Join(dir, "inventory-desktop", "data", "inventory.sqlite"), nil
 }
 
 func readConfigFile(path string, values map[string]string) error {

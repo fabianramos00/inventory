@@ -9,10 +9,13 @@
 | Node | 22+ |
 | pnpm | 12+ |
 | Platform webview deps | WebView2 / WebKitGTK 4.1 / system WebKit |
-| PostgreSQL | 17 |
+| PostgreSQL | 17 (primary; optional for auth-only offline use) |
 
-The target machine needs a reachable PostgreSQL 17 instance. The installer
-does not bundle PostgreSQL.
+PostgreSQL is the primary database. The installer does not bundle it. With
+`DB_MODE=auto` (default), the app falls back to local SQLite when PostgreSQL
+is unreachable. `DB_MODE=postgres` fails hard; `DB_MODE=sqlite` forces the
+local backend. SQLite currently contains only the auth tables, so offline
+inventory/sales are not available until Phase 3.
 
 On Linux, Wails must be built with `-tags webkit2_41`. Ubuntu 26.04 ships
 WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`) only, so the 4.0 ABI is unavailable.
@@ -21,9 +24,10 @@ on port `5433`.
 
 ## Phase status
 
-Phase 2 ships the walking skeleton, PostgreSQL migrations, seed command, and
-authentication. Inventory, sales, orders, and dashboard are deferred to
-Phase 3 and are not part of a Phase 2 release.
+Phase 2 ships the walking skeleton, PostgreSQL and SQLite persistence behind
+ports/adapters, authentication, and the seed command. Inventory, sales, orders,
+and dashboard are deferred to Phase 3. The SQLite fallback is auth-only; the
+full offline business schema is Phase 3 work.
 
 ## Versioning
 
@@ -52,14 +56,17 @@ cd frontend && pnpm lint && pnpm test && pnpm build && cd ..
 wails build -tags webkit2_41
 ```
 
-`wails build` does not require a running PostgreSQL instance. Wails compiles a
+`wails build` does not require a running database. The app itself starts with
+`DB_MODE=auto` and local SQLite if PostgreSQL is unavailable. Wails compiles a
 temporary binary with the `bindings` build tag to generate `frontend/wailsjs`;
 that entry point skips config loading, database connection, and migrations. The
 database is required only when the built app runs, or for seed and parity
 tests.
 
 The `Makefile` wraps the same steps: `make dev`, `make build`, `make test`,
-`make lint`, `make db-up`, `make db-down`, and `make seed`. The `scripts/dev.sh`
+`make lint`, `make db-up`, `make db-down`, and `make seed`. To seed the offline
+dataset, run `DB_MODE=sqlite SEED_EMAIL=... SEED_PASSWORD=... make seed`.
+Local SQLite accounts are separate from PostgreSQL accounts until sync exists. The `scripts/dev.sh`
 and `scripts/build.sh` wrappers source `.env` when it exists and call the
 matching make target.
 

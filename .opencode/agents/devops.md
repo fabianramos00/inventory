@@ -29,11 +29,11 @@ Windows, and macOS.
 ## Project context
 
 - Wails v2 with Go 1.26, React 19, Vite 8, pnpm 12.
-- PostgreSQL 17 is required at runtime; the installer does not bundle it.
+- PostgreSQL 17 is the primary runtime database; `DB_MODE=auto` falls back to local SQLite, so PostgreSQL is not strictly required for auth-only offline use.
 - Targets: Linux (amd64), Windows (amd64, WebView2), macOS (universal).
 - Signing: Authenticode on Windows, Developer ID + notarization on macOS,
   checksums on Linux.
-- Current phase: Phase 1 docs only. No build files exist yet.
+- Current phase: Phase 2. Wails build, Makefile, scripts, and the Linux WebKitGTK 4.1 tag are in place.
 
 ## Your scope
 
@@ -86,10 +86,11 @@ A red step blocks release.
 
 ### Runtime prerequisites
 
-- PostgreSQL 17 reachable through `DATABASE_URL`.
-- Writable OS config directory.
-- Generated or supplied `SECRET_KEY`.
-- Correct file permissions on the config file.
+- `DB_MODE=auto` (default), `postgres`, or `sqlite`.
+- PostgreSQL 17 reachable through `DATABASE_URL` when using Postgres.
+- Writable OS config directory for `config.env` and the default SQLite file.
+- Generated or supplied `SECRET_KEY` (32+ bytes).
+- Correct file permissions on the config and SQLite files.
 
 ### Release quality
 

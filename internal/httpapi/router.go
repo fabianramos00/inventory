@@ -8,12 +8,19 @@ import (
 )
 
 func NewRouter(authService *service.AuthService, logger *slog.Logger, devMode ...bool) http.Handler {
+	return NewRouterWithBackend(authService, logger, "", devMode...)
+}
+
+func NewRouterWithBackend(authService *service.AuthService, logger *slog.Logger, backend string, devMode ...bool) http.Handler {
 	dev := len(devMode) > 0 && devMode[0]
+	if backend == "" {
+		backend = "unknown"
+	}
 	mux := http.NewServeMux()
 	authHandler := NewAuthHandler(authService, logger)
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "database": backend})
 	})
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
 	mux.HandleFunc("POST /api/v1/auth/refresh", authHandler.Refresh)
