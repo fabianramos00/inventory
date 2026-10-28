@@ -101,7 +101,7 @@ func TestAuthFlow(t *testing.T) {
 	)
 	userService := application.NewUserService(users, passwords)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := httptest.NewServer(httpapi.NewRouter(authService, userService, logger, true))
+	server := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{Auth: authService, Users: userService, Logger: logger, DevMode: true}))
 	defer server.Close()
 
 	t.Run("login", func(t *testing.T) {
@@ -226,7 +226,7 @@ func TestAuthFlow(t *testing.T) {
 	})
 
 	t.Run("dev origins are rejected when dev mode is off", func(t *testing.T) {
-		strict := httptest.NewServer(httpapi.NewRouter(authService, userService, logger))
+		strict := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{Auth: authService, Users: userService, Logger: logger}))
 		defer strict.Close()
 
 		originHeader := func(origin string) http.Header {

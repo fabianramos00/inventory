@@ -238,3 +238,20 @@ through `gormstore.Timestamp`. GORM is configured with a silent logger so SQL
 values and token material never reach logs. Queries that need precise locking
 or aggregation may still be written by hand without introducing a second
 persistence abstraction.
+
+## ADR-0015 — Catalog search treats SQL wildcards literally
+
+**Status:** Accepted
+
+**Context:** Legacy FastAPI built catalog search as `ILIKE '%' || term || '%'`,
+so `%` and `_` in the term acted as SQL wildcards. The SQLite Go-side filter
+folds case in Go over a full-table scan, which cannot reproduce `ILIKE`
+wildcard semantics. Backend parity requires the same observable behavior on
+PostgreSQL and SQLite.
+
+**Decision:** Catalog search performs literal substring matching on both
+backends. PostgreSQL uses `strpos(lower(name), lower(?)) > 0`; SQLite uses Go
+case folding. `%` and `_` are ordinary characters.
+
+**Consequences:** Results are consistent across backends, but `%` and `_` no
+longer act as wildcards, a documented deviation from the legacy API.

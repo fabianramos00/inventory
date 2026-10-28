@@ -155,10 +155,22 @@ Cases:
   cannot be rotated again.
 - An expired token is rejected by `FindValid`.
 - Token rows return the user ID they were created for (two users checked).
+- Catalog CRUD for categories, brands, materials, and measurement units on both
+  backends: create, get, update, delete, and `domain.ErrNotFound` for missing
+  rows and updates.
+- Duplicate category name/code, brand name, material name, and unit
+  name/abbreviation map to `domain.ErrConflict`.
+- Deleting a category, brand, material, or unit referenced by a product maps to
+  `domain.ErrForeignKeyViolation` and leaves the row in place.
+- Catalog list orders by `id DESC`, computes `has_next` from `limit + 1`,
+  honors `skip`, searches `name` only, and matches accented terms with different
+  casing on SQLite and PostgreSQL.
 
-SQLite currently only has the `users` and `refresh_tokens` tables. The rest of
-the business schema is Phase 3 work, so contract tests must not assume
-inventory, sales, orders, or dashboard tables exist on the SQLite adapter.
+SQLite now has the full Phase 3 business schema (`00001_auth.sql` plus
+`00002_catalog.sql` through `00006_sales.sql`). Go service, handler, and
+persistence contract coverage for catalog exists on both backends; the live
+legacy FastAPI fixture run is still pending. Product, sales, order, and
+dashboard repositories are still pending.
 
 Refresh-token timestamps use `gormstore.Timestamp`, which writes a fixed-width
 UTC format (`2006-01-02T15:04:05.000000000Z`) so the lexicographic
@@ -167,7 +179,7 @@ read path parses with `time.RFC3339Nano` and normalizes to UTC, so values with
 a zero fraction or trimmed trailing zeros are accepted instead of failing.
 Coverage:
 
-- `internal/adapters/outbound/persistence/gormstore/models_test.go` verifies
+- `internal/adapters/outbound/persistence/gormstore/timestamp_test.go` verifies
   the fixed-width writer and round trip for 0, trailing-zero, and full
   nanoseconds, plus driver-normalized strings.
 - `internal/adapters/outbound/persistence/gormstore/refresh_tokens_test.go`
@@ -203,6 +215,22 @@ on all five routes, the exact legacy `403` detail, list cursor pagination,
 CRUD success, duplicate email `400`, `404 User not found`, and the
 `FOREIGN_KEY_VIOLATION` code on delete.
 
+### Catalog slice
+
+`internal/application/catalog_test.go` covers create validation boundaries for
+every catalog entity (150-character names, 10-character category code,
+500-character description, 255-character logo URL, 5-character abbreviation,
+empty required fields), partial updates that keep omitted fields and clear
+empty optional strings, conflict/not-found propagation, and pagination/search
+pass-through.
+
+`internal/adapters/inbound/httpapi/catalog_test.go` covers bearer auth on all 18
+routes, the four exact `404` details, `UNIQUE_VIOLATION` and
+`FOREIGN_KEY_VIOLATION` codes, `422 VALIDATION_ERROR` for bad ids, query
+parameters, malformed JSON, and unknown fields, the `{items, has_next, skip,
+limit}` list shape, `200` create/update/delete responses, and the intentional
+absence of `GET` by id for materials and measurement units (404).
+
 `frontend/e2e/users.spec.ts` runs the full stack: real login, create a unique
 user from the Usuarios page, search, rename, toggle active, and delete.
 
@@ -231,9 +259,10 @@ The following is covered now:
   environment so the password never appears in argv, and the test secret is
   at least 32 bytes.
 
-Deferred until Phase 3: inventory CRUD, sales/stock, purchase orders,
-dashboard, and the full 67-endpoint parity matrix. The Users CRUD slice is
-covered now (application, handler, repository contract, and full-stack E2E).
+Deferred: product CRUD and stats, sales/stock, purchase orders, dashboard, and
+the full 67-endpoint parity matrix. The Users CRUD slice and the catalog slice
+are covered now (application, handler, repository contract, and, for Users,
+full-stack E2E).
 
 ## Frontend tests
 
@@ -316,7 +345,8 @@ fixtures in replay mode. Do not mark parity as passing without a run.
 |---|---:|---|
 | Auth | 3 | Covered (Phase 2) |
 | Users | 5 | Covered (this slice) |
-| Inventory | 24 | Pending |
+| Inventory — catalog | 18 | Backend contract covered; legacy FastAPI parity pending |
+| Inventory — products | 6 | Pending |
 | Sales + clients | 15 | Pending |
 | Supply chain | 16 | Pending |
 | Dashboard | 4 | Pending |

@@ -32,6 +32,7 @@ app.go                  Wails bindings (GetAPIBaseURL)
 internal/
   application/
     auth.go             auth use cases
+    catalog.go          catalog validation and use cases
     inventory.go
     sales.go
     supply_chain.go
@@ -40,14 +41,17 @@ internal/
   ports/
     inbound/
       auth.go           AuthUseCase, LoginResult, TokenPair
+      catalog.go        CatalogUseCase, list and create/update inputs
       users.go          UserUseCase, UserList, create/update inputs
     outbound/
+      catalog.go        CatalogRepository interface
       users.go          UserRepository interface
       refresh_tokens.go RefreshTokenRepository interface
       password_hasher.go
       access_token_issuer.go
       refresh_token_service.go
   domain/
+    catalog.go          Category, Brand, Material, MeasurementUnit
     user.go             User, RefreshToken (no JSON tags)
     errors.go           domain sentinel errors (not found, conflict, validation, auth)
   adapters/
@@ -57,12 +61,14 @@ internal/
         middleware.go   auth, CORS, recovery, request ID, logging
         response.go     JSON and error helpers
         auth.go         auth handlers
+        catalog.go      catalog CRUD handlers and request/response DTOs
         user_dto.go     shared user response DTO and mapper
         users.go        user CRUD handlers and superuser guard
     outbound/
       persistence/
         gormstore/
           timestamp.go  fixed-width UTC Timestamp type
+          catalog.go    catalog models and repositories
           user_model.go
           refresh_token_model.go
           users.go      UserRepository
@@ -141,7 +147,8 @@ Rules:
   complex statements.
 - Parameterized queries only. Never concatenate SQL values.
 - Pagination fetches `limit + 1` rows and returns `(items, hasNext)`.
-- Search uses the legacy columns and `ILIKE` semantics; cap input length.
+- Search uses the legacy columns and stays case-insensitive; wildcard
+  handling is documented per module. Cap input length.
 - Lock products with `SELECT ... FOR UPDATE` before stock changes.
 - Map `gorm.ErrRecordNotFound` and `sql.ErrNoRows` to `domain.ErrNotFound`.
 - Multi-row writes use `db.Transaction` so both dialects commit atomically.
@@ -206,6 +213,31 @@ Dates are `time.Time` in UTC. Format responses with `time.RFC3339`.
 
 Never log passwords, tokens, authorization headers, or full request bodies.
 
+## Catalog
+
+- Endpoints under `/api/v1/inventory`: categories and brands expose list,
+  create, get, update, and delete; materials and measurement units expose list,
+  create, update, and delete (no `GET` by id, matching `include_get=False`).
+- All routes need any active user; only `/users` requires a superuser.
+- Lists return `{items, has_next, skip, limit}`, order `id DESC`, and search
+  `name` only. `search` is trimmed and capped at 256 runes; `limit` defaults to
+  100 and is capped at 200.
+- Create/update/delete return the entity with `200`. Update is partial; omitted
+  and `null` string fields stay unchanged, and an empty string clears an
+  optional field. Required names and unit abbreviations reject empty values.
+- Validation mirrors database lengths: names 150, category code 10, category
+  description 500, brand `logo_url` 255, unit abbreviation 5.
+- Duplicates map to `400 UNIQUE_VIOLATION`; referenced deletes map to
+  `400 FOREIGN_KEY_VIOLATION`; missing rows use the legacy details
+  (`Category not found`, `Brand not found`, `Material not found`,
+  `Unit of Measure not found`).
+- Search treats `%` and `_` literally on both backends — a deliberate
+  difference from legacy `ILIKE` wildcard behavior, documented in
+  [ADR-0015](DECISIONS.md#adr-0015--catalog-search-treats-sql-wildcards-literally).
+  PostgreSQL uses `strpos(lower(name), lower(?)) > 0`; SQLite uses Go Unicode
+  case folding over a full-table scan (`ponytail:` add FTS5 if catalog size
+  makes the scan measurable).
+
 ## Transactions and stock
 
 Sale creation:
@@ -259,9 +291,9 @@ is used. Generate and persist `SECRET_KEY` when missing.
 - SQLite uses goose dialect `sqlite3`. Version 1 creates the auth tables
   (`users`, `refresh_tokens`); versions 2–6 create the Phase 3 business schema
   split by domain: catalog, identity, products, purchases, sales.
-- The business schema exists, but the business repositories and handlers are
-  still pending. Do not translate business tables piecemeal; parity tests come
-  with the adapters.
+- The catalog repositories and handlers are implemented. The remaining
+  business repositories and handlers are still pending. Do not translate
+  business tables piecemeal; parity tests come with the adapters.
 - Every migration is forward-only unless a rollback is safe and tested.
 - Run at startup when `AUTO_MIGRATE=true`; otherwise expose an explicit
   migrate command.

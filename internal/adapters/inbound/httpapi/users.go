@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	defaultUserLimit = 100
-	maxUserLimit     = 200
-	maxUserSearch    = 256
+	defaultListLimit = 100
+	maxListLimit     = 200
+	maxListSearch    = 256
 )
 
 type UsersHandler struct {
@@ -44,7 +44,7 @@ func NewUsersHandler(service inbound.UserUseCase, logger *slog.Logger) *UsersHan
 }
 
 func (h *UsersHandler) List(w http.ResponseWriter, r *http.Request) {
-	skip, limit, search, err := parseUserListQuery(r)
+	skip, limit, search, err := parseListQuery(r)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid query parameters", "VALIDATION_ERROR")
 		return
@@ -87,7 +87,7 @@ func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UsersHandler) Get(w http.ResponseWriter, r *http.Request) {
-	id, ok := userID(r)
+	id, ok := pathID(r)
 	if !ok {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid user id", "VALIDATION_ERROR")
 		return
@@ -101,7 +101,7 @@ func (h *UsersHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UsersHandler) Update(w http.ResponseWriter, r *http.Request) {
-	id, ok := userID(r)
+	id, ok := pathID(r)
 	if !ok {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid user id", "VALIDATION_ERROR")
 		return
@@ -126,7 +126,7 @@ func (h *UsersHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UsersHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	id, ok := userID(r)
+	id, ok := pathID(r)
 	if !ok {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid user id", "VALIDATION_ERROR")
 		return
@@ -167,7 +167,7 @@ func requireSuperuser(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func parseUserListQuery(r *http.Request) (int, int, string, error) {
+func parseListQuery(r *http.Request) (int, int, string, error) {
 	query := r.URL.Query()
 	skip := 0
 	if raw := query.Get("skip"); raw != "" {
@@ -177,22 +177,22 @@ func parseUserListQuery(r *http.Request) (int, int, string, error) {
 		}
 		skip = parsed
 	}
-	limit := defaultUserLimit
+	limit := defaultListLimit
 	if raw := query.Get("limit"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed < 1 || parsed > maxUserLimit {
+		if err != nil || parsed < 1 || parsed > maxListLimit {
 			return 0, 0, "", errors.New("invalid limit")
 		}
 		limit = parsed
 	}
 	search := strings.TrimSpace(query.Get("search"))
-	if utf8.RuneCountInString(search) > maxUserSearch {
+	if utf8.RuneCountInString(search) > maxListSearch {
 		return 0, 0, "", errors.New("invalid search")
 	}
 	return skip, limit, search, nil
 }
 
-func userID(r *http.Request) (int64, bool) {
+func pathID(r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	return id, err == nil && id > 0
 }

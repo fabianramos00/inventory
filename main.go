@@ -44,7 +44,17 @@ func main() {
 		cfg.RefreshTokenTTL(),
 	)
 	userService := application.NewUserService(stores.Users, passwords)
-	handler := httpapi.NewRouterWithBackend(authService, userService, logger, stores.Backend, cfg.DevMode)
+	handler := httpapi.NewRouter(httpapi.Deps{
+		Auth:             authService,
+		Users:            userService,
+		Categories:       application.NewCategoryService(stores.Categories),
+		Brands:           application.NewBrandService(stores.Brands),
+		Materials:        application.NewMaterialService(stores.Materials),
+		MeasurementUnits: application.NewMeasurementUnitService(stores.MeasurementUnits),
+		Logger:           logger,
+		Backend:          stores.Backend,
+		DevMode:          cfg.DevMode,
+	})
 	server, err := httpapi.NewServer("127.0.0.1:0", handler, logger)
 	if err != nil {
 		_ = stores.Closer()

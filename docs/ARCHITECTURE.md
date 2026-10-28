@@ -145,9 +145,9 @@ SQLite:
 - Migrations in `migrations/sqlite/`, embedded in the binary and run through
   goose.
 - The auth tables and the full Phase 3 business schema exist today
-  (  `00001_auth.sql` plus `00002_catalog.sql` through `00006_sales.sql`).
-  Business repositories and handlers are still pending, so offline business
-  modules are not available yet.
+  (`00001_auth.sql` plus `00002_catalog.sql` through `00006_sales.sql`).
+  Catalog repositories and handlers are implemented; the remaining business
+  modules are still pending.
 - Booleans are stored as `0`/`1`; timestamps are stored as fixed-width UTC
   text so lexical comparisons stay correct, and parsing accepts RFC 3339
   with variable fractional seconds.

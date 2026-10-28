@@ -5,8 +5,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
+
+	"gorm.io/gorm"
 
 	"inventory-desktop/internal/adapters/outbound/persistence/gormstore"
 	"inventory-desktop/internal/db"
@@ -17,8 +20,13 @@ import (
 
 // repositories is one backend wired to the port interfaces services consume.
 type repositories struct {
-	users  outbound.UserRepository
-	tokens outbound.RefreshTokenRepository
+	users      outbound.UserRepository
+	tokens     outbound.RefreshTokenRepository
+	categories outbound.CatalogRepository[domain.Category]
+	brands     outbound.CatalogRepository[domain.Brand]
+	materials  outbound.CatalogRepository[domain.Material]
+	units      outbound.CatalogRepository[domain.MeasurementUnit]
+	gorm       *gorm.DB
 }
 
 func TestRepositoryContract(t *testing.T) {
@@ -29,6 +37,7 @@ func TestRepositoryContract(t *testing.T) {
 		{"sqlite", openSQLiteRepositories},
 		{"postgres", openPostgresRepositories},
 	}
+	searchIDs := map[string]map[string][]int64{}
 	for _, backend := range backends {
 		t.Run(backend.name, func(t *testing.T) {
 			repos := backend.setup(t)
@@ -37,7 +46,17 @@ func TestRepositoryContract(t *testing.T) {
 				testUserListAndDelete(t, repos)
 			})
 			t.Run("refresh tokens", func(t *testing.T) { testRefreshTokens(t, repos) })
+			t.Run("catalog", func(t *testing.T) { testCatalog(t, repos, searchIDs, backend.name) })
 		})
+	}
+	postgresIDs, postgresRan := searchIDs["postgres"]
+	if !postgresRan {
+		return
+	}
+	for query, want := range searchIDs["sqlite"] {
+		if got := postgresIDs[query]; !slices.Equal(got, want) {
+			t.Fatalf("search %q ids = %v on postgres, %v on sqlite", query, got, want)
+		}
 	}
 }
 
@@ -53,9 +72,18 @@ func openSQLiteRepositories(t *testing.T) *repositories {
 	if err := db.MigrateSQLite(ctx, conn); err != nil {
 		t.Fatal(err)
 	}
+	return newRepositories(gormDB)
+}
+
+func newRepositories(gormDB *gorm.DB) *repositories {
 	return &repositories{
-		users:  gormstore.NewUserStore(gormDB),
-		tokens: gormstore.NewRefreshTokenStore(gormDB),
+		users:      gormstore.NewUserStore(gormDB),
+		tokens:     gormstore.NewRefreshTokenStore(gormDB),
+		categories: gormstore.NewCategoryStore(gormDB),
+		brands:     gormstore.NewBrandStore(gormDB),
+		materials:  gormstore.NewMaterialStore(gormDB),
+		units:      gormstore.NewMeasurementUnitStore(gormDB),
+		gorm:       gormDB,
 	}
 }
 
@@ -84,13 +112,370 @@ func openPostgresRepositories(t *testing.T) *repositories {
 	if err := db.MigratePostgres(ctx, conn); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.ExecContext(ctx, "TRUNCATE refresh_tokens, users RESTART IDENTITY CASCADE"); err != nil {
+	if _, err := conn.ExecContext(ctx, "TRUNCATE users, categories, materials, brands, measurement_units RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatal(err)
 	}
-	return &repositories{
-		users:  gormstore.NewUserStore(gormDB),
-		tokens: gormstore.NewRefreshTokenStore(gormDB),
+	return newRepositories(gormDB)
+}
+
+func testCatalog(t *testing.T, repos *repositories, searchIDs map[string]map[string][]int64, backend string) {
+	t.Helper()
+	ctx := context.Background()
+
+	// Runs first so both freshly reset backends assign the same ids to these
+	// rows; the parity check at the end compares those ids across backends.
+	t.Run("literal wildcards", func(t *testing.T) {
+		ids := map[string]int64{}
+		for _, name := range []string{"100% cotton", "100 cotton", "a_b", "axb"} {
+			record, err := repos.materials.Create(ctx, &domain.Material{Name: name})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ids[name] = record.ID
+		}
+		searchIDs[backend] = map[string][]int64{}
+
+		for _, tt := range []struct{ name, query, want string }{
+			{"percent", "%", "100% cotton"},
+			{"underscore", "_", "a_b"},
+		} {
+			t.Run("search "+tt.name, func(t *testing.T) {
+				items, hasNext, err := repos.materials.List(ctx, 0, 10, tt.query)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if hasNext || len(items) != 1 || items[0].ID != ids[tt.want] {
+					t.Fatalf("search %q = %d items has_next=%v, want %q only", tt.query, len(items), hasNext, tt.want)
+				}
+				searchIDs[backend][tt.query] = []int64{items[0].ID}
+			})
+		}
+	})
+
+	t.Run("category", func(t *testing.T) {
+		code := "CAT-1"
+		description := "Hand tools"
+		created, err := repos.categories.Create(ctx, &domain.Category{Name: "Contract Category", Code: &code, Description: &description})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if created.ID <= 0 {
+			t.Fatalf("Create returned id %d, want a positive id", created.ID)
+		}
+
+		got, err := repos.categories.Get(ctx, created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertCategory(t, got, created)
+		if _, err := repos.categories.Get(ctx, created.ID+1000); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("Get missing row error = %v, want ErrNotFound", err)
+		}
+
+		if _, err := repos.categories.Create(ctx, &domain.Category{Name: created.Name}); !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("duplicate name error = %v, want ErrConflict", err)
+		}
+
+		otherCode := "CAT-2"
+		other, err := repos.categories.Create(ctx, &domain.Category{Name: "Contract Category Two", Code: &otherCode})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repos.categories.Create(ctx, &domain.Category{Name: "Contract Category Three", Code: &otherCode}); !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("duplicate code error = %v, want ErrConflict", err)
+		}
+
+		for _, query := range []string{"Hand tools", "CAT-2"} {
+			items, hasNext, err := repos.categories.List(ctx, 0, 10, query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasNext || len(items) != 0 {
+				t.Fatalf("search %q matched non-name fields: %+v", query, items)
+			}
+		}
+
+		updatedDescription := "Updated description"
+		if err := repos.categories.Update(ctx, created.ID, &domain.Category{Name: "Contract Category Updated", Description: &updatedDescription}); err != nil {
+			t.Fatal(err)
+		}
+		got, err = repos.categories.Get(ctx, created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Name != "Contract Category Updated" || got.Code != nil || got.Description == nil || *got.Description != updatedDescription {
+			t.Fatalf("updated category = %+v", got)
+		}
+		if err := repos.categories.Update(ctx, created.ID, &domain.Category{Name: got.Name, Code: got.Code, Description: got.Description}); err != nil {
+			t.Fatalf("no-op update error = %v, want nil", err)
+		}
+
+		if err := repos.categories.Update(ctx, created.ID+1000, &domain.Category{Name: "Ghost"}); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("update missing row error = %v, want ErrNotFound", err)
+		}
+
+		if _, err := repos.categories.Create(ctx, &domain.Category{Name: "Contract Category Four"}); err != nil {
+			t.Fatal(err)
+		}
+
+		deleted, err := repos.categories.Delete(ctx, other.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertCategory(t, deleted, other)
+		if _, err := repos.categories.Get(ctx, other.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("Get after delete error = %v, want ErrNotFound", err)
+		}
+		if _, err := repos.categories.Delete(ctx, other.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("second delete error = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("brand", func(t *testing.T) {
+		logo := "https://example.com/logo.png"
+		created, err := repos.brands.Create(ctx, &domain.Brand{Name: "Contract Brand", LogoURL: &logo})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := repos.brands.Get(ctx, created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertBrand(t, got, created)
+
+		if _, err := repos.brands.Create(ctx, &domain.Brand{Name: created.Name}); !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("duplicate name error = %v, want ErrConflict", err)
+		}
+		if err := repos.brands.Update(ctx, created.ID, &domain.Brand{Name: "Contract Brand Updated"}); err != nil {
+			t.Fatal(err)
+		}
+		got, err = repos.brands.Get(ctx, created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Name != "Contract Brand Updated" || got.LogoURL != nil {
+			t.Fatalf("updated brand = %+v", got)
+		}
+		if err := repos.brands.Update(ctx, created.ID+1000, &domain.Brand{Name: "Ghost"}); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("update missing row error = %v, want ErrNotFound", err)
+		}
+		if _, err := repos.brands.Delete(ctx, created.ID); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("material", func(t *testing.T) {
+		created, err := repos.materials.Create(ctx, &domain.Material{Name: "Contract Material"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := repos.materials.Get(ctx, created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertMaterial(t, got, created)
+
+		if _, err := repos.materials.Create(ctx, &domain.Material{Name: created.Name}); !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("duplicate name error = %v, want ErrConflict", err)
+		}
+		if err := repos.materials.Update(ctx, created.ID, &domain.Material{Name: "Contract Material Updated"}); err != nil {
+			t.Fatal(err)
+		}
+		got, err = repos.materials.Get(ctx, created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Name != "Contract Material Updated" {
+			t.Fatalf("updated material = %+v", got)
+		}
+		if _, err := repos.materials.Delete(ctx, created.ID); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("measurement unit", func(t *testing.T) {
+		created, err := repos.units.Create(ctx, &domain.MeasurementUnit{Name: "Contract Unit", Abbreviation: "cu"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := repos.units.Get(ctx, created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertMeasurementUnit(t, got, created)
+
+		if _, err := repos.units.Create(ctx, &domain.MeasurementUnit{Name: created.Name, Abbreviation: "xx"}); !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("duplicate name error = %v, want ErrConflict", err)
+		}
+		if _, err := repos.units.Create(ctx, &domain.MeasurementUnit{Name: "Contract Unit Two", Abbreviation: created.Abbreviation}); !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("duplicate abbreviation error = %v, want ErrConflict", err)
+		}
+		if err := repos.units.Update(ctx, created.ID, &domain.MeasurementUnit{Name: "Contract Unit Updated", Abbreviation: "cu2"}); err != nil {
+			t.Fatal(err)
+		}
+		got, err = repos.units.Get(ctx, created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Name != "Contract Unit Updated" || got.Abbreviation != "cu2" {
+			t.Fatalf("updated unit = %+v", got)
+		}
+		if _, err := repos.units.Delete(ctx, created.ID); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("delete referenced", func(t *testing.T) { testCatalogDeleteForeignKey(t, repos) })
+	t.Run("pagination search and order", func(t *testing.T) {
+		names := []string{"Paging Alpha", "Paging Beta", "Paging Gamma", "Paging Delta"}
+		for _, name := range names {
+			if _, err := repos.materials.Create(ctx, &domain.Material{Name: name}); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		all, hasNext, err := repos.materials.List(ctx, 0, 100, "paging")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hasNext || len(all) != len(names) {
+			t.Fatalf("search paging = %d items has_next=%v, want %d and false", len(all), hasNext, len(names))
+		}
+		for i := 1; i < len(all); i++ {
+			if all[i-1].ID <= all[i].ID {
+				t.Fatalf("search results are not ordered id DESC: %d then %d", all[i-1].ID, all[i].ID)
+			}
+		}
+
+		page, hasNext, err := repos.materials.List(ctx, 0, 2, "paging")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !hasNext || len(page) != 2 || page[0].ID != all[0].ID || page[1].ID != all[1].ID {
+			t.Fatalf("first page = %+v has_next=%v, want %d/%d and true", page, hasNext, all[0].ID, all[1].ID)
+		}
+
+		last, hasNext, err := repos.materials.List(ctx, 2, 2, "paging")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hasNext || len(last) != 2 || last[0].ID != all[2].ID || last[1].ID != all[3].ID {
+			t.Fatalf("last page = %+v has_next=%v, want %d/%d and false", last, hasNext, all[2].ID, all[3].ID)
+		}
+
+		past, hasNext, err := repos.materials.List(ctx, 4, 2, "paging")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hasNext || len(past) != 0 {
+			t.Fatalf("past-the-end page = %d items has_next=%v, want 0 and false", len(past), hasNext)
+		}
+
+		accented, err := repos.materials.Create(ctx, &domain.Material{Name: "Árbol de Pino"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, term := range []string{"árbol", "ÁRBOL"} {
+			items, hasNext, err := repos.materials.List(ctx, 0, 10, term)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasNext || len(items) != 1 || items[0].ID != accented.ID {
+				t.Fatalf("search %q = %+v has_next=%v, want the accented row", term, items, hasNext)
+			}
+		}
+		none, hasNext, err := repos.materials.List(ctx, 0, 10, "nobody-matches-this")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hasNext || len(none) != 0 {
+			t.Fatalf("no-match search = %d items has_next=%v, want 0 and false", len(none), hasNext)
+		}
+	})
+}
+func testCatalogDeleteForeignKey(t *testing.T, repos *repositories) {
+	t.Helper()
+	ctx := context.Background()
+
+	category, err := repos.categories.Create(ctx, &domain.Category{Name: "Referenced Category"})
+	if err != nil {
+		t.Fatal(err)
 	}
+	brand, err := repos.brands.Create(ctx, &domain.Brand{Name: "Referenced Brand"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	material, err := repos.materials.Create(ctx, &domain.Material{Name: "Referenced Material"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit, err := repos.units.Create(ctx, &domain.MeasurementUnit{Name: "Referenced Unit", Abbreviation: "ru"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const sku = "CONTRACT-CATALOG-1"
+	if err := repos.gorm.WithContext(ctx).Exec(
+		"INSERT INTO products (sku, name, price, cost, stock_quantity, low_stock_threshold, brand_id, category_id, material_id, measurement_unit_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		sku, "Referenced Product", 100, 50, 1, 1, brand.ID, category.ID, material.ID, unit.ID,
+	).Error; err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = repos.gorm.WithContext(context.Background()).Exec("DELETE FROM products WHERE sku = ?", sku).Error
+	})
+
+	if _, err := repos.categories.Delete(ctx, category.ID); !errors.Is(err, domain.ErrForeignKeyViolation) {
+		t.Fatalf("delete referenced category error = %v, want ErrForeignKeyViolation", err)
+	}
+	if _, err := repos.brands.Delete(ctx, brand.ID); !errors.Is(err, domain.ErrForeignKeyViolation) {
+		t.Fatalf("delete referenced brand error = %v, want ErrForeignKeyViolation", err)
+	}
+	if _, err := repos.materials.Delete(ctx, material.ID); !errors.Is(err, domain.ErrForeignKeyViolation) {
+		t.Fatalf("delete referenced material error = %v, want ErrForeignKeyViolation", err)
+	}
+	if _, err := repos.units.Delete(ctx, unit.ID); !errors.Is(err, domain.ErrForeignKeyViolation) {
+		t.Fatalf("delete referenced unit error = %v, want ErrForeignKeyViolation", err)
+	}
+
+	if _, err := repos.categories.Get(ctx, category.ID); err != nil {
+		t.Fatalf("referenced category must survive the failed delete: %v", err)
+	}
+}
+
+func assertCategory(t *testing.T, got, want *domain.Category) {
+	t.Helper()
+	if got.ID != want.ID || got.Name != want.Name || !equalStringPtr(got.Code, want.Code) || !equalStringPtr(got.Description, want.Description) {
+		t.Fatalf("category = %+v, want %+v", got, want)
+	}
+}
+
+func assertBrand(t *testing.T, got, want *domain.Brand) {
+	t.Helper()
+	if got.ID != want.ID || got.Name != want.Name || !equalStringPtr(got.LogoURL, want.LogoURL) {
+		t.Fatalf("brand = %+v, want %+v", got, want)
+	}
+}
+
+func assertMaterial(t *testing.T, got, want *domain.Material) {
+	t.Helper()
+	if got.ID != want.ID || got.Name != want.Name {
+		t.Fatalf("material = %+v, want %+v", got, want)
+	}
+}
+
+func assertMeasurementUnit(t *testing.T, got, want *domain.MeasurementUnit) {
+	t.Helper()
+	if got.ID != want.ID || got.Name != want.Name || got.Abbreviation != want.Abbreviation {
+		t.Fatalf("measurement unit = %+v, want %+v", got, want)
+	}
+}
+
+func equalStringPtr(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 func testUsers(t *testing.T, repos *repositories) {

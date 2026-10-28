@@ -145,7 +145,7 @@ func newUsersTestServer(t *testing.T, service inbound.UserUseCase) *httptest.Ser
 		"regular": {ID: 2, FullName: "Regular User", Email: "regular@example.com", IsActive: true},
 	}}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := httptest.NewServer(httpapi.NewRouter(auth, service, logger))
+	server := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{Auth: auth, Users: service, Logger: logger}))
 	t.Cleanup(server.Close)
 	return server
 }
@@ -478,7 +478,7 @@ func TestRefreshResponseOmitsUser(t *testing.T) {
 		},
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := httptest.NewServer(httpapi.NewRouter(auth, &stubUserService{}, logger))
+	server := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{Auth: auth, Users: &stubUserService{}, Logger: logger}))
 	t.Cleanup(server.Close)
 
 	status, raw := userRequest(t, http.MethodPost, server.URL+"/api/v1/auth/refresh", "", map[string]any{

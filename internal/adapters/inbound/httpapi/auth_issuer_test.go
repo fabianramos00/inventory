@@ -61,9 +61,9 @@ func TestAccessTokensAreBoundToBackendIssuer(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	userService := application.NewUserService(users, passwords)
-	sqliteServer := httptest.NewServer(httpapi.NewRouterWithBackend(sqliteService, userService, logger, "sqlite"))
+	sqliteServer := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{Auth: sqliteService, Users: userService, Logger: logger, Backend: "sqlite"}))
 	defer sqliteServer.Close()
-	postgresServer := httptest.NewServer(httpapi.NewRouterWithBackend(postgresService, userService, logger, "postgres"))
+	postgresServer := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{Auth: postgresService, Users: userService, Logger: logger, Backend: "postgres"}))
 	defer postgresServer.Close()
 
 	sqliteLogin, err := sqliteService.Login(ctx, user.Email, password)

@@ -12,16 +12,21 @@ import (
 	"inventory-desktop/internal/adapters/outbound/persistence/gormstore"
 	"inventory-desktop/internal/config"
 	"inventory-desktop/internal/db"
+	"inventory-desktop/internal/domain"
 	"inventory-desktop/internal/ports/outbound"
 )
 
 const postgresProbeTimeout = 3 * time.Second
 
 type Stores struct {
-	Users         outbound.UserRepository
-	RefreshTokens outbound.RefreshTokenRepository
-	Closer        func() error
-	Backend       string
+	Users            outbound.UserRepository
+	RefreshTokens    outbound.RefreshTokenRepository
+	Categories       outbound.CatalogRepository[domain.Category]
+	Brands           outbound.CatalogRepository[domain.Brand]
+	Materials        outbound.CatalogRepository[domain.Material]
+	MeasurementUnits outbound.CatalogRepository[domain.MeasurementUnit]
+	Closer           func() error
+	Backend          string
 }
 
 func Open(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Stores, error) {
@@ -70,12 +75,7 @@ func finishPostgres(ctx context.Context, cfg *config.Config, logger *slog.Logger
 		}
 	}
 	logger.Info("database ready", "backend", "postgres")
-	return &Stores{
-		Users:         gormstore.NewUserStore(gormDB),
-		RefreshTokens: gormstore.NewRefreshTokenStore(gormDB),
-		Closer:        conn.Close,
-		Backend:       "postgres",
-	}, nil
+	return newStores(gormDB, conn, "postgres"), nil
 }
 
 func openSQLite(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Stores, error) {
@@ -90,10 +90,18 @@ func openSQLite(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*
 		}
 	}
 	logger.Info("database ready", "backend", "sqlite", "path", cfg.SQLitePath)
+	return newStores(gormDB, conn, "sqlite"), nil
+}
+
+func newStores(gormDB *gorm.DB, conn *sql.DB, backend string) *Stores {
 	return &Stores{
-		Users:         gormstore.NewUserStore(gormDB),
-		RefreshTokens: gormstore.NewRefreshTokenStore(gormDB),
-		Closer:        conn.Close,
-		Backend:       "sqlite",
-	}, nil
+		Users:            gormstore.NewUserStore(gormDB),
+		RefreshTokens:    gormstore.NewRefreshTokenStore(gormDB),
+		Categories:       gormstore.NewCategoryStore(gormDB),
+		Brands:           gormstore.NewBrandStore(gormDB),
+		Materials:        gormstore.NewMaterialStore(gormDB),
+		MeasurementUnits: gormstore.NewMeasurementUnitStore(gormDB),
+		Closer:           conn.Close,
+		Backend:          backend,
+	}
 }

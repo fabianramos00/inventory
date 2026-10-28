@@ -146,7 +146,10 @@ is both safer and compatible with the UI.
 
 `search` is optional, trimmed, and limited to 256 characters. It matches the
 entity's name fields as defined by the legacy repository. Do not change the
-match columns while porting.
+match columns while porting. Catalog search treats `%` and `_` literally as a
+deliberate difference from legacy `ILIKE` wildcards; see
+[MIGRATION.md](MIGRATION.md#known-legacy-quirks) and
+[DECISIONS.md](DECISIONS.md#adr-0015--catalog-search-treats-sql-wildcards-literally).
 
 ## Endpoints
 

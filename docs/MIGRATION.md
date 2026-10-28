@@ -179,6 +179,7 @@ For each module:
 | Dashboard | `inventory_value` uses sale price, not cost | Preserve; document |
 | Dashboard | Top products sum delivered quantity but rank by subtotal | Preserve; document |
 | Orders | Deleting a received order does not reverse stock | Preserve until approved |
+| Search wildcards | Legacy `ILIKE` treats `%` and `_` as wildcards | Escape/treat literally on both backends; see ADR-0015 |
 | Products | `sku` is generated when omitted | Preserve |
 | Products | `size_value` is a string | Preserve |
 | Purchase order detail | Returns the order without items; items are a separate endpoint | Preserve |
