@@ -64,10 +64,11 @@ type rotatedRefreshToken struct {
 }
 
 type fakeRefreshTokenRepository struct {
-	valid     *domain.RefreshToken
-	findErr   error
-	rotateErr error
-	revokeErr error
+	validUserID int64
+	hasValid    bool
+	findErr     error
+	rotateErr   error
+	revokeErr   error
 
 	findHash string
 	findNow  time.Time
@@ -81,16 +82,16 @@ func (f *fakeRefreshTokenRepository) Create(_ context.Context, userID int64, has
 	return nil
 }
 
-func (f *fakeRefreshTokenRepository) FindValid(_ context.Context, hash string, now time.Time) (*domain.RefreshToken, error) {
+func (f *fakeRefreshTokenRepository) FindValid(_ context.Context, hash string, now time.Time) (int64, error) {
 	f.findHash = hash
 	f.findNow = now
 	if f.findErr != nil {
-		return nil, f.findErr
+		return 0, f.findErr
 	}
-	if f.valid == nil {
-		return nil, domain.ErrNotFound
+	if !f.hasValid {
+		return 0, domain.ErrNotFound
 	}
-	return f.valid, nil
+	return f.validUserID, nil
 }
 
 func (f *fakeRefreshTokenRepository) Rotate(_ context.Context, oldHash, newHash string, now, expiresAt time.Time) error {
@@ -287,7 +288,8 @@ func TestLoginInactiveUser(t *testing.T) {
 func TestRefreshSuccessRotatesToken(t *testing.T) {
 	user := activeUser()
 	h := newAuthHarness(user)
-	h.tokens.valid = &domain.RefreshToken{UserID: user.ID, TokenHash: "sha256:old-token"}
+	h.tokens.validUserID = user.ID
+	h.tokens.hasValid = true
 	h.refresh.sequence = []string{"new-token"}
 
 	pair, err := h.service.Refresh(context.Background(), "old-token")
@@ -362,7 +364,8 @@ func TestRefreshInactiveUser(t *testing.T) {
 	user := activeUser()
 	user.IsActive = false
 	h := newAuthHarness(user)
-	h.tokens.valid = &domain.RefreshToken{UserID: user.ID, TokenHash: "sha256:old-token"}
+	h.tokens.validUserID = user.ID
+	h.tokens.hasValid = true
 
 	_, err := h.service.Refresh(context.Background(), "old-token")
 	if !errors.Is(err, domain.ErrInvalidRefresh) {

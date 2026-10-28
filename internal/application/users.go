@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/mail"
 	"strings"
@@ -44,9 +43,6 @@ func (s *UserService) Create(ctx context.Context, input inbound.CreateUserInput)
 	if err := validatePassword(input.Password); err != nil {
 		return nil, err
 	}
-	if err := s.ensureEmailFree(ctx, email, 0); err != nil {
-		return nil, err
-	}
 	hash, err := s.passwords.Hash(input.Password)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -84,11 +80,6 @@ func (s *UserService) Update(ctx context.Context, id int64, input inbound.Update
 		if err != nil {
 			return nil, err
 		}
-		if email != user.Email {
-			if err := s.ensureEmailFree(ctx, email, user.ID); err != nil {
-				return nil, err
-			}
-		}
 		user.Email = email
 	}
 	if input.Password != nil && *input.Password != "" {
@@ -118,20 +109,6 @@ func (s *UserService) Update(ctx context.Context, id int64, input inbound.Update
 
 func (s *UserService) Delete(ctx context.Context, id int64) (*domain.User, error) {
 	return s.users.Delete(ctx, id)
-}
-
-func (s *UserService) ensureEmailFree(ctx context.Context, email string, id int64) error {
-	existing, err := s.users.GetByEmail(ctx, email)
-	if errors.Is(err, domain.ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if existing.ID != id {
-		return domain.ErrConflict
-	}
-	return nil
 }
 
 func normalizeEmail(raw string) (string, error) {

@@ -5,15 +5,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/mail"
 	"os"
 	"strings"
-	"unicode/utf8"
 
 	"inventory-desktop/internal/adapters/outbound/security"
+	"inventory-desktop/internal/application"
 	"inventory-desktop/internal/bootstrap"
 	"inventory-desktop/internal/config"
 	"inventory-desktop/internal/domain"
+	"inventory-desktop/internal/ports/inbound"
 )
 
 func main() {
@@ -27,19 +27,12 @@ func main() {
 	if *email == "" {
 		fail("email is required (use -email or SEED_EMAIL)")
 	}
-	address, err := mail.ParseAddress(*email)
-	if err != nil || address.Address != *email {
-		fail("invalid email: " + *email)
-	}
-	if *password != "" {
-		length := utf8.RuneCountInString(*password)
-		if length < 8 || length > 128 {
-			fail("password must be between 8 and 128 characters")
+	superuserSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "superuser" {
+			superuserSet = true
 		}
-		if len(*password) > 72 {
-			fail("password must not exceed 72 bytes (bcrypt limit)")
-		}
-	}
+	})
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -56,29 +49,29 @@ func main() {
 	defer stores.Closer()
 
 	passwords := security.NewPasswordHasher(cfg.BcryptRounds)
-	users := stores.Users
-	existing, err := users.GetByEmail(ctx, *email)
+	users := application.NewUserService(stores.Users, passwords)
+	existing, err := stores.Users.GetByEmail(ctx, *email)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {
 		logger.Error("look up user failed", "error", err)
 		os.Exit(1)
+	}
+
+	var superuserValue *bool
+	if superuserSet {
+		superuserValue = superuser
 	}
 
 	if errors.Is(err, domain.ErrNotFound) {
 		if *password == "" {
 			fail("password is required when creating a user (use -password or SEED_PASSWORD)")
 		}
-		hash, err := passwords.Hash(*password)
+		user, err := users.Create(ctx, inbound.CreateUserInput{
+			Email:       *email,
+			Password:    *password,
+			FullName:    *name,
+			IsSuperuser: superuserValue,
+		})
 		if err != nil {
-			fail("hash password: " + err.Error())
-		}
-		user := &domain.User{
-			FullName:       strings.TrimSpace(*name),
-			Email:          *email,
-			HashedPassword: hash,
-			IsActive:       true,
-			IsSuperuser:    *superuser,
-		}
-		if err := users.Create(ctx, user); err != nil {
 			logger.Error("create user failed", "error", err)
 			os.Exit(1)
 		}
@@ -86,31 +79,26 @@ func main() {
 		return
 	}
 
+	var nameValue *string
 	if *name != "" {
-		existing.FullName = strings.TrimSpace(*name)
+		nameValue = name
 	}
+	var passwordValue *string
 	if *password != "" {
-		hash, err := passwords.Hash(*password)
-		if err != nil {
-			fail("hash password: " + err.Error())
-		}
-		existing.HashedPassword = hash
+		passwordValue = password
 	}
-	existing.IsActive = true
-	superuserSet := false
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "superuser" {
-			superuserSet = true
-		}
+	active := true
+	updated, err := users.Update(ctx, existing.ID, inbound.UpdateUserInput{
+		FullName:    nameValue,
+		Password:    passwordValue,
+		IsActive:    &active,
+		IsSuperuser: superuserValue,
 	})
-	if superuserSet {
-		existing.IsSuperuser = *superuser
-	}
-	if err := users.Update(ctx, existing); err != nil {
+	if err != nil {
 		logger.Error("update user failed", "error", err)
 		os.Exit(1)
 	}
-	fmt.Printf("updated user %d (%s)\n", existing.ID, existing.Email)
+	fmt.Printf("updated user %d (%s)\n", updated.ID, updated.Email)
 }
 
 func fail(message string) {

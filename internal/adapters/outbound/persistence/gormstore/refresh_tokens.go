@@ -36,24 +36,18 @@ func (r *RefreshTokenStore) Create(ctx context.Context, userID int64, tokenHash 
 	return nil
 }
 
-func (r *RefreshTokenStore) FindValid(ctx context.Context, tokenHash string, now time.Time) (*domain.RefreshToken, error) {
+func (r *RefreshTokenStore) FindValid(ctx context.Context, tokenHash string, now time.Time) (int64, error) {
 	var record refreshTokenModel
 	err := r.db.WithContext(ctx).
 		Where("token_hash = ? AND revoked = ? AND expires_at > ?", tokenHash, false, Timestamp(now)).
 		Take(&record).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, domain.ErrNotFound
+		return 0, domain.ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("find refresh token: %w", err)
+		return 0, fmt.Errorf("find refresh token: %w", err)
 	}
-	return &domain.RefreshToken{
-		ID:        record.ID,
-		UserID:    record.UserID,
-		TokenHash: record.TokenHash,
-		ExpiresAt: record.ExpiresAt.Time(),
-		Revoked:   record.Revoked,
-	}, nil
+	return record.UserID, nil
 }
 
 func (r *RefreshTokenStore) Rotate(ctx context.Context, oldHash, newHash string, now, expiresAt time.Time) error {

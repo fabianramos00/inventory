@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"inventory-desktop/internal/adapters/inbound/httpapi"
@@ -106,7 +107,9 @@ func (s *stubUserService) Delete(_ context.Context, id int64) (*domain.User, err
 }
 
 type stubAuthService struct {
-	tokens map[string]*domain.User
+	tokens        map[string]*domain.User
+	refreshResult *inbound.TokenPair
+	refreshErr    error
 }
 
 func (s *stubAuthService) Login(context.Context, string, string) (*inbound.LoginResult, error) {
@@ -114,7 +117,13 @@ func (s *stubAuthService) Login(context.Context, string, string) (*inbound.Login
 }
 
 func (s *stubAuthService) Refresh(context.Context, string) (*inbound.TokenPair, error) {
-	return nil, errors.New("not implemented")
+	if s.refreshErr != nil {
+		return nil, s.refreshErr
+	}
+	if s.refreshResult == nil {
+		return nil, errors.New("not implemented")
+	}
+	return s.refreshResult, nil
 }
 
 func (s *stubAuthService) Logout(context.Context, string) error {
@@ -453,6 +462,81 @@ func TestUsersErrorMapping(t *testing.T) {
 			if body.Detail != tt.wantDetail {
 				t.Errorf("detail = %q, want %q", body.Detail, tt.wantDetail)
 			}
+			if body.Code != tt.wantCode {
+				t.Errorf("code = %q, want %q", body.Code, tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestRefreshResponseOmitsUser(t *testing.T) {
+	auth := &stubAuthService{
+		tokens: map[string]*domain.User{},
+		refreshResult: &inbound.TokenPair{
+			AccessToken:  "new-access",
+			RefreshToken: "new-refresh",
+		},
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := httptest.NewServer(httpapi.NewRouter(auth, &stubUserService{}, logger))
+	t.Cleanup(server.Close)
+
+	status, raw := userRequest(t, http.MethodPost, server.URL+"/api/v1/auth/refresh", "", map[string]any{
+		"refresh_token": "old-refresh",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d body = %s, want 200", status, raw)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"access_token", "refresh_token", "token_type"} {
+		if _, ok := fields[key]; !ok {
+			t.Errorf("response is missing %q", key)
+		}
+	}
+	if _, ok := fields["user"]; ok {
+		t.Errorf("refresh response must not include %q: %s", "user", raw)
+	}
+	if len(fields) != 3 {
+		t.Errorf("response has %d fields, want exactly 3: %s", len(fields), raw)
+	}
+}
+
+func TestUsersRequestBodyErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantCode   string
+	}{
+		{"malformed json", `{"email":`, http.StatusUnprocessableEntity, "VALIDATION_ERROR"},
+		{"oversized body", strings.Repeat(" ", (10<<20)+1), http.StatusRequestEntityTooLarge, "BODY_TOO_LARGE"},
+	}
+
+	server := newUsersTestServer(t, &stubUserService{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request, err := http.NewRequest(http.MethodPost, server.URL+"/api/v1/users", strings.NewReader(tt.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Authorization", "Bearer super")
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			raw, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != tt.wantStatus {
+				t.Fatalf("status = %d body = %s, want %d", response.StatusCode, raw, tt.wantStatus)
+			}
+			body := decodeUserError(t, raw)
 			if body.Code != tt.wantCode {
 				t.Errorf("code = %q, want %q", body.Code, tt.wantCode)
 			}

@@ -243,6 +243,7 @@ func TestUserCreateHonorsExplicitFlags(t *testing.T) {
 
 func TestUserCreateDuplicateEmail(t *testing.T) {
 	h := newUserHarness(userRecord(1, "taken@example.com"))
+	h.store.createErr = domain.ErrConflict
 
 	_, err := h.service.Create(context.Background(), inbound.CreateUserInput{
 		Email:    "taken@example.com",
@@ -250,9 +251,6 @@ func TestUserCreateDuplicateEmail(t *testing.T) {
 	})
 	if !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("Create() error = %v, want ErrConflict", err)
-	}
-	if len(h.hasher.hashed) != 0 {
-		t.Errorf("hashed %d passwords, want 0 before the conflict check", len(h.hasher.hashed))
 	}
 	if len(h.store.created) != 0 {
 		t.Errorf("created %d users, want 0", len(h.store.created))
@@ -364,6 +362,7 @@ func TestUserUpdateDuplicateEmail(t *testing.T) {
 	first := userRecord(1, "ada@example.com")
 	second := userRecord(2, "grace@example.com")
 	h := newUserHarness(first, second)
+	h.store.updateErr = domain.ErrConflict
 	email := "grace@example.com"
 
 	_, err := h.service.Update(context.Background(), 1, inbound.UpdateUserInput{Email: &email})
@@ -372,9 +371,6 @@ func TestUserUpdateDuplicateEmail(t *testing.T) {
 	}
 	if len(h.store.updated) != 0 {
 		t.Errorf("repository updates = %d, want 0", len(h.store.updated))
-	}
-	if first.Email != "ada@example.com" {
-		t.Errorf("stored email = %q, want the original", first.Email)
 	}
 }
 

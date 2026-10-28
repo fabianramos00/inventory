@@ -64,15 +64,12 @@ func TestRefreshTokenExpiryRoundTrip(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			found, err := tokens.FindValid(ctx, tokenHash, now)
+			foundID, err := tokens.FindValid(ctx, tokenHash, now)
 			if err != nil {
 				t.Fatalf("FindValid(%q): %v", normalized, err)
 			}
-			if found.UserID != user.ID {
-				t.Fatalf("user id = %d, want %d", found.UserID, user.ID)
-			}
-			if !found.ExpiresAt.Equal(expiresAt) {
-				t.Fatalf("expires_at = %s, want %s", found.ExpiresAt, expiresAt)
+			if foundID != user.ID {
+				t.Fatalf("user id = %d, want %d", foundID, user.ID)
 			}
 
 			if _, err := tokens.FindValid(ctx, tokenHash, expiresAt.Add(time.Second)); !errors.Is(err, domain.ErrNotFound) {
@@ -87,12 +84,12 @@ func TestRefreshTokenExpiryRoundTrip(t *testing.T) {
 			if _, err := tokens.FindValid(ctx, tokenHash, now); !errors.Is(err, domain.ErrNotFound) {
 				t.Fatalf("old token after rotation error = %v, want ErrNotFound", err)
 			}
-			rotated, err := tokens.FindValid(ctx, rotatedHash, now)
+			rotatedID, err := tokens.FindValid(ctx, rotatedHash, now)
 			if err != nil {
 				t.Fatalf("FindValid(rotated): %v", err)
 			}
-			if !rotated.ExpiresAt.Equal(rotatedExpiry) {
-				t.Fatalf("rotated expires_at = %s, want %s", rotated.ExpiresAt, rotatedExpiry)
+			if rotatedID != user.ID {
+				t.Fatalf("rotated user id = %d, want %d", rotatedID, user.ID)
 			}
 		})
 	}

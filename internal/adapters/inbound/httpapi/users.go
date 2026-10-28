@@ -69,7 +69,7 @@ func (h *UsersHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var body createUserRequest
 	if err := decodeJSON(w, r, &body); err != nil {
-		h.writeRequestError(w, err)
+		writeRequestError(w, err)
 		return
 	}
 	user, err := h.service.Create(r.Context(), inbound.CreateUserInput{
@@ -108,7 +108,7 @@ func (h *UsersHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	var body updateUserRequest
 	if err := decodeJSON(w, r, &body); err != nil {
-		h.writeRequestError(w, err)
+		writeRequestError(w, err)
 		return
 	}
 	user, err := h.service.Update(r.Context(), id, inbound.UpdateUserInput{
@@ -154,14 +154,6 @@ func (h *UsersHandler) writeUserError(w http.ResponseWriter, r *http.Request, er
 		h.logger.Error("user request failed", "request_id", requestIDFrom(r.Context()), "error", err)
 		writeError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
 	}
-}
-
-func (h *UsersHandler) writeRequestError(w http.ResponseWriter, err error) {
-	if isBodyTooLarge(err) {
-		writeError(w, http.StatusRequestEntityTooLarge, "Request body too large", "BODY_TOO_LARGE")
-		return
-	}
-	writeError(w, http.StatusUnprocessableEntity, "Invalid request body", "VALIDATION_ERROR")
 }
 
 func requireSuperuser(next http.HandlerFunc) http.HandlerFunc {

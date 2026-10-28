@@ -17,17 +17,11 @@ type AuthHandler struct {
 	limiter *loginLimiter
 }
 
-type loginResponse struct {
+type tokenResponse struct {
 	AccessToken  string        `json:"access_token"`
 	RefreshToken string        `json:"refresh_token"`
 	TokenType    string        `json:"token_type"`
-	User         *userResponse `json:"user"`
-}
-
-type refreshResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
+	User         *userResponse `json:"user,omitempty"`
 }
 
 type refreshRequest struct {
@@ -51,7 +45,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
-		h.writeRequestError(w, err)
+		writeRequestError(w, err)
 		return
 	}
 	email := r.PostFormValue("username")
@@ -67,7 +61,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, loginResponse{
+	writeJSON(w, http.StatusOK, tokenResponse{
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
 		TokenType:    "bearer",
@@ -80,7 +74,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Pragma", "no-cache")
 	var body refreshRequest
 	if err := decodeJSON(w, r, &body); err != nil {
-		h.writeRequestError(w, err)
+		writeRequestError(w, err)
 		return
 	}
 
@@ -90,7 +84,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, refreshResponse{
+	writeJSON(w, http.StatusOK, tokenResponse{
 		AccessToken:  pair.AccessToken,
 		RefreshToken: pair.RefreshToken,
 		TokenType:    "bearer",
@@ -102,7 +96,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Pragma", "no-cache")
 	var body refreshRequest
 	if err := decodeJSON(w, r, &body); err != nil {
-		h.writeRequestError(w, err)
+		writeRequestError(w, err)
 		return
 	}
 
@@ -127,14 +121,6 @@ func (h *AuthHandler) writeAuthError(w http.ResponseWriter, err error) {
 		h.logger.Error("auth request failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
 	}
-}
-
-func (h *AuthHandler) writeRequestError(w http.ResponseWriter, err error) {
-	if isBodyTooLarge(err) {
-		writeError(w, http.StatusRequestEntityTooLarge, "Request body too large", "BODY_TOO_LARGE")
-		return
-	}
-	writeError(w, http.StatusUnprocessableEntity, "Invalid request body", "VALIDATION_ERROR")
 }
 
 type loginLimiter struct {

@@ -77,7 +77,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawToken string) (*inbound.To
 	}
 
 	oldHash := s.refreshTokens.Hash(rawToken)
-	stored, err := s.tokens.FindValid(ctx, oldHash, time.Now())
+	userID, err := s.tokens.FindValid(ctx, oldHash, time.Now())
 	if errors.Is(err, domain.ErrNotFound) {
 		return nil, domain.ErrInvalidRefresh
 	}
@@ -85,7 +85,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawToken string) (*inbound.To
 		return nil, err
 	}
 
-	user, err := s.users.GetByID(ctx, stored.UserID)
+	user, err := s.users.GetByID(ctx, userID)
 	if errors.Is(err, domain.ErrNotFound) {
 		return nil, domain.ErrInvalidRefresh
 	}

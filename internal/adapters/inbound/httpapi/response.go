@@ -46,3 +46,11 @@ func isBodyTooLarge(err error) bool {
 	var maxErr *http.MaxBytesError
 	return errors.As(err, &maxErr)
 }
+
+func writeRequestError(w http.ResponseWriter, err error) {
+	if isBodyTooLarge(err) {
+		writeError(w, http.StatusRequestEntityTooLarge, "Request body too large", "BODY_TOO_LARGE")
+		return
+	}
+	writeError(w, http.StatusUnprocessableEntity, "Invalid request body", "VALIDATION_ERROR")
+}

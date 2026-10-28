@@ -250,6 +250,13 @@ func testUserListAndDelete(t *testing.T, repos *repositories) {
 		t.Fatalf("duplicate email error = %v, want ErrConflict", err)
 	}
 
+	first := createUser(t, repos, "update-conflict-a@contract.test")
+	second := createUser(t, repos, "update-conflict-b@contract.test")
+	second.Email = first.Email
+	if err := repos.users.Update(ctx, second); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("update to duplicate email error = %v, want ErrConflict", err)
+	}
+
 	deleted, err := repos.users.Delete(ctx, grace.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -337,16 +344,9 @@ func testRefreshTokens(t *testing.T, repos *repositories) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ownerToken.UserID != owner.ID {
-		t.Fatalf("owner token user = %d, want %d", ownerToken.UserID, owner.ID)
+	if ownerToken != owner.ID {
+		t.Fatalf("owner token user = %d, want %d", ownerToken, owner.ID)
 	}
-	if ownerToken.TokenHash != ownerHash {
-		t.Fatalf("token hash = %q, want %q", ownerToken.TokenHash, ownerHash)
-	}
-	if ownerToken.Revoked {
-		t.Fatal("new token is marked revoked")
-	}
-	assertInstant(t, ownerToken.ExpiresAt, ownerExpiry)
 
 	const otherHash = "other-token-hash"
 	if err := repos.tokens.Create(ctx, other.ID, otherHash, ownerExpiry); err != nil {
@@ -356,8 +356,8 @@ func testRefreshTokens(t *testing.T, repos *repositories) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if otherToken.UserID != other.ID {
-		t.Fatalf("other token user = %d, want %d", otherToken.UserID, other.ID)
+	if otherToken != other.ID {
+		t.Fatalf("other token user = %d, want %d", otherToken, other.ID)
 	}
 
 	const rotatedHash = "owner-rotated-hash"
@@ -372,10 +372,9 @@ func testRefreshTokens(t *testing.T, repos *repositories) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rotated.UserID != owner.ID {
-		t.Fatalf("rotated token user = %d, want %d", rotated.UserID, owner.ID)
+	if rotated != owner.ID {
+		t.Fatalf("rotated token user = %d, want %d", rotated, owner.ID)
 	}
-	assertInstant(t, rotated.ExpiresAt, rotatedExpiry)
 
 	if err := repos.tokens.Rotate(ctx, ownerHash, "unused-hash", now, rotatedExpiry); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("rotating an already used token error = %v, want ErrNotFound", err)
@@ -414,15 +413,6 @@ func createUser(t *testing.T, repos *repositories, email string) *domain.User {
 		t.Fatal(err)
 	}
 	return user
-}
-
-// assertInstant allows for the microsecond precision PostgreSQL stores; SQLite
-// keeps the full nanosecond value.
-func assertInstant(t *testing.T, got, want time.Time) {
-	t.Helper()
-	if delta := got.Sub(want); delta < -time.Microsecond || delta > time.Microsecond {
-		t.Fatalf("expires_at = %s, want %s", got, want)
-	}
 }
 
 func assertUser(t *testing.T, got, want *domain.User) {
