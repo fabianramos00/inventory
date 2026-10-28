@@ -8,7 +8,8 @@ impossible.
 
 - PostgreSQL is the primary database.
 - `DB_MODE=auto` falls back to local SQLite when PostgreSQL is unreachable.
-- SQLite currently contains only `users` and `refresh_tokens`.
+- SQLite contains the auth tables and the full Phase 3 business schema, but
+  the business repositories and handlers are still pending.
 - Local writes are not sent anywhere. An offline session is a separate
   standalone dataset until sync exists.
 - Auth sessions are per installation. Do not assume the same user exists in

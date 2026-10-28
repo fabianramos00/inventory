@@ -70,15 +70,28 @@ migrations/postgres/00006_sales.sql
 Goose applies versions 1–6 in order. Databases created before the split must
 be recreated; the old single-file baseline is not compatible.
 
-SQLite is the offline/standalone fallback:
+SQLite is the offline/standalone fallback and uses its own version map:
 
-```text
-migrations/sqlite/00001_auth.sql
-```
+| SQLite version | File | Contents |
+|---:|---|---|
+| 1 | `migrations/sqlite/00001_auth.sql` | `users`, `refresh_tokens` |
+| 2 | `migrations/sqlite/00002_catalog.sql` | `categories`, `materials`, `brands`, `measurement_units` + indexes |
+| 3 | `migrations/sqlite/00003_identity.sql` | `clients`, `providers` |
+| 4 | `migrations/sqlite/00004_products.sql` | `products`, `price_history` + indexes |
+| 5 | `migrations/sqlite/00005_purchases.sql` | `supplier_catalogs`, `purchase_orders`, `order_items` + indexes |
+| 6 | `migrations/sqlite/00006_sales.sql` | `sales`, `sale_items` + indexes |
 
-The SQLite migration currently creates only `users` and `refresh_tokens`.
-The remaining 15 business tables are **Phase 3** work and must land as one
-coherent SQLite schema with parity fixtures, not as ad-hoc per-module tables.
+A SQLite database that already applied the old single
+`00002_business_schema.sql` is incompatible with the split baseline and must
+be recreated: delete the local file at `SQLITE_PATH` (default
+`<OS config dir>/inventory-desktop/data/inventory.sqlite`) and let the app
+re-run migrations on the next start. Migrations are forward-only; there is no
+in-place upgrade from the monolith.
+
+The full business schema now exists in SQLite. Business repositories and
+handlers are still pending; the schema being present does not mean the offline
+business modules work yet. The two goose version tables are independent, so
+SQLite and PostgreSQL version numbers do not match.
 
 `DB_MODE=auto` (default) probes PostgreSQL with a 3-second timeout and falls
 back to SQLite on failure. `DB_MODE=postgres` fails hard. `DB_MODE=sqlite`
@@ -136,8 +149,10 @@ For each module:
 
 ## Phase 3 — SQLite business schema
 
-1. Translate the remaining 15 business tables to `migrations/sqlite/`.
-2. Preserve integer stock, decimal money semantics, and UTC timestamps.
+1. The 13 business tables now exist in SQLite, split by domain across
+   `00002_catalog.sql` through `00006_sales.sql`.
+2. Preserve integer stock, integer-cent money, and UTC text timestamps in the
+   pending business adapters.
 3. Add adapter contract tests that run the same fixtures against PostgreSQL
    and SQLite.
 4. Document any SQL-semantic differences (`ILIKE`, enums, `RETURNING`,
@@ -197,5 +212,5 @@ For each module:
 | Stock race conditions | Row locks and concurrency tests |
 | Wails webview differences | HashRouter, manual platform smoke tests |
 | Shared Postgres with multiple counters | Shared `SECRET_KEY` and documented deployment |
-| SQLite fallback diverges from PostgreSQL | Auth-only schema today; Phase 3 full-schema parity tests before exposing business modules |
+| SQLite fallback diverges from PostgreSQL | Business schema now exists; full-schema parity tests still required before exposing business modules |
 | Legacy service unavailable | Snapshot fixtures and replay locally |

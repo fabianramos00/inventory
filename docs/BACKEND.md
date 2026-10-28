@@ -256,10 +256,12 @@ is used. Generate and persist `SECRET_KEY` when missing.
 - The split changed the baseline: databases created before the split must be
   recreated. A goose row for version `1` alone is not a valid baseline for the
   split set.
-- SQLite uses goose dialect `sqlite3` and currently contains only the auth
-  tables.
-- Full SQLite business-schema parity is Phase 3 work; do not translate the
-  remaining tables piecemeal while porting modules.
+- SQLite uses goose dialect `sqlite3`. Version 1 creates the auth tables
+  (`users`, `refresh_tokens`); versions 2–6 create the Phase 3 business schema
+  split by domain: catalog, identity, products, purchases, sales.
+- The business schema exists, but the business repositories and handlers are
+  still pending. Do not translate business tables piecemeal; parity tests come
+  with the adapters.
 - Every migration is forward-only unless a rollback is safe and tested.
 - Run at startup when `AUTO_MIGRATE=true`; otherwise expose an explicit
   migrate command.

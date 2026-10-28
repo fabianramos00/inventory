@@ -9,13 +9,14 @@
 | Node | 22+ |
 | pnpm | 12+ |
 | Platform webview deps | WebView2 / WebKitGTK 4.1 / system WebKit |
-| PostgreSQL | 17 (primary; optional for auth-only offline use) |
+| PostgreSQL | 17 (primary; SQLite fallback available) |
 
 PostgreSQL is the primary database. The installer does not bundle it. With
 `DB_MODE=auto` (default), the app falls back to local SQLite when PostgreSQL
 is unreachable. `DB_MODE=postgres` fails hard; `DB_MODE=sqlite` forces the
-local backend. SQLite currently contains only the auth tables, so offline
-inventory/sales are not available until Phase 3.
+local backend. SQLite contains the auth tables and the full Phase 3 business
+schema, but the business repositories and handlers are still pending, so
+offline inventory/sales are not available yet.
 
 On Linux, Wails must be built with `-tags webkit2_41`. Ubuntu 26.04 ships
 WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`) only, so the 4.0 ABI is unavailable.
@@ -26,8 +27,8 @@ on port `5433`.
 
 Phase 2 ships the walking skeleton, PostgreSQL and SQLite persistence behind
 ports/adapters, authentication, and the seed command. Inventory, sales, orders,
-and dashboard are deferred to Phase 3. The SQLite fallback is auth-only; the
-full offline business schema is Phase 3 work.
+and dashboard are deferred to Phase 3. The full SQLite business schema now
+exists; the business modules and their repositories are still pending.
 
 ## Versioning
 
@@ -172,6 +173,6 @@ Never roll back only the binary if the schema changed.
 - Development PostgreSQL runs on port `5433` and must not be reused for
   production data.
 - There is no auto-update mechanism yet.
-- There is no offline mode.
+- Offline business modules are not implemented yet; only auth works on SQLite.
 - Multi-station use requires a shared PostgreSQL server and a shared
   `SECRET_KEY`.
