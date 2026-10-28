@@ -249,9 +249,13 @@ is used. Generate and persist `SECRET_KEY` when missing.
 
 - SQL files live under `migrations/postgres/` and `migrations/sqlite/`, each
   embedded with `embed.FS`.
-- Naming: `00001_initial_schema.sql`, `00002_add_index.sql`.
-- PostgreSQL keeps the legacy version at `1` so existing databases do not
-  re-run it.
+- Naming: `00001_enums.sql`, `00002_catalog.sql`, `00003_identity.sql`,
+  `00004_products.sql`, `00005_purchases.sql`, `00006_sales.sql`.
+- The initial schema is split by domain across versions 1–6; future changes
+  get one new file each (`00007_add_index.sql`).
+- The split changed the baseline: databases created before the split must be
+  recreated. A goose row for version `1` alone is not a valid baseline for the
+  split set.
 - SQLite uses goose dialect `sqlite3` and currently contains only the auth
   tables.
 - Full SQLite business-schema parity is Phase 3 work; do not translate the

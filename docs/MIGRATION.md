@@ -35,7 +35,9 @@ the API module by module and proves parity before cutover.
    pg_dump --schema-only --no-owner --no-privileges inventory > schema.sql
    ```
 
-4. Create the initial goose migration from that SQL. Keep constraints,
+4. Create the initial goose migrations from that SQL, split by domain and kept
+   in dependency order: `00001_enums`, `00002_catalog`, `00003_identity`,
+   `00004_products`, `00005_purchases`, `00006_sales`. Keep constraints,
    indexes, enum types, and defaults exactly as captured.
 5. Verify by applying goose to a second empty database and diffing the two
    schemas:
@@ -57,8 +59,16 @@ Persistence now follows the ports/adapters layout. PostgreSQL is the primary
 backend and keeps the full legacy schema:
 
 ```text
-migrations/postgres/00001_initial_schema.sql
+migrations/postgres/00001_enums.sql
+migrations/postgres/00002_catalog.sql
+migrations/postgres/00003_identity.sql
+migrations/postgres/00004_products.sql
+migrations/postgres/00005_purchases.sql
+migrations/postgres/00006_sales.sql
 ```
+
+Goose applies versions 1–6 in order. Databases created before the split must
+be recreated; the old single-file baseline is not compatible.
 
 SQLite is the offline/standalone fallback:
 
