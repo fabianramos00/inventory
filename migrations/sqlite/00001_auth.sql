@@ -1,5 +1,5 @@
 -- +goose Up
--- Auth-only schema for offline SQLite mode. Full business schema lands in Phase 3.
+-- Auth-only schema for offline SQLite mode.
 
 CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
