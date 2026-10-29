@@ -176,6 +176,31 @@ until later phases restore the full table from
   `total`/`pages`.
 - Keep `isLoading` for skeletons and `isFetching` for background refreshes.
 
+### Dashboard
+
+- Data comes from the four read-only `/dashboard/*` endpoints through
+  `useDashboard`; the low-stock rail is not part of that contract. It uses
+  `['dashboardLowStock']` (`stock_status: 'low_stock'`) and the exact
+  `low_stock_count` from `['inventoryStats']`, falling back to the returned
+  page length when stats fail.
+- KPI cards: `Ventas de hoy` = `total_sales_today`, `Ventas sin pagar` =
+  `pending_payment_sales`, `Pedidos pendientes` = `pending_orders`, and
+  `Stock bajo` = inventory stats. Money fields are COP currency
+  (`$ 1.234,56`); `pending_payment_sales` is the outstanding balance, never a
+  sale count. `delivered_orders` counts delivered sales, not purchase orders,
+  and is not shown in the KPI strip.
+- Trend `date` keys are `YYYY-MM-DD` Bogota calendar days. Derive weekday
+  labels from the string itself (UTC noon/midnight) so the host timezone never
+  shifts the displayed day. Seven zero-filled days are valid data; an empty
+  array is the empty state.
+- Top products may return `null` brand, category, or material names. The table
+  renders the brand with a `-` fallback, and nullable category/material names
+  must not break the row. The table shows the first five products returned by
+  the API.
+- Order status distribution is purchase orders grouped by status with
+  `count` and `percentage`; an empty array renders the empty state. Each
+  section shows its own error and retry action.
+
 ## Auth
 
 - `AuthContext` keeps access token, refresh token, and the full user

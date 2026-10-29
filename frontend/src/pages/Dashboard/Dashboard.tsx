@@ -23,7 +23,7 @@ function normalizeOrderStatus(status: string) {
 }
 
 function getSpanishDayName(dateStr: string): string {
-  const date = new Date(dateStr + 'T00:00:00')
+  const date = new Date(dateStr + 'T00:00:00Z')
   const dayIndex = date.getUTCDay()
   const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
   return days[dayIndex]
@@ -80,7 +80,7 @@ export default function Dashboard() {
   const finding = errors.summary && !summary
     ? undefined
     : unpaidSales > 0
-      ? `${formatNumber(unpaidSales)} ventas sin pagar requieren seguimiento.`
+      ? `Hay ${formatCurrency(unpaidSales)} en ventas sin pagar.`
       : lowStockCount > 0
         ? `${formatNumber(lowStockCount)} productos bajo el mínimo.`
         : 'Sin pendientes: ventas y stock al día.'
@@ -93,7 +93,7 @@ export default function Dashboard() {
 
   const kpiCards: KpiCardConfig[] = [
     { label: 'Ventas de hoy', value: formatCurrency(summary?.total_sales_today ?? 0), lead: true },
-    { label: 'Ventas sin pagar', value: formatNumber(unpaidSales) },
+    { label: 'Ventas sin pagar', value: formatCurrency(unpaidSales) },
     { label: 'Pedidos pendientes', value: formatNumber(pendingOrders) },
     { label: 'Stock bajo', value: formatNumber(lowStockCount) },
   ]
@@ -149,7 +149,7 @@ export default function Dashboard() {
   const topProductsData = (topProducts ?? []).slice(0, 5).map((p) => ({
     sku: p.product_sku,
     name: p.product_name,
-    brand: p.brand_name,
+    brand: p.brand_name || '-',
     ventas: p.total_quantity_sold,
     revenue: p.total_sales_amount,
   }))

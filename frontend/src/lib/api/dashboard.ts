@@ -22,9 +22,9 @@ export interface TopProduct {
   product_id: number
   product_name: string
   product_sku: string
-  brand_name: string
-  category_name: string
-  material_name: string
+  brand_name: string | null
+  category_name: string | null
+  material_name: string | null
   total_quantity_sold: number
   total_sales_amount: number
 }

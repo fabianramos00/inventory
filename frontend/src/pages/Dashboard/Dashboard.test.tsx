@@ -1,5 +1,6 @@
+import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Dashboard from './Dashboard'
@@ -30,8 +31,10 @@ vi.mock('@/lib/api/inventory', () => ({
 }))
 
 vi.mock('recharts', () => ({
-  ResponsiveContainer: () => null,
-  LineChart: () => null,
+  ResponsiveContainer: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  LineChart: ({ data }: { data?: Array<{ dia: string; ventas: number }> }) => (
+    <div data-testid="trend-chart" data-points={JSON.stringify(data ?? [])} />
+  ),
   Line: () => null,
   XAxis: () => null,
   YAxis: () => null,
@@ -49,6 +52,17 @@ const summary = {
 
 const trendItem = { date: '2026-01-01', sales_amount: 10, orders_cost: 5 }
 
+const topProduct = {
+  product_id: 1,
+  product_name: 'Martillo',
+  product_sku: 'SKU-1',
+  brand_name: 'Marca',
+  category_name: 'Herramientas',
+  material_name: 'Acero',
+  total_quantity_sold: 3,
+  total_sales_amount: 21,
+}
+
 function renderDashboard() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
@@ -60,7 +74,7 @@ function renderDashboard() {
   )
 }
 
-describe('Dashboard error states', () => {
+describe('Dashboard', () => {
   beforeEach(() => {
     mocks.getSummary.mockReset().mockResolvedValue({ data: summary })
     mocks.getSalesTrend.mockReset().mockResolvedValue({ data: { data: [trendItem] } })
@@ -70,6 +84,89 @@ describe('Dashboard error states', () => {
     mocks.getStats.mockReset().mockResolvedValue({
       data: { total_products: 0, total_stock: 0, low_stock_count: 0, total_inventory_value: 0 },
     })
+  })
+
+  it('renders pending payment sales as COP currency, never as a count', async () => {
+    mocks.getSummary.mockResolvedValue({
+      data: { ...summary, total_sales_today: 2500, pending_payment_sales: 1234.5 },
+    })
+    renderDashboard()
+
+    const unpaidLabel = await screen.findByText('Ventas sin pagar')
+    expect(unpaidLabel.parentElement?.textContent).toBe('Ventas sin pagar$ 1.234,50')
+    expect(screen.getByText('Ventas de hoy').parentElement?.textContent).toBe('Ventas de hoy$ 2.500,00')
+    expect(screen.getByText('Pedidos pendientes').parentElement?.textContent).toBe('Pedidos pendientes2')
+    expect(screen.getByText('Hay $ 1.234,50 en ventas sin pagar.')).toBeTruthy()
+  })
+
+  it('renders the order status distribution with counts and percentages', async () => {
+    mocks.getOrderStatusDistribution.mockResolvedValue({
+      data: {
+        data: [
+          { status: 'pending', count: 2, percentage: 50 },
+          { status: 'received', count: 2, percentage: 50 },
+        ],
+      },
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('Pendiente')).toBeTruthy()
+    expect(screen.getByText('Recibido')).toBeTruthy()
+    expect(screen.getAllByText('50%')).toHaveLength(2)
+  })
+
+  it('renders all seven zero-filled trend days', async () => {
+    const zeroTrend = [
+      '2026-10-22',
+      '2026-10-23',
+      '2026-10-24',
+      '2026-10-25',
+      '2026-10-26',
+      '2026-10-27',
+      '2026-10-28',
+    ].map((date) => ({ date, sales_amount: 0, orders_cost: 0 }))
+    mocks.getSalesTrend.mockResolvedValue({ data: { data: zeroTrend } })
+    renderDashboard()
+
+    const chart = await screen.findByTestId('trend-chart')
+    const points = JSON.parse(chart.dataset.points ?? '[]') as Array<{ dia: string; ventas: number }>
+    expect(points).toHaveLength(7)
+    expect(points.map((point) => point.dia)).toEqual(['Jue', 'Vie', 'Sáb', 'Dom', 'Lun', 'Mar', 'Mié'])
+    expect(points.every((point) => point.ventas === 0)).toBe(true)
+    expect(screen.getByText('Total 7 días').parentElement?.textContent).toBe('Total 7 días$ 0,00')
+  })
+
+  it('keeps the trend calendar day when the host timezone is ahead of UTC', async () => {
+    vi.stubEnv('TZ', 'Pacific/Kiritimati')
+    try {
+      mocks.getSalesTrend.mockResolvedValue({
+        data: { data: [{ date: '2026-10-24', sales_amount: 0, orders_cost: 0 }] },
+      })
+      renderDashboard()
+
+      const chart = await screen.findByTestId('trend-chart')
+      const points = JSON.parse(chart.dataset.points ?? '[]') as Array<{ dia: string; ventas: number }>
+      expect(points[0]).toEqual({ dia: 'Sáb', ventas: 0 })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('renders top products with nullable brand, category, and material names', async () => {
+    mocks.getTopProducts.mockResolvedValue({
+      data: {
+        products: [
+          { ...topProduct, brand_name: null, category_name: null, material_name: null },
+        ],
+      },
+    })
+    renderDashboard()
+
+    const row = (await screen.findByText('Martillo')).closest('tr')
+    expect(row).not.toBeNull()
+    expect(within(row as HTMLElement).getByText('SKU-1')).toBeTruthy()
+    expect(within(row as HTMLElement).getByText('-')).toBeTruthy()
+    expect(within(row as HTMLElement).getByText('$ 21,00')).toBeTruthy()
   })
 
   it('distinguishes a failed section from a successful empty one and retries only that section', async () => {
@@ -97,6 +194,56 @@ describe('Dashboard error states', () => {
     expect(screen.getByText('Nada bajo el mínimo')).toBeTruthy()
     expect(screen.queryByText('No se pudo cargar la tendencia de ventas.')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull()
+  })
+
+  it('retries only the failed order-status section', async () => {
+    mocks.getOrderStatusDistribution.mockRejectedValueOnce(new Error('orders down'))
+    renderDashboard()
+
+    await screen.findByText('No se pudo cargar el estado de pedidos.')
+    mocks.getOrderStatusDistribution.mockResolvedValue({
+      data: { data: [{ status: 'pending', count: 2, percentage: 100 }] },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+    await waitFor(() => expect(mocks.getOrderStatusDistribution).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('Pendiente')).toBeTruthy()
+    expect(mocks.getSummary).toHaveBeenCalledTimes(1)
+    expect(mocks.getSalesTrend).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries only the failed top-products section', async () => {
+    mocks.getTopProducts.mockRejectedValueOnce(new Error('products down'))
+    renderDashboard()
+
+    await screen.findByText('No se pudieron cargar los productos vendidos.')
+    mocks.getTopProducts.mockResolvedValue({ data: { products: [topProduct] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+    await waitFor(() => expect(mocks.getTopProducts).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('Martillo')).toBeTruthy()
+    expect(mocks.getSummary).toHaveBeenCalledTimes(1)
+    expect(mocks.getOrderStatusDistribution).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries only the failed low-stock section and its stats', async () => {
+    mocks.getProducts.mockRejectedValueOnce(new Error('stock down'))
+    renderDashboard()
+
+    await screen.findByText('No se pudo cargar el stock bajo.')
+    mocks.getProducts.mockResolvedValue({
+      data: {
+        items: [{ id: 1, name: 'Martillo', sku: 'SKU-1', stock_quantity: 2, low_stock_threshold: 5 }],
+        total: 1,
+        has_next: false,
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+    await waitFor(() => expect(mocks.getProducts).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('Martillo')).toBeTruthy()
+    expect(mocks.getStats).toHaveBeenCalledTimes(2)
+    expect(mocks.getSummary).toHaveBeenCalledTimes(1)
   })
 
   it('uses the exact low-stock count from stats instead of the returned page length', async () => {
@@ -159,5 +306,40 @@ describe('Dashboard error states', () => {
     await waitFor(() => expect(mocks.getSummary).toHaveBeenCalledTimes(2))
     expect(mocks.getSalesTrend).toHaveBeenCalledTimes(1)
     expect(await screen.findByText('Ventas de hoy')).toBeTruthy()
+  })
+
+  it('renders zero money KPIs as COP and zero pending orders as a count', async () => {
+    mocks.getSummary.mockResolvedValue({
+      data: {
+        inventory_value: 0,
+        total_sales_today: 0,
+        pending_orders: 0,
+        delivered_orders: 0,
+        pending_payment_sales: 0,
+      },
+    })
+    renderDashboard()
+
+    const today = await screen.findByText('Ventas de hoy')
+    expect(today.parentElement?.textContent).toBe('Ventas de hoy$ 0,00')
+    expect(screen.getByText('Ventas sin pagar').parentElement?.textContent).toBe('Ventas sin pagar$ 0,00')
+    expect(screen.getByText('Pedidos pendientes').parentElement?.textContent).toBe('Pedidos pendientes0')
+    expect(screen.queryByText('Hay $ 0,00 en ventas sin pagar.')).toBeNull()
+  })
+
+  it('keeps the trend calendar day when the host timezone is behind UTC', async () => {
+    vi.stubEnv('TZ', 'America/Los_Angeles')
+    try {
+      mocks.getSalesTrend.mockResolvedValue({
+        data: { data: [{ date: '2026-10-24', sales_amount: 1, orders_cost: 0 }] },
+      })
+      renderDashboard()
+
+      const chart = await screen.findByTestId('trend-chart')
+      const points = JSON.parse(chart.dataset.points ?? '[]') as Array<{ dia: string; ventas: number }>
+      expect(points[0]).toEqual({ dia: 'Sáb', ventas: 1 })
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
