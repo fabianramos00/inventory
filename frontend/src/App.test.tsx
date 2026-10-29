@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
 vi.mock('@/pages/Login/Login', () => ({ default: () => <div>login-page</div> }))
+vi.mock('@/pages/Dashboard/Dashboard', () => ({ default: () => <div>dashboard-page</div> }))
 vi.mock('@/pages/Inventory/Inventory', () => ({ default: () => <div>inventory-page</div> }))
 vi.mock('@/pages/ProductForm/ProductForm', () => ({ default: () => <div>product-form-page</div> }))
 vi.mock('@/pages/Sales/Sales', () => ({ default: () => <div>sales-page</div> }))
@@ -36,6 +37,7 @@ describe('App routes', () => {
   })
 
   it.each([
+    ['#/', 'dashboard-page', '#/'],
     ['#/inventory', 'inventory-page', '#/inventory'],
     ['#/inventory/create', 'product-form-page', '#/inventory/create'],
     ['#/inventory/product/1', 'product-form-page', '#/inventory/product/1'],
@@ -56,6 +58,7 @@ describe('App routes', () => {
   })
 
   it.each([
+    '#/',
     '#/inventory',
     '#/inventory/create',
     '#/inventory/product/1',
@@ -76,6 +79,14 @@ describe('App routes', () => {
       await waitFor(() => expect(window.location.hash).toBe('#/login'))
     },
   )
+
+  it('marks the Dashboard sidebar link as active', async () => {
+    authenticate()
+    renderAt('#/')
+
+    expect(await screen.findByText('dashboard-page')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBe('page')
+  })
 
   it('marks the inventory sidebar link as active', async () => {
     authenticate()

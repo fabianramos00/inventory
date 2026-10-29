@@ -6,9 +6,9 @@ import PrivateRoute from '@/components/PrivateRoute'
 import SuperuserRoute from '@/components/SuperuserRoute'
 import AppLayout from '@/components/layout/AppLayout'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import Home from '@/pages/Home/Home'
 import Login from '@/pages/Login/Login'
 
+const Dashboard = lazy(() => import('@/pages/Dashboard/Dashboard'))
 const Users = lazy(() => import('@/pages/Users/Users'))
 const Inventory = lazy(() => import('@/pages/Inventory/Inventory'))
 const ProductForm = lazy(() => import('@/pages/ProductForm/ProductForm'))
@@ -30,7 +30,7 @@ export default function App() {
               <Route path="/login" element={<Login />} />
               <Route element={<PrivateRoute />}>
                 <Route element={<AppLayout />}>
-                  <Route path="/" element={<Home />} />
+                  <Route path="/" element={<Dashboard />} />
                   <Route path="/inventory" element={<Inventory />} />
                   <Route path="/inventory/create" element={<ProductForm />} />
                   <Route path="/inventory/product/:id" element={<ProductForm />} />

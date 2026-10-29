@@ -91,7 +91,7 @@ Use `HashRouter` in the desktop build. The legacy route table stays the same;
 only the router wrapper changes. Browser dev may keep `BrowserRouter` behind
 `import.meta.env.DEV`, but the shipped build must be hash-based.
 
-Current routes are `/#/login`, the protected `/#/` Home, `/#/inventory`,
+Current routes are `/#/login`, the protected `/#/` Dashboard, `/#/inventory`,
 `/#/inventory/create`, `/#/inventory/product/:id`, `/#/sales`,
 `/#/sales/create`, `/#/sales/:id`, `/#/orders`, `/#/orders/create`,
 `/#/orders/:id`, `/#/clients`, `/#/providers`, and the superuser-only
