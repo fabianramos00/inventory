@@ -125,19 +125,36 @@ Publish SHA-256 checksums with every artifact.
 
 ## CI
 
-The pipeline must run, in order:
+`.github/workflows/ci.yml` runs on every push and pull request. It pins Go
+1.26, Node 24, and pnpm 12, and starts a PostgreSQL 17 service on port 5433
+with the `inventory` and `inventory_desktop_test` databases. The Go steps run
+with `INVENTORY_TEST_DATABASE_URL` pointed at the test database.
 
-1. `go test ./...`
-2. `go vet ./...`
-3. `gofmt -l .` (must be empty)
-4. `pnpm install --frozen-lockfile`
-5. `pnpm lint`
-6. `pnpm test`
-7. `pnpm build`
-8. `wails build` for the target platform (`-tags webkit2_41` on Linux)
-9. Contract parity suite when `LEGACY_API_URL` is available
+The workflow runs, in order:
 
-A red step blocks the release. Do not skip tests to ship.
+1. `go test ./... -count=1`
+2. `go test -race ./... -count=1`
+3. `go vet ./...`
+4. `gofmt -l internal cmd main.go app.go` (must be empty)
+5. `govulncheck ./...`
+6. `pnpm install --frozen-lockfile`
+7. `pnpm lint`
+8. `pnpm test`
+9. `pnpm build`
+10. `pnpm audit --audit-level=high`
+
+A red step blocks the release. Do not skip tests to ship. `scripts/verify.sh`
+(also `make verify`) runs the same local checks, adding `git diff --check`;
+the PostgreSQL pass is skipped unless `INVENTORY_TEST_DATABASE_URL` is set.
+
+Wails platform builds and the FastAPI-vs-Go contract parity suite when
+`LEGACY_API_URL` is available remain release-time steps, not part of this
+first workflow. Playwright E2E is a documented follow-up: add it once the
+service/database setup is reliable in CI.
+
+```bash
+scripts/verify.sh
+```
 
 ## Release checklist
 

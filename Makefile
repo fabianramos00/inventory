@@ -7,7 +7,7 @@ endif
 
 export SEED_EMAIL SEED_PASSWORD SEED_NAME
 
-.PHONY: help dev build test lint db-up db-down seed
+.PHONY: help dev build test lint verify db-up db-down seed
 
 help:
 	@echo "Inventory Desktop"
@@ -17,6 +17,7 @@ help:
 	@echo "  build     Build the desktop app into build/bin/"
 	@echo "  test      Run Go and frontend unit tests"
 	@echo "  lint      Run go vet, a gofmt check, and frontend lint"
+	@echo "  verify    Run the full local pre-release check (scripts/verify.sh)"
 	@echo "  db-up     Start PostgreSQL 17 on localhost:5433"
 	@echo "  db-down   Stop the compose database (keeps its volume)"
 	@echo "  seed      Create or update a user; needs SEED_EMAIL and SEED_PASSWORD"
@@ -41,6 +42,9 @@ lint:
 		echo "gofmt required:"; echo "$$unformatted"; exit 1; \
 	fi
 	cd frontend && pnpm lint
+
+verify:
+	scripts/verify.sh
 
 db-up:
 	docker compose up -d --wait postgres
