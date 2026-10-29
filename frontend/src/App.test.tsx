@@ -7,6 +7,8 @@ vi.mock('@/pages/Inventory/Inventory', () => ({ default: () => <div>inventory-pa
 vi.mock('@/pages/ProductForm/ProductForm', () => ({ default: () => <div>product-form-page</div> }))
 vi.mock('@/pages/Sales/Sales', () => ({ default: () => <div>sales-page</div> }))
 vi.mock('@/pages/SaleForm/SaleForm', () => ({ default: () => <div>sale-form-page</div> }))
+vi.mock('@/pages/Orders/Orders', () => ({ default: () => <div>orders-page</div> }))
+vi.mock('@/pages/OrderForm/OrderForm', () => ({ default: () => <div>order-form-page</div> }))
 vi.mock('@/pages/Clients/Clients', () => ({ default: () => <div>clients-page</div> }))
 vi.mock('@/pages/Providers/Providers', () => ({ default: () => <div>providers-page</div> }))
 
@@ -40,6 +42,9 @@ describe('App routes', () => {
     ['#/sales', 'sales-page', '#/sales'],
     ['#/sales/create', 'sale-form-page', '#/sales/create'],
     ['#/sales/12', 'sale-form-page', '#/sales/12'],
+    ['#/orders', 'orders-page', '#/orders'],
+    ['#/orders/create', 'order-form-page', '#/orders/create'],
+    ['#/orders/12', 'order-form-page', '#/orders/12'],
     ['#/clients', 'clients-page', '#/clients'],
     ['#/providers', 'providers-page', '#/providers'],
   ])('renders %s for an authenticated user', async (hash, text, expectedHash) => {
@@ -57,6 +62,9 @@ describe('App routes', () => {
     '#/sales',
     '#/sales/create',
     '#/sales/12',
+    '#/orders',
+    '#/orders/create',
+    '#/orders/12',
     '#/clients',
     '#/providers',
   ])(
@@ -90,6 +98,19 @@ describe('App routes', () => {
 
     expect(await screen.findByText(text)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Ventas' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it.each([
+    ['#/orders', 'orders-page'],
+    ['#/orders/create', 'order-form-page'],
+    ['#/orders/12', 'order-form-page'],
+  ])('keeps the Pedidos sidebar link active for %s', async (hash, text) => {
+    authenticate()
+    renderAt(hash)
+
+    expect(await screen.findByText(text)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Pedidos' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBeNull()
   })
 

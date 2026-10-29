@@ -93,10 +93,12 @@ only the router wrapper changes. Browser dev may keep `BrowserRouter` behind
 
 Current routes are `/#/login`, the protected `/#/` Home, `/#/inventory`,
 `/#/inventory/create`, `/#/inventory/product/:id`, `/#/sales`,
-`/#/sales/create`, `/#/sales/:id`, `/#/clients`, `/#/providers`, and the
-superuser-only `/#/users` page, all under `AppLayout` except login. Declare
-`/#/sales/create` before `/#/sales/:id`. The remaining page files stay in
-`src/pages` without routes until later phases restore the full table from
+`/#/sales/create`, `/#/sales/:id`, `/#/orders`, `/#/orders/create`,
+`/#/orders/:id`, `/#/clients`, `/#/providers`, and the superuser-only
+`/#/users` page, all under `AppLayout` except login. Declare
+`/#/sales/create` before `/#/sales/:id` and `/#/orders/create` before
+`/#/orders/:id`. The remaining page files stay in `src/pages` without routes
+until later phases restore the full table from
 [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Playwright specs must use hash URLs.
 
 ### Browser assumptions to review
@@ -143,16 +145,35 @@ superuser-only `/#/users` page, all under `AppLayout` except login. Declare
   offer a manual override.
 - Sales date inputs emit `YYYY-MM-DD`; `useSales` converts `start_date` to
   the Bogota start of day and `end_date` to the inclusive Bogota end of day
-  as RFC 3339 instants before calling the API.
+  as RFC 3339 instants before calling the API. `useOrders` applies the same
+  conversion to `min_date`/`max_date`. Changing either date filter resets the
+  page to 1.
+- Purchase-order create sends exactly `provider_id`, `status`,
+  `payment_status`, and `items[{ product_id, quantity, unit_cost,
+  supplier_sku? }]`; `supplier_sku` is omitted when empty. Details updates
+  send only `provider_id`, `status`, and `payment_status`. Item add sends
+  `{ product_id, quantity, unit_cost, supplier_sku? }`; item update sends
+  `{ quantity, unit_cost, supplier_sku }` and sends `null` to clear
+  `supplier_sku`; item delete uses the item id.
+- Create/delete order invalidates `['orders']` and the dashboard keys. A
+  details update invalidates `['order', id]`, `['orders']`, and the dashboard
+  keys. Moving an order to `received` also invalidates `['product']` (detail
+  prefix), `['products']`, `['inventoryStats']`, and the supplier-catalog key
+  so stock reflects the backend increment. Item mutations invalidate
+  `['order', id]`, `['orderItems', id]`, and `['orders']`; they never
+  invalidate stock, because the backend does not adjust stock for received
+  item edits. Deleting an order never reverses stock already received.
 - API errors surface the backend `response.data.detail` through
   `getAPIErrorMessage(error, fallback)`; plain `Error` messages and the
   Spanish fallback are used when no detail exists. Error boxes use
   `role="alert"`.
-- Product, sales, client, and provider list responses use the cursor shape
-  `{ items, has_next, skip, limit }`. Provider search matches name, email, and
-  phone; `contact_info` is not searched. The product write payload uses
-  `low_stock_threshold`; the legacy `min_stock`/`min_stock_quantity` names are
-  not sent. Sales, client, and provider pagination use `has_next`, never `total`/`pages`.
+- Product, sales, purchase-order, order-item, client, and provider list
+  responses use the cursor shape `{ items, has_next, skip, limit }`. Provider
+  search matches name, email, and phone; `contact_info` is not searched. The
+  product write payload uses `low_stock_threshold`; the legacy
+  `min_stock`/`min_stock_quantity` names are not sent. Sales, purchase-order,
+  order-item, client, and provider pagination use `has_next`, never
+  `total`/`pages`.
 - Keep `isLoading` for skeletons and `isFetching` for background refreshes.
 
 ## Auth
@@ -219,8 +240,9 @@ pnpm test:e2e
 
 - Unit/component tests: Vitest + Testing Library.
 - Hooks: test loading, success, error, pagination, invalidation.
-- E2E: login, inventory CRUD, sale creation with stock validation, order
-  receiving, user management, keyboard dialogs.
+- E2E (Playwright): auth and user management are covered today. Pending
+  Playwright: inventory CRUD, sale creation with stock validation, order
+  receiving, and keyboard dialogs.
 - Every bug fix leaves a regression test.
 
 ## Boundaries

@@ -87,6 +87,9 @@ export interface OrderItem {
   supplier_sku: string | null
   product_name: string
   product_sku: string
+  brand_name: string | null
+  material_name: string | null
+  category_name: string | null
 }
 
 export interface Order {

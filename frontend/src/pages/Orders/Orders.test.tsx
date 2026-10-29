@@ -91,4 +91,70 @@ describe('Orders list', () => {
 
     await waitFor(() => expect(mocks.deleteOrder).toHaveBeenCalledWith(1))
   })
+
+  it('uses has_next to enable cursor pagination', async () => {
+    mocks.getOrders.mockResolvedValue({
+      data: { ...orderPage().data, has_next: true },
+    })
+    renderOrders()
+    await screen.findByText('Ferretería Central')
+
+    const next = screen.getByRole('button', { name: 'Ir a página siguiente' }) as HTMLButtonElement
+    expect(next.disabled).toBe(false)
+    fireEvent.click(next)
+
+    await waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith({ skip: 10, limit: 10 }))
+  })
+
+  it('sends Bogota day bounds and resets the page when a date filter changes', async () => {
+    mocks.getOrders.mockResolvedValue({
+      data: { ...orderPage().data, has_next: true },
+    })
+    renderOrders()
+    await screen.findByText('Ferretería Central')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ir a página siguiente' }))
+    await waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith({ skip: 10, limit: 10 }))
+
+    fireEvent.change(screen.getByTitle('Fecha inicio'), { target: { value: '2026-10-24' } })
+
+    await waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith({
+      skip: 0,
+      limit: 10,
+      min_date: '2026-10-24T05:00:00.000Z',
+    }))
+  })
+
+  it('sends the inclusive Bogota end-of-day bound', async () => {
+    renderOrders()
+    await screen.findByText('Ferretería Central')
+
+    fireEvent.change(screen.getByTitle('Fecha fin'), { target: { value: '2026-10-25' } })
+
+    await waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith({
+      skip: 0,
+      limit: 10,
+      max_date: '2026-10-26T04:59:59.999Z',
+    }))
+  })
+
+  it('resets the page when a status filter changes', async () => {
+    mocks.getOrders.mockResolvedValue({
+      data: { ...orderPage().data, has_next: true },
+    })
+    renderOrders()
+    await screen.findByText('Ferretería Central')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ir a página siguiente' }))
+    await waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith({ skip: 10, limit: 10 }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Estado' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Enviado' }))
+
+    await waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith({
+      skip: 0,
+      limit: 10,
+      status: 'sent',
+    }))
+  })
 })

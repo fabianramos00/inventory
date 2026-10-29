@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { salesApi, type SalesParams } from '@/lib/api/sales'
 import { SALE_RELATED_KEYS } from '@/lib/saleCache'
+import { bogotaDayBounds } from '@/lib/dateBounds'
 import type { Sale } from '@/types'
 import { usePagedList } from './usePagedList'
+
+export { bogotaDayBounds } from '@/lib/dateBounds'
 
 export interface SalesFilters {
   user_id?: number | ''
@@ -18,13 +21,6 @@ export interface SalesFilters {
 interface UseSalesParams {
   page: number
   filters: SalesFilters
-}
-
-export function bogotaDayBounds(startDate?: string, endDate?: string) {
-  return {
-    start_date: startDate ? new Date(`${startDate}T00:00:00-05:00`).toISOString() : undefined,
-    end_date: endDate ? new Date(`${endDate}T23:59:59.999-05:00`).toISOString() : undefined,
-  }
 }
 
 function buildSalesParams({ skip, limit, user_id, no_client, client_id, payment_method, delivery_status, payment_status, start_date, end_date }: { skip: number; limit: number } & SalesFilters): SalesParams {

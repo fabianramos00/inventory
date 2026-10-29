@@ -14,6 +14,8 @@ const Inventory = lazy(() => import('@/pages/Inventory/Inventory'))
 const ProductForm = lazy(() => import('@/pages/ProductForm/ProductForm'))
 const Sales = lazy(() => import('@/pages/Sales/Sales'))
 const SaleForm = lazy(() => import('@/pages/SaleForm/SaleForm'))
+const Orders = lazy(() => import('@/pages/Orders/Orders'))
+const OrderForm = lazy(() => import('@/pages/OrderForm/OrderForm'))
 const Clients = lazy(() => import('@/pages/Clients/Clients'))
 const Providers = lazy(() => import('@/pages/Providers/Providers'))
 
@@ -35,6 +37,9 @@ export default function App() {
                   <Route path="/sales" element={<Sales />} />
                   <Route path="/sales/create" element={<SaleForm />} />
                   <Route path="/sales/:id" element={<SaleForm />} />
+                  <Route path="/orders" element={<Orders />} />
+                  <Route path="/orders/create" element={<OrderForm />} />
+                  <Route path="/orders/:id" element={<OrderForm />} />
                   <Route path="/clients" element={<Clients />} />
                   <Route path="/providers" element={<Providers />} />
                 </Route>

@@ -35,7 +35,7 @@ export const ordersApi = {
   addOrderItem: (orderId: number, data: { product_id: number; quantity: number; unit_cost: number; supplier_sku?: string }) =>
     api.post<Order>(`/supply-chain/purchase-orders/${orderId}/items`, data),
 
-  updateOrderItem: (orderId: number, itemId: number, data: { quantity?: number; unit_cost?: number; supplier_sku?: string }) =>
+  updateOrderItem: (orderId: number, itemId: number, data: { quantity?: number; unit_cost?: number; supplier_sku?: string | null }) =>
     api.put<Order>(`/supply-chain/purchase-orders/${orderId}/items/${itemId}`, data),
 
   deleteOrderItem: (orderId: number, itemId: number) =>

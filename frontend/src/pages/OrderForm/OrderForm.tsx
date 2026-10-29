@@ -10,8 +10,20 @@ import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteMod
 import CreateFormModal, { type FieldConfig } from '@/components/CreateFormModal/CreateFormModal'
 import { orderStatusLabel, orderStatusBadge, orderPaymentStatusLabel, orderPaymentStatusBadge } from '@/lib/constants'
 import { formatDate, formatCurrency } from '@/lib/utils'
+import { getAPIErrorMessage } from '@/lib/apiError'
+import {
+  invalidateOrderDetails,
+  invalidateOrderItems,
+  invalidateOrderListData,
+} from '@/lib/orderCache'
 import { useOrder } from '@/hooks/useOrder'
-import type { Product, OrderItem, OrderStatus, OrderPaymentStatus, FilterOption, CreateOrderInput } from '@/types'
+import {
+  buildAddOrderItemPayload,
+  buildCreateOrderPayload,
+  buildUpdateOrderItemPayload,
+  buildUpdateOrderPayload,
+} from './orderPayload'
+import type { Product, OrderItem, OrderStatus, OrderPaymentStatus, FilterOption } from '@/types'
 
 interface OrderItemDraft {
   id?: number
@@ -261,15 +273,17 @@ export default function OrderForm() {
     if (!order) return
     setIsSaving(true)
     try {
-      const res = await ordersApi.updateOrder(order.id, {
-        provider_id: providerId || undefined,
+      const res = await ordersApi.updateOrder(order.id, buildUpdateOrderPayload({
+        providerId,
         status,
-        payment_status: paymentStatus,
-      })
+        paymentStatus,
+      }))
       queryClient.setQueryData(['order', order.id], res.data)
+      const becameReceived = order.status !== 'received' && status === 'received'
+      invalidateOrderDetails(queryClient, order.id, becameReceived)
       setIsEditingDetails(false)
-    } catch {
-      setApiError('Error al guardar los detalles del pedido. Intenta de nuevo.')
+    } catch (error) {
+      setApiError(getAPIErrorMessage(error, 'Error al guardar los detalles del pedido. Intenta de nuevo.'))
     } finally {
       setIsSaving(false)
     }
@@ -278,11 +292,7 @@ export default function OrderForm() {
   async function handleDeleteOrder() {
     if (!order) return
     await ordersApi.deleteOrder(order.id)
-    queryClient.invalidateQueries({ queryKey: ['orders'] })
-    queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-    queryClient.invalidateQueries({ queryKey: ['dashboardTrend'] })
-    queryClient.invalidateQueries({ queryKey: ['dashboardOrderStatus'] })
-    queryClient.invalidateQueries({ queryKey: ['dashboardLowStock'] })
+    invalidateOrderListData(queryClient)
     navigate('/orders')
   }
 
@@ -338,10 +348,10 @@ export default function OrderForm() {
       queryClient.setQueryData<OrderItem[]>(['orderItems', order.id], (prev) =>
         (prev ?? []).filter(orderItem => orderItem.id !== item.id)
       )
+      invalidateOrderItems(queryClient, order.id)
       setItems(prev => prev.filter(i => i.product_id !== productId))
-    } catch {
-      if (import.meta.env.DEV) console.error('Error deleting order item')
-      setApiError('Error al eliminar el artículo. Intenta de nuevo.')
+    } catch (error) {
+      setApiError(getAPIErrorMessage(error, 'Error al eliminar el artículo. Intenta de nuevo.'))
     } finally {
       setDeletingItemId(null)
     }
@@ -354,26 +364,23 @@ export default function OrderForm() {
     if (item.id) {
       setSavingItemId(item.id)
       try {
-        const res = await ordersApi.updateOrderItem(order.id, item.id, {
-          quantity: parseFloat(item.quantity) || 1,
-          unit_cost: parseFloat(item.unit_cost) || 0,
-          supplier_sku: item.supplier_sku || undefined,
-        })
+        const payload = buildUpdateOrderItemPayload(item)
+        const res = await ordersApi.updateOrderItem(order.id, item.id, payload)
         queryClient.setQueryData(['order', order.id], res.data)
-        const quantity = parseFloat(item.quantity) || 1
-        const cost = parseFloat(item.unit_cost) || 0
+        const quantity = payload.quantity
+        const cost = payload.unit_cost
         queryClient.setQueryData<OrderItem[]>(['orderItems', order.id], (prev) =>
           (prev ?? []).map(orderItem => orderItem.id === item.id ? {
             ...orderItem,
             quantity,
             unit_cost: cost,
             subtotal: quantity * cost,
-            supplier_sku: item.supplier_sku || null,
+            supplier_sku: payload.supplier_sku,
           } : orderItem)
         )
-      } catch {
-        if (import.meta.env.DEV) console.error('Error saving order item')
-        setApiError('Error al guardar el artículo. Intenta de nuevo.')
+        invalidateOrderItems(queryClient, order.id)
+      } catch (error) {
+        setApiError(getAPIErrorMessage(error, 'Error al guardar el artículo. Intenta de nuevo.'))
       } finally {
         setSavingItemId(null)
       }
@@ -381,23 +388,18 @@ export default function OrderForm() {
     }
 
     try {
-      const res = await ordersApi.addOrderItem(order.id, {
-        product_id: item.product_id,
-        quantity: parseFloat(item.quantity) || 1,
-        unit_cost: parseFloat(item.unit_cost) || 0,
-        supplier_sku: item.supplier_sku || undefined,
-      })
+      const res = await ordersApi.addOrderItem(order.id, buildAddOrderItemPayload(item))
       queryClient.setQueryData(['order', order.id], res.data)
       const itemsRes = await ordersApi.getOrderItems(order.id, { skip: 0, limit: 100 })
       const freshItems = itemsRes.data.items
       queryClient.setQueryData(['orderItems', order.id], freshItems)
+      invalidateOrderItems(queryClient, order.id)
       const newItem = freshItems.find(orderItem => orderItem.product_id === productId)
       if (newItem) {
         setItems(prev => prev.map(i => i.product_id === productId ? { ...i, id: newItem.id } : i))
       }
-    } catch {
-      if (import.meta.env.DEV) console.error('Error adding pending order item')
-      setApiError('Error al agregar el artículo. Intenta de nuevo.')
+    } catch (error) {
+      setApiError(getAPIErrorMessage(error, 'Error al agregar el artículo. Intenta de nuevo.'))
     }
   }
 
@@ -432,26 +434,16 @@ export default function OrderForm() {
 
     setIsSubmitting(true)
     try {
-      const payload: CreateOrderInput = {
-        provider_id: providerId as number,
+      await ordersApi.createOrder(buildCreateOrderPayload({
+        providerId: providerId as number,
         status,
-        payment_status: paymentStatus,
-        items: items.map(item => ({
-          product_id: item.product_id,
-          quantity: Number(item.quantity),
-          unit_cost: item.unit_cost !== '' ? parseFloat(item.unit_cost) || 0 : 0,
-          supplier_sku: item.supplier_sku || undefined,
-        })),
-      }
-      await ordersApi.createOrder(payload)
-      queryClient.invalidateQueries({ queryKey: ['orders'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardTrend'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardOrderStatus'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardLowStock'] })
+        paymentStatus,
+        items,
+      }))
+      invalidateOrderListData(queryClient)
       navigate('/orders')
     } catch (error) {
-      setApiError(error instanceof Error ? error.message : 'Error al crear el pedido.')
+      setApiError(getAPIErrorMessage(error, 'Error al crear el pedido.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -507,8 +499,8 @@ export default function OrderForm() {
         )}
       </div>
 
-      {apiError && <div className={styles.errorBox}>{apiError}</div>}
-      {validationError && <div className={styles.errorBox}>{validationError}</div>}
+      {apiError && <div className={styles.errorBox} role="alert">{apiError}</div>}
+      {validationError && <div className={styles.errorBox} role="alert">{validationError}</div>}
 
       <div className={styles.sectionsGrid}>
         <section className={styles.card}>
