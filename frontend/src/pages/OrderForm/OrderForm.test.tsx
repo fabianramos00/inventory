@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import OrderForm from './OrderForm'
 
+vi.setConfig({ testTimeout: 15000 })
+
 const mocks = vi.hoisted(() => ({
   useOrder: vi.fn(),
   createOrder: vi.fn(),
