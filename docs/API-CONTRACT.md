@@ -508,6 +508,10 @@ Item shape:
 | GET | `/dashboard/top-products` | `limit` (default 10) |
 | GET | `/dashboard/order-status-distribution` | |
 
+All four require an active user and are read-only. `limit` defaults to `10`
+when the key is missing and must be between `1` and `100`; an empty,
+non-numeric, or out-of-range value is `422`.
+
 Shapes:
 
 ```json
@@ -532,6 +536,18 @@ Known legacy semantics that must be preserved unless explicitly changed:
 - `pending_payment_sales` is an amount, not a count.
 - `inventory_value` uses sale price, not cost.
 - Top products sum delivered quantities but rank by full subtotals.
+
+Time, empty data, and status details:
+
+- Dashboard calendar days use `America/Bogota` with a fixed `-05:00` offset
+  (Colombia has no DST); the host timezone is never used.
+- `sales-trend` always returns exactly seven entries, oldest first, with
+  `YYYY-MM-DD` date keys, zero-filled for days without rows.
+- `top-products` covers the last seven days from now and returns
+  `{"products": []}` when there is no data.
+- `order-status-distribution` returns lowercase statuses ordered by count
+  descending. `percentage` is `count / total * 100`, rounded to two decimals,
+  or `0` when there are no orders; no orders returns `{"data": []}`.
 
 ## Endpoint count
 

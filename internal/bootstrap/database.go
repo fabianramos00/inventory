@@ -31,6 +31,7 @@ type Stores struct {
 	Providers        outbound.ProviderRepository
 	SupplierCatalogs outbound.SupplierCatalogRepository
 	PurchaseOrders   outbound.PurchaseOrderRepository
+	Dashboard        outbound.DashboardRepository
 	UnitOfWork       outbound.UnitOfWork
 	Closer           func() error
 	Backend          string
@@ -114,6 +115,7 @@ func newStores(gormDB *gorm.DB, conn *sql.DB, backend string) *Stores {
 		Providers:        gormstore.NewProviderStore(gormDB),
 		SupplierCatalogs: gormstore.NewSupplierCatalogStore(gormDB),
 		PurchaseOrders:   gormstore.NewPurchaseOrderStore(gormDB),
+		Dashboard:        gormstore.NewDashboardStore(gormDB),
 		UnitOfWork:       gormstore.NewUnitOfWork(gormDB),
 		Closer:           conn.Close,
 		Backend:          backend,

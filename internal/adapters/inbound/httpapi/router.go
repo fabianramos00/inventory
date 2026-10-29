@@ -21,6 +21,7 @@ type Deps struct {
 	Providers        inbound.ProviderUseCase
 	SupplierCatalogs inbound.SupplierCatalogUseCase
 	PurchaseOrders   inbound.PurchaseOrderUseCase
+	Dashboard        inbound.DashboardUseCase
 	Logger           *slog.Logger
 	Backend          string
 	DevMode          bool
@@ -46,6 +47,7 @@ func NewRouter(deps Deps) http.Handler {
 	providersHandler := NewProviderHandler(deps.Providers, logger)
 	supplierCatalogsHandler := NewSupplierCatalogHandler(deps.SupplierCatalogs, logger)
 	purchaseOrdersHandler := NewPurchaseOrderHandler(deps.PurchaseOrders, logger)
+	dashboardHandler := NewDashboardHandler(deps.Dashboard, logger)
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "database": backend})
@@ -94,6 +96,11 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/v1/supply-chain/purchase-orders/{id}/items", purchaseOrdersHandler.AddItem)
 	mux.HandleFunc("PUT /api/v1/supply-chain/purchase-orders/{id}/items/{item_id}", purchaseOrdersHandler.UpdateItem)
 	mux.HandleFunc("DELETE /api/v1/supply-chain/purchase-orders/{id}/items/{item_id}", purchaseOrdersHandler.DeleteItem)
+
+	mux.HandleFunc("GET /api/v1/dashboard/summary", dashboardHandler.Summary)
+	mux.HandleFunc("GET /api/v1/dashboard/sales-trend", dashboardHandler.SalesTrend)
+	mux.HandleFunc("GET /api/v1/dashboard/top-products", dashboardHandler.TopProducts)
+	mux.HandleFunc("GET /api/v1/dashboard/order-status-distribution", dashboardHandler.OrderStatusDistribution)
 
 	mux.HandleFunc("GET /api/v1/sales", salesHandler.List)
 	mux.HandleFunc("POST /api/v1/sales", salesHandler.Create)

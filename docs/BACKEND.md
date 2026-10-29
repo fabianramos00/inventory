@@ -49,12 +49,14 @@ internal/
       client.go         ClientUseCase, list filter, and partial-update inputs
       sale.go           SaleUseCase, filters, and create/update/item inputs
       purchase_order.go PurchaseOrderUseCase, filters, and item inputs
+      dashboard.go      DashboardUseCase
       users.go          UserUseCase, UserList, create/update inputs
     outbound/
       catalog.go        CatalogRepository and ProductRepository interfaces
       client.go         ClientRepository interface
       sale.go           SaleRepository interface
       purchase_order.go PurchaseOrderRepository interface
+      dashboard.go      DashboardRepository interface
       stock.go          StockRepository interface
       uow.go            UnitOfWork and TxRepos
       users.go          UserRepository interface
@@ -66,6 +68,7 @@ internal/
     catalog.go          Category, Brand, Material, MeasurementUnit, Product
     client.go           Client
     purchase_order.go   PurchaseOrder and OrderItem
+    dashboard.go        Dashboard aggregate result types
     user.go             User, RefreshToken (no JSON tags)
     errors.go           domain sentinel errors (not found, conflict, validation, auth)
   adapters/
@@ -80,6 +83,7 @@ internal/
         client.go       client CRUD handlers and request/response DTOs
         sale.go         sale/item handlers, filters, and response DTOs
         purchase_order.go order/item handlers and response DTOs
+        dashboard.go    dashboard handlers and response DTOs
         user_dto.go     shared user response DTO and mapper
         users.go        user CRUD handlers and superuser guard
     outbound/
@@ -91,6 +95,7 @@ internal/
           client.go     client queries and timestamp round-trip
           sale.go       sale/item queries, status mapping, money conversion
           purchase_order.go order/item queries, status mapping, receiving lock
+          dashboard.go  aggregate queries, Bogota date buckets, money conversion
           stock.go      sorted locking and conditional stock deltas
           uow.go        transaction boundary and tx-bound stores
           user_model.go
@@ -436,6 +441,32 @@ Never log passwords, tokens, authorization headers, or full request bodies.
 - Item list responses are ordered `id ASC` and include product name/SKU plus
   brand, material, and category names.
 
+## Dashboard
+
+- Endpoints under `/api/v1/dashboard`: summary, sales-trend, top-products, and
+  order-status-distribution. All require an active user and are read-only.
+- Aggregates run as raw SQL in `gormstore`. PostgreSQL sums `NUMERIC(12,2)` as
+  text decimals; SQLite sums integer cents and converts once in the adapter.
+  No `float64` money path.
+- Summary: `inventory_value` is `SUM(price * stock_quantity)` at sale price;
+  `total_sales_today` sums sales created since Bogota midnight;
+  `pending_payment_sales` is `SUM(total_amount - amount_paid)` for unpaid or
+  partially paid sales; `pending_orders` counts pending purchase orders;
+  `delivered_orders` counts delivered sales, not purchase orders.
+- Sales trend returns exactly seven Bogota calendar days ending today, oldest
+  first, zero-filled. Sales bucket by `created_at`, orders by `order_date`.
+- Top products covers the last seven days from now, groups by product, sums
+  `delivered_quantity` for quantity, sums `subtotal` for amount, and orders by
+  the amount descending. Brand, category, and material names are nullable.
+  `limit` defaults to `10` and must be `1..100`, otherwise `422`.
+- Order-status distribution groups purchase orders by status, lowercases the
+  status, orders by count descending, and returns the percentage of the total
+  (two decimals) with `0` when there are no orders.
+- Bogota day bucketing uses a fixed `-05:00` offset because Colombia has no
+  DST, so the runtime does not need tzdata and never uses the host timezone.
+  PostgreSQL uses `AT TIME ZONE 'America/Bogota'`; SQLite uses
+  `date(created_at, '-5 hours')` on the stored UTC text.
+
 ## Transactions and stock
 
 Services own mutations through `outbound.UnitOfWork.WithinTx`, which provides
@@ -506,9 +537,9 @@ is used. Generate and persist `SECRET_KEY` when missing.
   (`users`, `refresh_tokens`); versions 2–6 create the Phase 3 business schema
   split by domain: catalog, identity, products, purchases, sales.
 - The catalog, product, client, provider, supplier catalog, purchase order,
-  and sales repositories and handlers are implemented. Dashboard remains
-  pending. Do not translate business tables piecemeal; parity tests come with
-  the adapters.
+  and sales repositories and handlers are implemented. Dashboard aggregates
+  are implemented and contract-tested on both backends. Do not translate
+  business tables piecemeal; parity tests come with the adapters.
 - Every migration is forward-only unless a rollback is safe and tested.
 - Run at startup when `AUTO_MIGRATE=true`; otherwise expose an explicit
   migrate command.

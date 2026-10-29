@@ -225,6 +225,35 @@ For each module:
 | Frontend product fields | `Product` type reads `stock_quantity` and `low_stock_threshold` and treats related category/brand/material/unit objects as nullable; legacy `stock`/`min_stock`/`unit` remain optional aliases | API fields are authoritative; frontend matches the API |
 | Locale | UI uses `es-PE` while backend uses Bogotá | New rule: `es-CO` / COP |
 
+### Dashboard
+
+- **Bogota grouping.** Legacy uses `ZoneInfo("America/Bogota")`; Go uses the
+  fixed `-05:00` offset because Colombia has no DST. Results are identical and
+  the runtime does not need tzdata. PostgreSQL buckets with
+  `AT TIME ZONE 'America/Bogota'`; SQLite derives the day from the stored UTC
+  text with `date(created_at, '-5 hours')`. The host timezone is never used.
+- **Money amount.** `pending_payment_sales` stays an amount
+  (`total_amount - amount_paid` for `payment_status != paid`), never a count.
+  Paid sales are excluded even when overpaid. The value can be negative when a
+  non-paid sale is overpaid, matching the legacy sum.
+- **Sale-price inventory.** `inventory_value` is
+  `SUM(products.price * products.stock_quantity)` using the sale price, not the
+  cost.
+- **Top-product quirk.** Quantity is `SUM(sale_items.delivered_quantity)`, but
+  ranking uses `SUM(sale_items.subtotal)`, so a product with undelivered items
+  can outrank one with more delivered units. Preserve this legacy behavior.
+- **Exact money.** PostgreSQL sums `NUMERIC(12,2)` as text decimals; SQLite
+  sums integer cents and converts once at the adapter boundary. No `float64`
+  money path.
+- **Trend shape.** The repository returns only days with rows; the application
+  builds the seven Bogota dates, oldest first, and zero-fills the gaps.
+- **Distribution percentage.** Go rounds to two decimals for a stable JSON
+  number; the legacy float is otherwise the same ratio. Statuses are lowercase
+  and ordered by count descending.
+- **Limit validation.** `limit` defaults to `10` and is constrained to
+  `1..100`, returning `422` outside that range. FastAPI accepted any integer;
+  the frozen contract requires the bound.
+
 ## Cutover criteria
 
 - All 67 endpoints pass parity fixtures or have approved differences.

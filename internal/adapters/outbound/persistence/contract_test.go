@@ -33,6 +33,7 @@ type repositories struct {
 	providers        outbound.ProviderRepository
 	supplierCatalogs outbound.SupplierCatalogRepository
 	purchaseOrders   outbound.PurchaseOrderRepository
+	dashboard        outbound.DashboardRepository
 	uow              outbound.UnitOfWork
 	stock            outbound.StockRepository
 	gorm             *gorm.DB
@@ -104,6 +105,7 @@ func newRepositories(gormDB *gorm.DB) *repositories {
 		providers:        gormstore.NewProviderStore(gormDB),
 		supplierCatalogs: gormstore.NewSupplierCatalogStore(gormDB),
 		purchaseOrders:   gormstore.NewPurchaseOrderStore(gormDB),
+		dashboard:        gormstore.NewDashboardStore(gormDB),
 		uow:              gormstore.NewUnitOfWork(gormDB),
 		stock:            gormstore.NewStockStore(gormDB),
 		gorm:             gormDB,

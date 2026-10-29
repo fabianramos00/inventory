@@ -131,8 +131,8 @@ through the GORM store against both backends, so PostgreSQL and SQLite cannot
 drift behind the same `internal/ports/outbound` interfaces.
 
 - PostgreSQL: opens `db.OpenPostgresGORM`, uses `INVENTORY_TEST_DATABASE_URL`,
-  applies goose migrations on the exposed `*sql.DB`, and truncates
-  `refresh_tokens`/`users`. It skips when the variable is unset.
+  applies goose migrations on the exposed `*sql.DB`, and truncates all
+  auth/business tables before the suite. It skips when the variable is unset.
 - SQLite: opens `db.OpenSQLiteGORM` on a fresh database under `t.TempDir()`,
   applies the SQLite goose migrations, and needs no external server.
 - The contract suite and the `httpapi` auth integration test share the test
@@ -168,13 +168,18 @@ Cases:
 - Catalog list orders by `id DESC`, computes `has_next` from `limit + 1`,
   honors `skip`, searches `name` only, and matches accented terms with different
   casing on SQLite and PostgreSQL.
+- Dashboard on both backends: empty summary zeros, empty trend/products/status
+  arrays, summary money and counts, Bogota-midnight boundary, seven-day trend
+  buckets, top-product ranking by subtotal versus delivered quantity, nullable
+  relations, and status-distribution ordering.
 
 SQLite now has the full Phase 3 business schema (`00001_auth.sql` plus
 `00002_catalog.sql` through `00006_sales.sql`). Go service, handler, and
 persistence contract coverage for catalog, products, clients, sales, providers,
 and supplier catalogs exists on both backends; the live legacy FastAPI fixture
 run is still pending for all of them. Purchase orders are implemented and
-contract-tested; dashboard remains pending.
+contract-tested. Dashboard aggregates are covered by application, handler, and
+repository contract tests on both backends.
 
 Refresh-token timestamps use `gormstore.Timestamp`, which writes a fixed-width
 UTC format (`2006-01-02T15:04:05.000000000Z`) so the lexicographic
@@ -401,11 +406,11 @@ The following is covered now:
   environment so the password never appears in argv, and the test secret is
   at least 32 bytes.
 
-Deferred: dashboard and the full 67-endpoint parity matrix. The Users CRUD
-slice, the catalog slice, the products slice, the clients slice, the providers
-slice, the supplier catalog slice, the sales slice, and the purchase order
-slice are covered now (application, handler, repository contract, integration,
-and, for Users, full-stack E2E).
+The Users CRUD slice, the catalog slice, the products slice, the clients slice,
+the providers slice, the supplier catalog slice, the sales slice, the purchase
+order slice, and the dashboard aggregates are covered now (application,
+handler, repository contract, integration, and, for Users, full-stack E2E).
+The full 67-endpoint legacy parity matrix remains deferred.
 
 ## Frontend tests
 
@@ -501,7 +506,7 @@ fixtures in replay mode. Do not mark parity as passing without a run.
 | Supply chain — providers | 5 | Backend contract covered; legacy FastAPI parity pending |
 | Supply chain — supplier catalogs | 2 | Backend contract covered; legacy FastAPI parity pending |
 | Supply chain — purchase orders | 9 | Backend contract covered; legacy FastAPI parity pending |
-| Dashboard | 4 | Pending |
+| Dashboard | 4 | Backend contract covered; legacy FastAPI parity pending |
 | **Total** | **67** | Pending |
 
 Update the status column as each module passes. The matrix is the release
