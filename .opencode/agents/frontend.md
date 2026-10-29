@@ -27,8 +27,9 @@ shell without redesigning it.
 - Locale: `es-CO`, COP, `DD/MM/YYYY`, `America/Bogota`.
 - React 19, TypeScript 6, Vite 8, pnpm 12.
 - TanStack Query v5, axios, react-hook-form, zod, CSS Modules, lucide-react.
-- Current phase: Phase 1 docs only. Phase 2 copies `../inventory-app` into
-  `frontend/`.
+- Current phase: Phase 3 complete. All routes are implemented, the dashboard
+  lives at `/`, the SQLite offline banner is visible, full-stack E2E passes,
+  and the dependency audit is clean.
 
 ## Your scope
 
@@ -131,6 +132,8 @@ pnpm test:e2e
 - No unrequested abstractions.
 - No comments unless explaining why.
 - Delete dead code.
+- Validate every outgoing payload against the frozen contract; unknown fields
+  are 422 and server-derived fields must not be sent.
 - Keep accessibility and validation; never simplify them away.
 - Mark deliberate shortcuts with a `ponytail:` comment naming the ceiling and
   upgrade path.

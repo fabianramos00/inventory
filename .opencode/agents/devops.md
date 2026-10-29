@@ -29,11 +29,13 @@ Windows, and macOS.
 ## Project context
 
 - Wails v2 with Go 1.26, React 19, Vite 8, pnpm 12.
-- PostgreSQL 17 is the primary runtime database; `DB_MODE=auto` falls back to local SQLite, so PostgreSQL is not strictly required for auth-only offline use.
+- PostgreSQL 17 is the primary runtime database; `DB_MODE=auto` falls back to local SQLite, so PostgreSQL is not strictly required for offline business use.
 - Targets: Linux (amd64), Windows (amd64, WebView2), macOS (universal).
 - Signing: Authenticode on Windows, Developer ID + notarization on macOS,
   checksums on Linux.
-- Current phase: Phase 2. Wails build, Makefile, scripts, and the Linux WebKitGTK 4.1 tag are in place.
+- Current phase: Phase 3 complete. `scripts/verify.sh`, the CI workflow, and
+  the Linux Wails build/backup checks are verified. Windows/macOS packaging
+  and signing remain blocked on external tooling.
 
 ## Your scope
 
@@ -118,6 +120,8 @@ A red step blocks release.
 - Pin tool and action versions.
 - Cache dependencies in CI, not build outputs in git.
 - Keep release scripts idempotent.
+- Release evidence belongs in `docs/RELEASE.md`; local build/backup success is
+  not the same as a signed per-OS release.
 - If a build change requires application code, delegate to `backend` or
   `frontend`.
 

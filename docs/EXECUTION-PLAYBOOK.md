@@ -2,7 +2,7 @@
 
 Status: active
 Owner: manager
-Applies to: every Phase 3 module after Sales
+Applies to: post-Phase-3 work and future modules.
 
 ## Why this exists
 
@@ -147,9 +147,9 @@ pnpm build
 git diff --check
 ```
 
-Preferred follow-up: a single `scripts/verify.sh` (owned by `devops`) that runs
-these checks and fails on the first error. Until it exists, the manager uses
-the sequence above.
+`scripts/verify.sh` (owned by `devops`) runs these checks and fails on the
+first error. Use it as the single verification command; the sequence above
+documents what it does.
 
 Do not mark a module "covered" until the relevant command has run. Distinguish:
 
@@ -168,6 +168,35 @@ The parity matrix must use the weakest true label.
 - Do not claim legacy parity without a recorded run or fixture replay.
 - Record intentional differences in `MIGRATION.md` and `DECISIONS.md`.
 - If docs and code disagree, stop and resolve the conflict before merging.
+
+## Lessons from Phase 3
+
+- **Contract drift is expensive.** Freeze exact write keys and shapes:
+  `min_stock_quantity` vs `low_stock_threshold`, server-derived
+  `payment_status`, `total`/`pages` vs `has_next`, date-only vs RFC 3339
+  filters, and null vs empty string when clearing a client.
+- **Dead contract suites are not coverage.** A suite that is defined but not
+  registered in the top-level runner compiles and proves nothing.
+- **Docs overclaims are defects.** Never claim parity, Playwright, or a matrix
+  row before the command that proves it has run.
+- **Dependency audits are release gates.** `pnpm audit --audit-level=high` and
+  `govulncheck` must pass, not just be planned.
+- **Contract-first parallelism works.** Freeze the contract, then run backend
+  and frontend concurrently in non-overlapping scopes.
+- **One verification command.** `scripts/verify.sh` is the canonical local
+  gate for backend, frontend, lint, build, and repository hygiene.
+
+## Release gate
+
+- [ ] CI green and `scripts/verify.sh` passes locally.
+- [ ] Contract parity recorded (67/67 or documented differences).
+- [ ] Playwright critical flows pass.
+- [ ] `pnpm audit --audit-level=high` clean.
+- [ ] `govulncheck ./...` clean.
+- [ ] Wails smoke test: launch, login, create sale, restart, data persists.
+- [ ] Database backup/restore rehearsed.
+- [ ] Per-OS packaging and signing complete.
+- [ ] Release notes and checksums published.
 
 ## Reuse before rebuilding
 
@@ -224,34 +253,3 @@ refusal:
 | Backend + frontend parallel time | ≥ 30% of implementation |
 | Docs claims without a command | 0 |
 | Modules verified on PostgreSQL + SQLite + race | 100% |
-
-## Next-phase plan
-
-### Providers + Supplier Catalogs (CRUD)
-
-- Contract freeze: list shape, search columns, provider/product filters,
-  supplier catalog unique behavior.
-- Backend and frontend in parallel after freeze.
-- Reuse the catalog/client CRUD pattern.
-- QA: CRUD, filters, pagination, FK delete, money for `last_quoted_cost`.
-
-### Purchase Orders (stock mutation)
-
-- Contract freeze: create/update/delete, item mutations, receiving transition.
-- Reuse `UnitOfWork` + `StockRepository`.
-- Receiving is idempotent: only the first transition to `received` increments
-  stock and upserts supplier catalogs.
-- QA: concurrent receiving, no double stock, delete does not reverse stock.
-
-### Dashboard (read-only aggregates)
-
-- Contract freeze: date boundaries in `America/Bogota`, trend keys, money.
-- Backend aggregates and frontend charts can run in parallel.
-- QA: fixture aggregates, empty data, top-products quirks.
-
-### Cross-cutting
-
-- `devops`: create `scripts/verify.sh` and wire it into CI.
-- `qa`: add contract fixtures for every module and execute the live parity run
-  once credentials are available.
-- `security`: review loopback/auth boundaries for the new sales/order flows.

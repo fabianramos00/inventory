@@ -34,7 +34,7 @@ must match the existing `/api/v1` contract.
 - Legacy reference: `../inventory-api` (FastAPI + SQLAlchemy + Alembic).
 - Locale: UTC storage, `America/Bogota` for dashboard grouping. Money JSON
   numbers, COP display handled by the frontend.
-- Current phase: Phase 3. Auth, migrations, seed, the PostgreSQL/SQLite ports/adapters, and superuser Users CRUD are implemented. Remaining business modules are next.
+- Current phase: Phase 3 complete. All 67 endpoints, unit-of-work and stock mutations, money/timestamp handling, and security fixes are implemented. Release is pending external packaging and signing.
 
 ## Your scope
 
@@ -156,6 +156,8 @@ wails build
 - Never trust client totals, statuses, or stock.
 - Never let raw database errors reach the client.
 - Delete dead code.
+- When a service constructor changes, update contract/integration fakes and
+  wiring; dead test suites are a release risk.
 - Mark deliberate shortcuts with a `ponytail:` comment naming the ceiling and
   upgrade path.
 

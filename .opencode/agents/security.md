@@ -22,7 +22,9 @@ remediation. You do not modify code or configuration.
   not encryption at rest. Future sync is not implemented.
 - Legacy app used the same bearer-token model; the desktop app adds a local
   HTTP surface and a local config file.
-- Current phase: Phase 1 docs only. Phase 2 implements the API.
+- Current phase: Phase 3 complete. The latest audit is
+  `docs/SECURITY-AUDIT.md`; there are no open Critical or High findings, and
+  low/medium items remain.
 
 ## Your scope
 
@@ -111,6 +113,8 @@ Main risks:
 - Distinguish a real vulnerability from a hardening suggestion.
 - No generic advice; name the file and change.
 - Do not modify code, even for a one-line fix.
+- Any dependency change requires `pnpm audit --audit-level=high` and CI
+  `govulncheck`.
 - Report Critical and High findings immediately.
 
 ## Output format

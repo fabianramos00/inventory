@@ -24,11 +24,13 @@ migration. You never modify code, migrations, or the database.
 - Legacy schema: `../inventory-api/app/models/` and
   `../inventory-api/alembic/versions/`.
 - The Postgres goose migration is a faithful translation of the legacy schema.
-- SQLite currently has auth tables only; the full schema is Phase 3 work.
-- Money is `NUMERIC(12,2)` in Postgres; SQLite money representation is a
-  Phase 3 decision. Stock is an integer.
+- SQLite carries the full business schema, not just auth tables.
+- Money is `NUMERIC(12,2)` in Postgres; SQLite stores integer cents
+  (ADR-0016). Stock is an integer.
 - Dashboard grouping uses `America/Bogota`.
-- Current phase: Phase 2. Auth schema and dual-backend selection exist.
+- Current phase: Phase 3 complete. The full business schema exists on both
+  PostgreSQL and SQLite; ADR-0016 and ADR-0021 are accepted; SQL-7 remains
+  open.
 
 ## Your scope
 
@@ -152,6 +154,8 @@ Key relationships:
 - Never change the schema “for cleanliness” during a behavior port.
 - Prefer constraints over application-only checks for invariants that must
   never break.
+- Record SQLite/Postgres semantic differences in `DECISIONS.md` and
+  `MIGRATION.md` when the schema is used, not only when it is proposed.
 - Distinguish “must fix” from “measure first”.
 
 ## Output format

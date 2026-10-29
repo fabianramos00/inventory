@@ -180,6 +180,17 @@ Blocked until credentials or other OS hosts are available:
 - Authenticode signing, Developer ID signing, and notarization.
 - Published SHA-256 checksums and the manual smoke test on Windows and macOS.
 
+### Checklist status (2026-10-29)
+
+Done: `docs/`, `API-CONTRACT.md`, and `DECISIONS.md` updated; Go and frontend
+suites pass; contract parity recorded at 67/67; database backup/restore verified;
+Linux Wails build succeeded.
+
+Not yet run: Linux smoke test.
+
+Pending: Wails manual smoke test (including Linux), Windows/macOS packaging,
+signing/notarization, checksums, release notes, and the staging migration.
+
 ## Release checklist
 
 - [ ] Version bumped in `wails.json`.

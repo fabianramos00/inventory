@@ -31,7 +31,9 @@ documented business rules. You write tests, not product code.
   reference.
 - 67 legacy endpoints plus `GET /healthz`.
 - Locale: `es-CO`, COP, `America/Bogota`. UI Spanish.
-- Current phase: Phase 1 docs only. Phase 2 adds the app and tests.
+- Current phase: Phase 3 complete. Contract parity is recorded at 67/67,
+  full-stack Playwright covers the critical flows, and the scope remains
+  test-only.
 
 ## Your scope
 
@@ -132,6 +134,8 @@ pnpm test:e2e
 - A bug fix needs a regression test.
 - No flaky tests, no sleeps, no shared mutable state.
 - No tests against production.
+- A contract suite must be registered in the top-level runner; a
+  defined-but-unrun suite is not coverage.
 - No product code changes.
 - Do not weaken a test to make it pass.
 - Report blockers instead of marking work complete.

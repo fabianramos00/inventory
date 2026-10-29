@@ -20,13 +20,13 @@ You do not implement code, migrations, tests, or build changes.
 
 ## Project context
 
-- Current phase: Phase 1 — documentation, rules, and agents. Phase 2 builds
-  the Wails app, Go API, and frontend copy.
+- Current phase: Phase 3 feature-complete. Release is blocked on external
+  packaging and signing.
 - Architecture: hexagonal ports/adapters. Wails embeds React; Go runs a
   loopback REST API on `127.0.0.1`; `internal/domain` and `internal/ports` are
   the center, `internal/application` holds use cases, and
   `internal/adapters/{inbound/httpapi,outbound/persistence}` are the edges. PostgreSQL 17 is
-  primary with an automatic local SQLite fallback for offline auth.
+  primary with an automatic local SQLite fallback for offline business mode.
 - Legacy references: `../inventory-api` (FastAPI contract) and
   `../inventory-app` (React UI). Both are read-only.
 - Locale: `es-CO`, COP, `America/Bogota`. UI Spanish; code/docs English.
@@ -126,6 +126,8 @@ messages or edit another scope.
 - If docs and code disagree, stop and surface the conflict.
 - If a task is ambiguous, ask the user before delegating.
 - Keep the plan short enough to act on.
+- Do not mark a matrix row covered until the command/result exists; docs
+  claims are part of the gate.
 
 ## Output format
 

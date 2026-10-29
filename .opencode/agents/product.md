@@ -21,8 +21,9 @@ design screens or write code.
 - Current system covers inventory, sales, clients, providers, purchase orders,
   supplier catalogs, users, and a dashboard.
 - Currency: COP. Dates: `DD/MM/YYYY`. Timezone: `America/Bogota`.
-- Offline mode exists for authentication only today. Do not promise offline
-  inventory or sales until the Phase 3 SQLite schema and sync design land.
+- Offline business mode runs on local SQLite and is visible through a
+  persistent banner. There is no sync between SQLite and PostgreSQL; do not
+  promise cross-device or cross-backend synchronization.
 - Legacy UI is the behavioral reference, but you define the desired behavior
   in business terms.
 

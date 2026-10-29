@@ -170,8 +170,7 @@ WebView (React) ── HTTP loopback ── Go API ── PostgreSQL
 - Builds are produced from a clean tree.
 - Release artifacts are signed where the platform supports it.
 - Checksums are published with the installer.
-- Auto-update, if added, must verify signatures. It is out of scope for this
-  phase.
+- Auto-update, if added, must verify signatures. It is out of scope for v1.
 
 ## Audit checklist
 
