@@ -47,7 +47,7 @@ database. The desktop app connects with a configurable `DATABASE_URL`.
 
 **Consequences:** The installer requires a reachable PostgreSQL instance for
 full functionality. The development environment provides one through Docker.
-Standalone use is covered by the auth-only SQLite fallback in ADR-0012;
+Standalone use is covered by the local SQLite fallback in ADR-0012;
 bundling a PostgreSQL server is deferred.
 
 ## ADR-0004 — Full Go port with contract parity
@@ -175,7 +175,7 @@ services.
 
 ## ADR-0012 — Automatic PostgreSQL to SQLite fallback
 
-**Status:** Accepted
+**Status:** Accepted; extended by ADR-0021
 
 **Context:** The desktop app must remain usable when PostgreSQL is not
 reachable, and a future sync feature needs a local source of truth. Shipping
@@ -185,15 +185,16 @@ CGO or an embedded PostgreSQL server adds packaging and operational cost.
 In `auto`, probe PostgreSQL with a 3-second timeout; on failure log a warning
 and open SQLite through `modernc.org/sqlite` (pure Go). SQLite enables foreign
 keys, a busy timeout, and WAL, stores data under the OS config directory, and
-currently contains only the auth tables. PostgreSQL remains the full-feature
-backend.
+since Phase 3 contains the auth tables and the full business schema.
+PostgreSQL remains the full-feature backend.
 
-**Consequences:** Standalone installs can authenticate and persist sessions
-without PostgreSQL. Business modules are not available offline until the full
-SQLite schema and parity tests land in Phase 3. Automatic fallback can hide a
-misconfigured DSN, so the warning is logged and `DB_MODE=postgres` is
-available for deployments that must fail hard. Sync is not implemented; it
-will require stable sync IDs, reliable timestamps, tombstones, and an outbox.
+**Consequences:** Standalone installs can authenticate, persist sessions, and
+run the business modules offline. The full SQLite schema and parity tests
+landed in Phase 3. Automatic fallback can hide a misconfigured DSN, so the
+warning is logged, the UI shows a persistent offline banner, and
+`DB_MODE=postgres` is available for deployments that must fail hard. Sync is
+not implemented; it will require stable sync IDs, reliable timestamps,
+tombstones, and an outbox.
 
 ## ADR-0013 — Bind access tokens to the active backend
 
@@ -337,3 +338,23 @@ duplicate products and `delivered_quantity > quantity` with `422`, and derives
 **Consequences:** These are documented divergences in
 [MIGRATION.md](MIGRATION.md#known-legacy-quirks). Clients must rely on DOMAIN,
 not the legacy implementation, for sale validation and status.
+
+## ADR-0021 — SQLite offline mode is visible and unencrypted in v1
+
+**Status:** Accepted
+
+**Context:** SQLite now holds business data, including client PII and product
+pricing, not just auth rows. The database file is not encrypted at rest.
+`DB_MODE=auto` can silently fall back from PostgreSQL to SQLite, so an operator
+could be working on the local device without noticing.
+
+**Decision:** Keep `DB_MODE=auto` as the default for v1. The frontend shows a
+persistent banner on the login screen and on every authenticated screen
+whenever the active backend is SQLite; the backend already exposes it through
+`GET /healthz` (`database=sqlite`). SQLite permissions stay owner-only
+(`0600` file, `0700` directory). Cross-device sync remains out of scope.
+Encryption at rest is deferred.
+
+**Consequences:** Operators must protect the device and any backups of the
+SQLite file. The fallback is no longer silent because the UI surfaces it.
+Encryption at rest and sync each require a future ADR before implementation.

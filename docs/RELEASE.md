@@ -14,9 +14,10 @@
 PostgreSQL is the primary database. The installer does not bundle it. With
 `DB_MODE=auto` (default), the app falls back to local SQLite when PostgreSQL
 is unreachable. `DB_MODE=postgres` fails hard; `DB_MODE=sqlite` forces the
-local backend. SQLite contains the auth tables and the full Phase 3 business
-schema. Catalog, product, client, and sales handlers are available offline;
-providers, purchase orders, and dashboard aggregates remain pending.
+local backend. SQLite contains the auth tables and the full business schema.
+All business modules are available offline, including catalog, products,
+clients, providers, supplier catalogs, sales, purchase orders, and the
+dashboard.
 
 On Linux, Wails must be built with `-tags webkit2_41`. Ubuntu 26.04 ships
 WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`) only, so the 4.0 ABI is unavailable.
@@ -25,11 +26,11 @@ on port `5433`.
 
 ## Phase status
 
-Phase 2 ships the walking skeleton, PostgreSQL and SQLite persistence behind
-ports/adapters, authentication, and the seed command. Inventory, sales, orders,
-and dashboard are deferred to Phase 3. The full SQLite business schema now
-exists. Catalog, products, clients, and sales are implemented; providers,
-purchase orders, and dashboard remain pending.
+Phase 3 ships the walking skeleton, PostgreSQL and SQLite persistence behind
+ports/adapters, authentication, the seed command, and every business module:
+catalog, products, clients, providers, supplier catalogs, sales, purchase
+orders, and the dashboard. The full SQLite business schema exists, so the
+release supports both the PostgreSQL primary and the offline SQLite backend.
 
 ## Versioning
 
@@ -191,6 +192,7 @@ Never roll back only the binary if the schema changed.
 - Development PostgreSQL runs on port `5433` and must not be reused for
   production data.
 - There is no auto-update mechanism yet.
-- Offline business modules are not implemented yet; only auth works on SQLite.
+- SQLite is not encrypted at rest; the UI shows a persistent offline banner
+  whenever the app runs on the local backend.
 - Multi-station use requires a shared PostgreSQL server and a shared
   `SECRET_KEY`.

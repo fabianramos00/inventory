@@ -147,10 +147,13 @@ SQLite:
   `-wal`/`-shm` sidecars are best-effort set to `0600`.
 - Migrations in `migrations/sqlite/`, embedded in the binary and run through
   goose.
-- The auth tables and the full Phase 3 business schema exist today
+- The auth tables and the full business schema exist today
   (`00001_auth.sql` plus `00002_catalog.sql` through `00006_sales.sql`).
-  Catalog, product, client, provider, supplier catalog, and sales repositories
-  and handlers are implemented; purchase orders and dashboard remain pending.
+  Catalog, product, client, provider, supplier catalog, sales, purchase order,
+  and dashboard repositories and handlers are implemented on both backends.
+- SQLite is not encrypted at rest. The UI shows a persistent offline banner
+  whenever the active backend is SQLite (see
+  [DECISIONS.md](DECISIONS.md#adr-0021--sqlite-offline-mode-is-visible-and-unencrypted-in-v1)).
 - Booleans are stored as `0`/`1`; timestamps are stored as fixed-width UTC
   text so lexical comparisons stay correct, and parsing accepts RFC 3339
   with variable fractional seconds.

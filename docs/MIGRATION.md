@@ -89,11 +89,9 @@ re-run migrations on the next start. Migrations are forward-only; there is no
 in-place upgrade from the monolith.
 
 The full business schema now exists in SQLite. Catalog, product, client,
-provider, supplier catalog, and sales repositories/handlers are implemented on
-both backends. Purchase orders and dashboard aggregates are still pending; the
-schema being present does not mean those offline business modules work yet. The
-two goose version tables are independent, so SQLite and PostgreSQL version
-numbers do not match.
+provider, supplier catalog, sales, purchase order, and dashboard
+repositories/handlers are implemented on both backends. The two goose version
+tables are independent, so SQLite and PostgreSQL version numbers do not match.
 
 `DB_MODE=auto` (default) probes PostgreSQL with a 3-second timeout and falls
 back to SQLite on failure. `DB_MODE=postgres` fails hard. `DB_MODE=sqlite`
@@ -277,5 +275,5 @@ For each module:
 | Stock race conditions | Row locks and concurrency tests |
 | Wails webview differences | HashRouter, manual platform smoke tests |
 | Shared Postgres with multiple counters | Shared `SECRET_KEY` and documented deployment |
-| SQLite fallback diverges from PostgreSQL | Business schema now exists; full-schema parity tests still required before exposing business modules |
+| SQLite fallback diverges from PostgreSQL | Adapter contract tests run the same fixtures on both backends; SQL-semantic differences are documented |
 | Legacy service unavailable | Snapshot fixtures and replay locally |

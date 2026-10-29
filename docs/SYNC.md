@@ -8,10 +8,9 @@ impossible.
 
 - PostgreSQL is the primary database.
 - `DB_MODE=auto` falls back to local SQLite when PostgreSQL is unreachable.
-- SQLite contains the auth tables and the full Phase 3 business schema.
-  Catalog, products, clients, providers, supplier catalogs, and sales are
-  implemented; purchase orders and dashboard remain pending. The SQLite
-  business schema exists, but sync is still not implemented.
+- SQLite contains the auth tables and the full business schema. Catalog,
+  products, clients, providers, supplier catalogs, sales, purchase orders, and
+  the dashboard are implemented offline. Sync is still not implemented.
 - Local writes are not sent anywhere. An offline session is a separate
   standalone dataset until sync exists.
 - Auth sessions are per installation. Do not assume the same user exists in

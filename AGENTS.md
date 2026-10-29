@@ -17,10 +17,10 @@ The Go API mirrors the legacy FastAPI `/api/v1` contract. PostgreSQL is the
 primary database; when it is unreachable, the app can run on local SQLite in
 offline mode.
 
-Current phase: **Phase 3 — business modules.** Implemented: Wails shell, Go
-API, PostgreSQL/SQLite persistence behind ports, auth, migrations, seed,
-tests, and superuser-only Users CRUD. Inventory, products, clients, providers,
-sales, orders, and dashboard remain.
+Current phase: **Phase 3 complete.** Implemented: Wails shell, Go API,
+PostgreSQL/SQLite persistence behind ports, auth, migrations, seed, tests,
+superuser-only Users CRUD, inventory catalog and products, clients, providers,
+supplier catalogs, sales, purchase orders, and the dashboard.
 
 ## Stack
 
@@ -53,8 +53,8 @@ sales, orders, and dashboard remain.
   `postgres` or `sqlite` to force a backend.
 - Business data is never stored in browser storage.
 - Migrations are backend-specific, versioned SQL files run by `goose`.
-- SQLite currently contains only the auth tables; full offline business
-  schema is Phase 3 work.
+- SQLite contains the auth tables and the full business schema. The UI shows a
+  persistent banner whenever the active backend is SQLite.
 - Cross-device sync is not implemented. Do not invent sync behavior in a
   feature task; follow `docs/SYNC.md`.
 - The loopback server must never bind to `0.0.0.0`.
@@ -81,7 +81,7 @@ opencode.json
 docs/
 ```
 
-Current code (Phase 2):
+Current code (Phase 3):
 
 ```text
 main.go, app.go, main_bindings.go, wails.json
@@ -101,7 +101,7 @@ internal/
   bootstrap/     # DB_MODE selection and store wiring
 migrations/
   postgres/      # full legacy schema
-  sqlite/        # auth-only schema for offline mode
+  sqlite/        # full business schema for offline mode
 frontend/        # copied React app
 docs/
 ```

@@ -6,12 +6,13 @@ REST API backed by PostgreSQL.
 
 ## Status
 
-**Phase 2 complete; Phase 3 in progress.** Implemented: Wails shell, embedded
-React app shell, loopback Go API, PostgreSQL and SQLite persistence behind
-ports/adapters, JWT auth, seed command, and superuser-only Users CRUD
-(list/create/get/update/delete). Inventory, products, clients, providers,
-sales, orders, and dashboard remain. SQLite currently contains only the auth
-tables; full offline business data is still Phase 3 work.
+**Phase 3 complete.** Implemented: Wails shell, embedded React app shell,
+loopback Go API, PostgreSQL and SQLite persistence behind ports/adapters, JWT
+auth, seed command, superuser-only Users CRUD, inventory catalog and products,
+clients, providers, supplier catalogs, sales, purchase orders, and the
+dashboard. SQLite holds the full business schema, so the same modules work
+offline. When the app falls back to SQLite, the UI shows a persistent offline
+banner on login and every screen.
 
 ## Why desktop
 
@@ -69,7 +70,7 @@ internal/adapters/outbound/persistence/gormstore/ GORM outbound adapter
 internal/adapters/outbound/security/ JWT, bcrypt, refresh tokens
 ```
 
-Implemented in Phase 2: `main.go`, `app.go`, `main_bindings.go`,
+Implemented through Phase 3: `main.go`, `app.go`, `main_bindings.go`,
 `wails.json`, `internal/`, `migrations/`, `cmd/`, `frontend/`, and the
 development `docker-compose.yml`.
 
@@ -79,7 +80,7 @@ development `docker-compose.yml`.
 - Wails CLI 2.16+
 - Node 22+ and pnpm 12+
 - Docker (development PostgreSQL 17 on `127.0.0.1:5433`)
-- PostgreSQL 17 (recommended primary; optional for auth-only offline mode)
+- PostgreSQL 17 (recommended primary; optional when running on local SQLite)
 
 Wails also needs the platform webview dependencies. On Linux that is
 WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`); the Makefile passes
