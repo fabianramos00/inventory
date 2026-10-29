@@ -52,6 +52,7 @@ func main() {
 		Materials:        application.NewMaterialService(stores.Materials),
 		MeasurementUnits: application.NewMeasurementUnitService(stores.MeasurementUnits),
 		Products:         application.NewProductService(stores.Products),
+		Clients:          application.NewClientService(stores.Clients),
 		Logger:           logger,
 		Backend:          stores.Backend,
 		DevMode:          cfg.DevMode,

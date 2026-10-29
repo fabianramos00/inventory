@@ -34,6 +34,7 @@ internal/
     auth.go             auth use cases
     catalog.go          catalog validation and use cases
     product.go          product validation, SKU generation, and use cases
+    client.go           client validation and use cases
     inventory.go
     sales.go
     supply_chain.go
@@ -44,9 +45,11 @@ internal/
       auth.go           AuthUseCase, LoginResult, TokenPair
       catalog.go        CatalogUseCase, list and create/update inputs
       product.go        ProductUseCase, filters, and partial-update inputs
+      client.go         ClientUseCase, list filter, and partial-update inputs
       users.go          UserUseCase, UserList, create/update inputs
     outbound/
       catalog.go        CatalogRepository and ProductRepository interfaces
+      client.go         ClientRepository interface
       users.go          UserRepository interface
       refresh_tokens.go RefreshTokenRepository interface
       password_hasher.go
@@ -54,6 +57,7 @@ internal/
       refresh_token_service.go
   domain/
     catalog.go          Category, Brand, Material, MeasurementUnit, Product
+    client.go           Client
     user.go             User, RefreshToken (no JSON tags)
     errors.go           domain sentinel errors (not found, conflict, validation, auth)
   adapters/
@@ -65,6 +69,7 @@ internal/
         auth.go         auth handlers
         catalog.go      catalog CRUD handlers and request/response DTOs
         product.go      product CRUD, stats handlers, and money JSON DTOs
+        client.go       client CRUD handlers and request/response DTOs
         user_dto.go     shared user response DTO and mapper
         users.go        user CRUD handlers and superuser guard
     outbound/
@@ -73,6 +78,7 @@ internal/
           timestamp.go  fixed-width UTC Timestamp type
           catalog.go    catalog models and repositories
           product.go    product queries and money normalization
+          client.go     client queries and timestamp round-trip
           user_model.go
           refresh_token_model.go
           users.go      UserRepository
@@ -280,6 +286,35 @@ Never log passwords, tokens, authorization headers, or full request bodies.
   cascade but did not record product price changes, so the port preserves that
   behavior.
 
+## Clients
+
+- Endpoints under `/api/v1/sales/clients`: list, create, get, update, and
+  delete. Any active user may call them; only `/users` requires a superuser.
+- Lists return `{items, has_next, skip, limit}`, order `id DESC`, and share the
+  default/cap (100/200) and search limit (256 runes) rules. Search matches
+  `name`, `identity_card`, `email`, and `phone`, case-insensitively and
+  literally.
+- Item shape: `{id, name, identity_card, email, phone, created_at,
+  updated_at}`. Timestamps are RFC 3339 UTC. `created_at` is set on create and
+  `updated_at` stays `null` until a field actually changes.
+- `name` is required and trimmed. The three optional fields are trimmed;
+  empty strings become `null`. Create accepts them as omitted, `null`, or
+  empty. Update is partial: omitted fields stay unchanged, explicit `null`
+  clears an optional field, and `null`/empty/blank `name` is `422`.
+- `updated_at` is set only when at least one field changes; a no-op or
+  whitespace-only update leaves it untouched.
+- Duplicate `identity_card` maps to `400 UNIQUE_VIOLATION`; deleting a client
+  referenced by a sale maps to `400 FOREIGN_KEY_VIOLATION`; missing rows map
+  to `404 Client not found`. Email and phone have no format validation,
+  matching legacy.
+- Search treats `%` and `_` literally on both backends. PostgreSQL uses
+  `strpos(lower(column), lower(?)) > 0` over the four fields; SQLite scans the
+  table and folds case in Go (`ponytail:` add FTS5 when the client table makes
+  the scan measurable).
+- Timestamps are stored through `gormstore.Timestamp` on both backends.
+  PostgreSQL keeps microseconds and SQLite keeps nanoseconds, so exactness
+  beyond microseconds is backend-specific.
+
 ## Transactions and stock
 
 Sale creation:
@@ -333,8 +368,8 @@ is used. Generate and persist `SECRET_KEY` when missing.
 - SQLite uses goose dialect `sqlite3`. Version 1 creates the auth tables
   (`users`, `refresh_tokens`); versions 2–6 create the Phase 3 business schema
   split by domain: catalog, identity, products, purchases, sales.
-- The catalog and product repositories and handlers are implemented. The
-  remaining business repositories and handlers are still pending. Do not
+- The catalog, product, and client repositories and handlers are implemented.
+  The remaining business repositories and handlers are still pending. Do not
   translate business tables piecemeal; parity tests come with the adapters.
 - Every migration is forward-only unless a rollback is safe and tested.
 - Run at startup when `AUTO_MIGRATE=true`; otherwise expose an explicit

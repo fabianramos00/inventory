@@ -28,6 +28,7 @@ type repositories struct {
 	materials  outbound.CatalogRepository[domain.Material]
 	units      outbound.CatalogRepository[domain.MeasurementUnit]
 	products   outbound.ProductRepository
+	clients    outbound.ClientRepository
 	gorm       *gorm.DB
 }
 
@@ -50,6 +51,7 @@ func TestRepositoryContract(t *testing.T) {
 			t.Run("refresh tokens", func(t *testing.T) { testRefreshTokens(t, repos) })
 			t.Run("catalog", func(t *testing.T) { testCatalog(t, repos, searchIDs, backend.name) })
 			t.Run("products", func(t *testing.T) { testProducts(t, repos, backend.name) })
+			t.Run("clients", func(t *testing.T) { testClients(t, repos) })
 		})
 	}
 	postgresIDs, postgresRan := searchIDs["postgres"]
@@ -87,6 +89,7 @@ func newRepositories(gormDB *gorm.DB) *repositories {
 		materials:  gormstore.NewMaterialStore(gormDB),
 		units:      gormstore.NewMeasurementUnitStore(gormDB),
 		products:   gormstore.NewProductStore(gormDB),
+		clients:    gormstore.NewClientStore(gormDB),
 		gorm:       gormDB,
 	}
 }
@@ -116,7 +119,7 @@ func openPostgresRepositories(t *testing.T) *repositories {
 	if err := db.MigratePostgres(ctx, conn); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.ExecContext(ctx, "TRUNCATE users, categories, materials, brands, measurement_units, products, price_history RESTART IDENTITY CASCADE"); err != nil {
+	if _, err := conn.ExecContext(ctx, "TRUNCATE users, categories, materials, brands, measurement_units, products, price_history, clients, sales, sale_items RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatal(err)
 	}
 	return newRepositories(gormDB)

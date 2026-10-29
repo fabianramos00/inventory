@@ -88,13 +88,13 @@ be recreated: delete the local file at `SQLITE_PATH` (default
 re-run migrations on the next start. Migrations are forward-only; there is no
 in-place upgrade from the monolith.
 
-The full business schema now exists in SQLite. Catalog and product
-repositories/handlers are implemented on both backends. Identity (clients and
-providers), sales, and supply-chain (supplier catalogs and purchase orders)
-repositories and handlers are still pending; the schema being present does not
-mean those offline business modules work yet. Dashboard aggregates are also
-pending. The two goose version tables are independent, so SQLite and
-PostgreSQL version numbers do not match.
+The full business schema now exists in SQLite. Catalog, product, and client
+repositories/handlers are implemented on both backends. Providers, sales, and
+supply-chain (supplier catalogs and purchase orders) repositories and handlers
+are still pending; the schema being present does not mean those offline
+business modules work yet. Dashboard aggregates are also pending. The two
+goose version tables are independent, so SQLite and PostgreSQL version numbers
+do not match.
 
 `DB_MODE=auto` (default) probes PostgreSQL with a 3-second timeout and falls
 back to SQLite on failure. `DB_MODE=postgres` fails hard. `DB_MODE=sqlite`
@@ -191,6 +191,13 @@ For each module:
 | Non-positive path IDs | FastAPI treats id 0/negative as not found (`404`) | Go returns `422 VALIDATION_ERROR` for id <= 0; documented difference |
 | Product whitespace | Legacy preserves leading/trailing whitespace in name/SKU | Go trims name and supplied SKU before validation |
 | Products | Legacy `ILIKE` searches name and SKU with wildcards | Treat `%`/`_` literally on both backends; see ADR-0015 |
+| Clients | Legacy does not trim `name`, `identity_card`, `email`, or `phone` | Go trims all four; empty optional values are stored as `null` |
+| Clients | Legacy `identity_card` is a unique optional column | Duplicate values return `400 UNIQUE_VIOLATION`; multiple `null` values are allowed |
+| Clients | Legacy `updated_at` is set by SQLAlchemy `onupdate` whenever an UPDATE runs | Go sets it only when at least one field actually changes; no-op and whitespace-only updates leave it untouched |
+| Clients | Legacy `PUT` uses `exclude_unset`, so explicit `null` clears and omitted fields stay | Preserve; `null`/empty/blank `name` is `422` instead of violating the NOT NULL column |
+| Clients | Legacy search uses `ILIKE` over name, identity card, email, and phone | Case-insensitive literal substring on both backends; `%`/`_` are ordinary characters |
+| Clients | Legacy does not validate email or phone format | Preserve; no format validation |
+| Client timestamps | PostgreSQL `timestamptz` and SQLite text have different precision | Round-trip through `gormstore.Timestamp`; PostgreSQL keeps microseconds, SQLite keeps nanoseconds |
 | Money (SQLite) | SQLite has no exact decimal type | Store integer cents, convert at the adapter boundary; see ADR-0016 |
 | Purchase order detail | Returns the order without items; items are a separate endpoint | Preserve |
 | Sales | `amount_paid > total_amount` is accepted and marks the sale paid | Preserve; document |

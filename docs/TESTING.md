@@ -171,9 +171,9 @@ Cases:
 
 SQLite now has the full Phase 3 business schema (`00001_auth.sql` plus
 `00002_catalog.sql` through `00006_sales.sql`). Go service, handler, and
-persistence contract coverage for catalog exists on both backends; the live
-legacy FastAPI fixture run is still pending. Sales, order, and dashboard
-repositories are still pending.
+persistence contract coverage for catalog, products, and clients exists on both
+backends; the live legacy FastAPI fixture run is still pending. Sales, order,
+and dashboard repositories are still pending.
 
 Refresh-token timestamps use `gormstore.Timestamp`, which writes a fixed-width
 UTC format (`2006-01-02T15:04:05.000000000Z`) so the lexicographic
@@ -258,6 +258,32 @@ fixture on PostgreSQL and SQLite: create/get relations, money exactness
 and nullable fields, delete, delete conflict, and stats using sale price.
 SQLite additionally asserts `price` is stored as integer cents.
 
+### Clients slice
+
+`internal/application/client_test.go` covers name trimming and required
+validation, optional-field trimming and empty-to-null conversion, `created_at`
+and `updated_at` rules, partial updates that keep omitted fields, explicit
+null/empty clearing, whitespace-only no-ops, and conflict/not-found
+propagation.
+
+`internal/adapters/inbound/httpapi/client_test.go` covers bearer auth on all
+five routes, list shape and defaults, invalid query parameters,
+`200` create/get/update/delete responses, timestamps, the null-versus-omitted
+update mapping, `404 Client not found`, `UNIQUE_VIOLATION`,
+`FOREIGN_KEY_VIOLATION`, `422 VALIDATION_ERROR`, malformed JSON, and unknown
+fields.
+
+`internal/adapters/inbound/httpapi/client_integration_test.go` runs the real
+router, service, and GORM repository against SQLite and PostgreSQL: CRUD,
+timestamps, search over all four fields, accents, literal `%`/`_`, `id DESC`
+pagination, duplicate identity card, FK-protected delete, and 404s.
+
+`internal/adapters/outbound/persistence/client_contract_test.go` runs the same
+client fixture on PostgreSQL and SQLite: create/get field and timestamp
+round-trip, update null clearing, duplicate identity card, multiple null
+identity cards, search over every field with accents, literal wildcards,
+pagination, delete, delete conflict, and `domain.ErrNotFound`.
+
 ## Phase 2 auth coverage
 
 The following is covered now:
@@ -284,9 +310,9 @@ The following is covered now:
   at least 32 bytes.
 
 Deferred: sales/stock, purchase orders, dashboard, and the full 67-endpoint
-parity matrix. The Users CRUD slice, the catalog slice, and the products slice
-are covered now (application, handler, repository contract, and, for Users,
-full-stack E2E).
+parity matrix. The Users CRUD slice, the catalog slice, the products slice, and
+the clients slice are covered now (application, handler, repository contract,
+and, for Users, full-stack E2E).
 
 ## Frontend tests
 
@@ -377,7 +403,8 @@ fixtures in replay mode. Do not mark parity as passing without a run.
 | Users | 5 | Covered (this slice) |
 | Inventory — catalog | 18 | Backend contract covered; legacy FastAPI parity pending |
 | Inventory — products | 6 | Backend contract covered; legacy FastAPI parity pending |
-| Sales + clients | 15 | Pending |
+| Clients | 5 | Backend contract covered; legacy FastAPI parity pending |
+| Sales | 10 | Pending |
 | Supply chain | 16 | Pending |
 | Dashboard | 4 | Pending |
 | **Total** | **67** | Pending |

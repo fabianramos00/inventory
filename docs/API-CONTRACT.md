@@ -211,6 +211,42 @@ is `422`. Product `price` and `cost` round half away from zero to two decimals.
 | PUT | `/sales/{id}/items/{item_id}` | Partial |
 | DELETE | `/sales/{id}/items/{item_id}` | Restores stock |
 
+#### Clients
+
+Item shape:
+
+```json
+{
+  "id": 1,
+  "name": "Ana Pérez",
+  "identity_card": "1020304050",
+  "email": "ana@example.com",
+  "phone": "3001234567",
+  "created_at": "2026-10-24T15:04:05Z",
+  "updated_at": null
+}
+```
+
+- `GET /sales/clients` returns the standard `{items, has_next, skip,
+  limit}` shape, ordered `id DESC`, with `limit` defaulting to 100 and capped
+  at 200. `search` is trimmed and capped at 256 characters.
+- Search matches `name`, `identity_card`, `email`, and `phone` by
+  case-insensitive substring. `%` and `_` are literal characters; see
+  [MIGRATION.md](MIGRATION.md#known-legacy-quirks).
+- `name` is required, trimmed, and non-empty. `identity_card`, `email`, and
+  `phone` are optional, trimmed, and stored as `null` when empty. Email and
+  phone formats are not validated (legacy behavior).
+- Create sets `created_at` to the current UTC instant and returns
+  `updated_at: null`. Update is partial: omitted fields stay unchanged,
+  explicit `null` clears one of the three optional fields, and
+  `null`/empty/blank `name` is `422`. `updated_at` is set only when a field
+  changes.
+- Duplicate `identity_card`: `400` with `code: "UNIQUE_VIOLATION"`.
+  Deleting a client referenced by a sale: `400` with
+  `code: "FOREIGN_KEY_VIOLATION"`. Missing client: `404` with
+  `detail: "Client not found"`.
+- Timestamps are RFC 3339 UTC on both backends.
+
 Creating a sale requires at least one item. One item per product per sale.
 `unit_price` defaults to the product price. The server calculates subtotals,
 total, payment status, and delivery status.

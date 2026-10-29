@@ -16,6 +16,7 @@ type Deps struct {
 	Materials        inbound.CatalogUseCase[domain.Material, inbound.CreateMaterialInput, inbound.UpdateMaterialInput]
 	MeasurementUnits inbound.CatalogUseCase[domain.MeasurementUnit, inbound.CreateMeasurementUnitInput, inbound.UpdateMeasurementUnitInput]
 	Products         inbound.ProductUseCase
+	Clients          inbound.ClientUseCase
 	Logger           *slog.Logger
 	Backend          string
 	DevMode          bool
@@ -36,6 +37,7 @@ func NewRouter(deps Deps) http.Handler {
 	materialsHandler := newMaterialHandler(deps.Materials, logger)
 	measurementUnitsHandler := newMeasurementUnitHandler(deps.MeasurementUnits, logger)
 	productsHandler := NewProductHandler(deps.Products, logger)
+	clientsHandler := NewClientHandler(deps.Clients, logger)
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "database": backend})
@@ -60,6 +62,12 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("GET /api/v1/inventory/products/{id}", productsHandler.Get)
 	mux.HandleFunc("PUT /api/v1/inventory/products/{id}", productsHandler.Update)
 	mux.HandleFunc("DELETE /api/v1/inventory/products/{id}", productsHandler.Delete)
+
+	mux.HandleFunc("GET /api/v1/sales/clients", clientsHandler.List)
+	mux.HandleFunc("POST /api/v1/sales/clients", clientsHandler.Create)
+	mux.HandleFunc("GET /api/v1/sales/clients/{id}", clientsHandler.Get)
+	mux.HandleFunc("PUT /api/v1/sales/clients/{id}", clientsHandler.Update)
+	mux.HandleFunc("DELETE /api/v1/sales/clients/{id}", clientsHandler.Delete)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Not found", "NOT_FOUND")
