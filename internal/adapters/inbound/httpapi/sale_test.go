@@ -421,6 +421,68 @@ func TestSaleCreateRejectsExplicitNullsAndUnknownFields(t *testing.T) {
 	}
 }
 
+func TestSaleCreateAcceptsTheFrontendPayloadShape(t *testing.T) {
+	service := &stubSaleService{createResult: sampleSale(12)}
+	server := newSaleTestServer(t, service)
+
+	body := map[string]any{
+		"payment_method": nil,
+		"amount_paid":    0,
+		"client_id":      nil,
+		"items": []map[string]any{
+			{"product_id": 3, "quantity": 2, "delivered_quantity": 0, "unit_price": nil},
+		},
+	}
+	status, raw := userRequest(t, http.MethodPost, server.URL+"/api/v1/sales", "user", body)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d body = %s", status, raw)
+	}
+	if service.createInput.PaymentMethod != nil || service.createInput.ClientID != nil {
+		t.Fatalf("nullable fields = %+v/%+v, want nil", service.createInput.PaymentMethod, service.createInput.ClientID)
+	}
+	if !service.createInput.AmountPaid.IsZero() {
+		t.Fatalf("amount_paid = %s, want 0", service.createInput.AmountPaid)
+	}
+	if len(service.createInput.Items) != 1 {
+		t.Fatalf("items = %+v", service.createInput.Items)
+	}
+	item := service.createInput.Items[0]
+	if item.ProductID != 3 || item.Quantity != 2 || item.DeliveredQuantity != 0 || item.UnitPrice != nil {
+		t.Fatalf("item = %+v, want unit_price nil default", item)
+	}
+}
+
+func TestSaleItemPayloadsMatchTheFrontendShape(t *testing.T) {
+	service := &stubSaleService{
+		addResult:        sampleSale(5),
+		updateItemResult: sampleSale(5),
+	}
+	server := newSaleTestServer(t, service)
+
+	status, raw := userRequest(t, http.MethodPost, server.URL+"/api/v1/sales/5/items", "user", map[string]any{
+		"product_id": 3, "quantity": 2, "delivered_quantity": 0, "unit_price": nil,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("add status = %d body = %s", status, raw)
+	}
+	if service.addInput.ProductID != 3 || service.addInput.Quantity != 2 ||
+		service.addInput.DeliveredQuantity != 0 || service.addInput.UnitPrice != nil {
+		t.Fatalf("add input = %+v, want unit_price nil default", service.addInput)
+	}
+
+	status, raw = userRequest(t, http.MethodPut, server.URL+"/api/v1/sales/5/items/2", "user", map[string]any{
+		"quantity": 3, "delivered_quantity": 1, "unit_price": 12.5,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("update status = %d body = %s", status, raw)
+	}
+	if !service.updateItemInput.Quantity.Set || *service.updateItemInput.Quantity.Value != 3 ||
+		!service.updateItemInput.DeliveredQuantity.Set || *service.updateItemInput.DeliveredQuantity.Value != 1 ||
+		!service.updateItemInput.UnitPrice.Set || !service.updateItemInput.UnitPrice.Value.Equal(decimal.RequireFromString("12.5")) {
+		t.Fatalf("update input = %+v", service.updateItemInput)
+	}
+}
+
 func TestSaleUpdateMapsPresenceAwareFields(t *testing.T) {
 	service := &stubSaleService{updateResult: sampleSale(4)}
 	server := newSaleTestServer(t, service)
