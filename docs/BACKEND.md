@@ -33,6 +33,7 @@ internal/
   application/
     auth.go             auth use cases
     catalog.go          catalog validation and use cases
+    product.go          product validation, SKU generation, and use cases
     inventory.go
     sales.go
     supply_chain.go
@@ -42,16 +43,17 @@ internal/
     inbound/
       auth.go           AuthUseCase, LoginResult, TokenPair
       catalog.go        CatalogUseCase, list and create/update inputs
+      product.go        ProductUseCase, filters, and partial-update inputs
       users.go          UserUseCase, UserList, create/update inputs
     outbound/
-      catalog.go        CatalogRepository interface
+      catalog.go        CatalogRepository and ProductRepository interfaces
       users.go          UserRepository interface
       refresh_tokens.go RefreshTokenRepository interface
       password_hasher.go
       access_token_issuer.go
       refresh_token_service.go
   domain/
-    catalog.go          Category, Brand, Material, MeasurementUnit
+    catalog.go          Category, Brand, Material, MeasurementUnit, Product
     user.go             User, RefreshToken (no JSON tags)
     errors.go           domain sentinel errors (not found, conflict, validation, auth)
   adapters/
@@ -62,6 +64,7 @@ internal/
         response.go     JSON and error helpers
         auth.go         auth handlers
         catalog.go      catalog CRUD handlers and request/response DTOs
+        product.go      product CRUD, stats handlers, and money JSON DTOs
         user_dto.go     shared user response DTO and mapper
         users.go        user CRUD handlers and superuser guard
     outbound/
@@ -69,6 +72,7 @@ internal/
         gormstore/
           timestamp.go  fixed-width UTC Timestamp type
           catalog.go    catalog models and repositories
+          product.go    product queries and money normalization
           user_model.go
           refresh_token_model.go
           users.go      UserRepository
@@ -233,10 +237,48 @@ Never log passwords, tokens, authorization headers, or full request bodies.
   `Unit of Measure not found`).
 - Search treats `%` and `_` literally on both backends — a deliberate
   difference from legacy `ILIKE` wildcard behavior, documented in
-  [ADR-0015](DECISIONS.md#adr-0015--catalog-search-treats-sql-wildcards-literally).
+  [ADR-0015](DECISIONS.md#adr-0015--inventory-search-treats-sql-wildcards-literally).
   PostgreSQL uses `strpos(lower(name), lower(?)) > 0`; SQLite uses Go Unicode
   case folding over a full-table scan (`ponytail:` add FTS5 if catalog size
   makes the scan measurable).
+
+## Products
+
+- Endpoints under `/api/v1/inventory/products`: list, create, get, update, and
+  delete, plus `GET /products/stats/overview`. Create/update/delete return
+  `200` with the plain product; list and get include the category, material,
+  brand, and measurement unit.
+- List filters: `search`, `category_id`, `brand_id`, `material_id`, and
+  `stock_status` (`in_stock`, `low_stock`, `out_of_stock`). Search matches
+  `name` and `sku`, case-insensitive and literal; order is `id DESC`; pagination
+  follows the shared `{items, has_next, skip, limit}` rules.
+- `stock_status`: `in_stock` is stock > 0, `low_stock` is stock > 0 and stock <=
+  `low_stock_threshold`, and `out_of_stock` is stock = 0.
+- Create requires `name`, `price`, `cost`, `brand_id`, `category_id`, and
+  `material_id`. `stock_quantity` defaults to 0 and `low_stock_threshold` to
+  10; explicit nulls are `422`. An omitted or empty `sku` generates
+  `SKU-XXXXXXXX` from cryptographic randomness and retries on generated
+  collisions. A user-supplied duplicate sku is `400 UNIQUE_VIOLATION`.
+- Product `name` and any supplied `sku` are trimmed before validation (legacy
+  does not trim). `sku` and `size_value` have rune limits of 100 and 20.
+  `price` and `cost` must be positive and at most `9999999999.99`; they are
+  rounded half away from zero to two decimals. IDs must be positive.
+- JSON bodies reject unknown fields with `422 VALIDATION_ERROR`; see
+  [ADR-0017](DECISIONS.md#adr-0017--reject-unknown-json-fields-at-the-http-boundary).
+- Updates are partial. Omitted fields stay unchanged; explicit null clears only
+  `size_value` and `measurement_unit_id`, and is `422` for every other field.
+  An empty `size_value` also clears it.
+- Stats: `total_products`, `total_stock`, `low_stock_count`, and
+  `total_inventory_value`. Inventory value uses sale `price`, not `cost`, and
+  is returned as a decimal-derived JSON number.
+- PostgreSQL `price`/`cost` are `NUMERIC(12,2)`, read as text and written with
+  two fixed decimals. SQLite stores integer cents: reads use
+  `decimal.New(cents, -2)` and writes use `rounded.Shift(2).IntPart()`; stats
+  sums stay integer until conversion. See
+  [ADR-0016](DECISIONS.md#adr-0016--sqlite-money-is-stored-as-integer-cents).
+- `price_history` is never written. The legacy API declared the table and
+  cascade but did not record product price changes, so the port preserves that
+  behavior.
 
 ## Transactions and stock
 
@@ -291,9 +333,9 @@ is used. Generate and persist `SECRET_KEY` when missing.
 - SQLite uses goose dialect `sqlite3`. Version 1 creates the auth tables
   (`users`, `refresh_tokens`); versions 2–6 create the Phase 3 business schema
   split by domain: catalog, identity, products, purchases, sales.
-- The catalog repositories and handlers are implemented. The remaining
-  business repositories and handlers are still pending. Do not translate
-  business tables piecemeal; parity tests come with the adapters.
+- The catalog and product repositories and handlers are implemented. The
+  remaining business repositories and handlers are still pending. Do not
+  translate business tables piecemeal; parity tests come with the adapters.
 - Every migration is forward-only unless a rollback is safe and tested.
 - Run at startup when `AUTO_MIGRATE=true`; otherwise expose an explicit
   migrate command.

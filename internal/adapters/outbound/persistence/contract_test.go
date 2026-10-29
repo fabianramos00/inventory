@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"inventory-desktop/internal/adapters/outbound/persistence/gormstore"
@@ -26,6 +27,7 @@ type repositories struct {
 	brands     outbound.CatalogRepository[domain.Brand]
 	materials  outbound.CatalogRepository[domain.Material]
 	units      outbound.CatalogRepository[domain.MeasurementUnit]
+	products   outbound.ProductRepository
 	gorm       *gorm.DB
 }
 
@@ -47,6 +49,7 @@ func TestRepositoryContract(t *testing.T) {
 			})
 			t.Run("refresh tokens", func(t *testing.T) { testRefreshTokens(t, repos) })
 			t.Run("catalog", func(t *testing.T) { testCatalog(t, repos, searchIDs, backend.name) })
+			t.Run("products", func(t *testing.T) { testProducts(t, repos, backend.name) })
 		})
 	}
 	postgresIDs, postgresRan := searchIDs["postgres"]
@@ -83,6 +86,7 @@ func newRepositories(gormDB *gorm.DB) *repositories {
 		brands:     gormstore.NewBrandStore(gormDB),
 		materials:  gormstore.NewMaterialStore(gormDB),
 		units:      gormstore.NewMeasurementUnitStore(gormDB),
+		products:   gormstore.NewProductStore(gormDB),
 		gorm:       gormDB,
 	}
 }
@@ -112,7 +116,7 @@ func openPostgresRepositories(t *testing.T) *repositories {
 	if err := db.MigratePostgres(ctx, conn); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.ExecContext(ctx, "TRUNCATE users, categories, materials, brands, measurement_units RESTART IDENTITY CASCADE"); err != nil {
+	if _, err := conn.ExecContext(ctx, "TRUNCATE users, categories, materials, brands, measurement_units, products, price_history RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatal(err)
 	}
 	return newRepositories(gormDB)
@@ -393,6 +397,275 @@ func testCatalog(t *testing.T, repos *repositories, searchIDs map[string]map[str
 		}
 	})
 }
+func testProducts(t *testing.T, repos *repositories, backend string) {
+	t.Helper()
+	ctx := context.Background()
+
+	category, err := repos.categories.Create(ctx, &domain.Category{Name: "Product Contract Category"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	brand, err := repos.brands.Create(ctx, &domain.Brand{Name: "Product Contract Brand"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	material, err := repos.materials.Create(ctx, &domain.Material{Name: "Product Contract Material"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit, err := repos.units.Create(ctx, &domain.MeasurementUnit{Name: "Product Contract Unit", Abbreviation: "pu"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	size := "M"
+	measurementUnitID := unit.ID
+	create := func(sku, name string, price, cost decimal.Decimal, stock, threshold int) *domain.Product {
+		t.Helper()
+		product, err := repos.products.Create(ctx, &domain.Product{
+			SKU:               sku,
+			Name:              name,
+			SizeValue:         &size,
+			MeasurementUnitID: &measurementUnitID,
+			Price:             price,
+			Cost:              cost,
+			StockQuantity:     stock,
+			LowStockThreshold: threshold,
+			BrandID:           brand.ID,
+			CategoryID:        category.ID,
+			MaterialID:        material.ID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return product
+	}
+
+	t.Run("create get and relations", func(t *testing.T) {
+		product := create("CONTRACT-PROD-1", "Contract Hammer", decimal.RequireFromString("10.25"), decimal.RequireFromString("4.10"), 3, 5)
+		if product.ID <= 0 {
+			t.Fatalf("Create returned id %d, want a positive id", product.ID)
+		}
+		detail, err := repos.products.Get(ctx, product.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if detail.SKU != product.SKU || detail.Name != product.Name || detail.StockQuantity != 3 || detail.LowStockThreshold != 5 {
+			t.Fatalf("detail = %+v", detail)
+		}
+		if !detail.Price.Equal(decimal.RequireFromString("10.25")) || !detail.Cost.Equal(decimal.RequireFromString("4.1")) {
+			t.Fatalf("money = %s/%s, want 10.25/4.1", detail.Price, detail.Cost)
+		}
+		if detail.Category == nil || detail.Category.ID != category.ID ||
+			detail.Material == nil || detail.Material.ID != material.ID ||
+			detail.Brand == nil || detail.Brand.ID != brand.ID ||
+			detail.MeasurementUnit == nil || detail.MeasurementUnit.ID != unit.ID {
+			t.Fatalf("relations = %+v/%+v/%+v/%+v", detail.Category, detail.Material, detail.Brand, detail.MeasurementUnit)
+		}
+		if _, err := repos.products.Get(ctx, product.ID+1000); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("Get missing row error = %v, want ErrNotFound", err)
+		}
+		duplicate := *product
+		duplicate.ID = 0
+		duplicate.Name = "Contract Hammer Copy"
+		if _, err := repos.products.Create(ctx, &duplicate); !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("duplicate sku error = %v, want ErrConflict", err)
+		}
+		if backend == "sqlite" {
+			var cents int64
+			err := repos.gorm.Raw("SELECT price FROM products WHERE id = ?", product.ID).Row().Scan(&cents)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cents != 1025 {
+				t.Fatalf("stored price = %d cents, want 1025", cents)
+			}
+		}
+	})
+
+	t.Run("search name and sku", func(t *testing.T) {
+		for _, tt := range []struct{ query, want string }{
+			{"contract hammer", "Contract Hammer"},
+			{"CONTRACT-PROD-1", "Contract Hammer"},
+			{"contract-prod-1", "Contract Hammer"},
+		} {
+			items, hasNext, err := repos.products.List(ctx, outbound.ProductFilter{Skip: 0, Limit: 10, Search: tt.query})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasNext || len(items) != 1 || items[0].Name != tt.want {
+				t.Fatalf("search %q = %+v has_next=%v, want %q", tt.query, items, hasNext, tt.want)
+			}
+		}
+	})
+
+	t.Run("literal wildcards", func(t *testing.T) {
+		create("CONTRACT-PROD-PERCENT", "100% Steel", decimal.RequireFromString("1"), decimal.RequireFromString("1"), 1, 0)
+		create("CONTRACT-PROD-UNDERSCORE", "a_b Steel", decimal.RequireFromString("1"), decimal.RequireFromString("1"), 1, 0)
+		for _, tt := range []struct{ query, want string }{
+			{"%", "100% Steel"},
+			{"_", "a_b Steel"},
+		} {
+			items, hasNext, err := repos.products.List(ctx, outbound.ProductFilter{Skip: 0, Limit: 10, Search: tt.query})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasNext || len(items) != 1 || items[0].Name != tt.want {
+				t.Fatalf("search %q = %+v has_next=%v, want %q", tt.query, items, hasNext, tt.want)
+			}
+		}
+	})
+
+	t.Run("filters and stock status", func(t *testing.T) {
+		create("CONTRACT-STOCK-IN", "Stock Status In", decimal.RequireFromString("1"), decimal.RequireFromString("1"), 10, 5)
+		create("CONTRACT-STOCK-LOW", "Stock Status Low", decimal.RequireFromString("1"), decimal.RequireFromString("1"), 2, 5)
+		create("CONTRACT-STOCK-OUT", "Stock Status Out", decimal.RequireFromString("1"), decimal.RequireFromString("1"), 0, 5)
+
+		categoryID, brandID, materialID := category.ID, brand.ID, material.ID
+		for _, tt := range []struct {
+			name   string
+			filter outbound.ProductFilter
+			want   string
+		}{
+			{"in stock", outbound.ProductFilter{Search: "stock status in", StockStatus: "in_stock", CategoryID: &categoryID, BrandID: &brandID, MaterialID: &materialID, Limit: 10}, "Stock Status In"},
+			{"low stock", outbound.ProductFilter{Search: "stock status low", StockStatus: "low_stock", Limit: 10}, "Stock Status Low"},
+			{"out of stock", outbound.ProductFilter{Search: "stock status out", StockStatus: "out_of_stock", Limit: 10}, "Stock Status Out"},
+		} {
+			items, hasNext, err := repos.products.List(ctx, tt.filter)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasNext || len(items) != 1 || items[0].Name != tt.want {
+				t.Fatalf("%s = %+v has_next=%v, want %q", tt.name, items, hasNext, tt.want)
+			}
+		}
+	})
+
+	t.Run("pagination", func(t *testing.T) {
+		names := []string{"Paging Product Alpha", "Paging Product Beta", "Paging Product Gamma", "Paging Product Delta"}
+		for i, name := range names {
+			create("CONTRACT-PAGING-"+string(rune('A'+i)), name, decimal.RequireFromString("1"), decimal.RequireFromString("1"), 1, 0)
+		}
+		all, hasNext, err := repos.products.List(ctx, outbound.ProductFilter{Search: "paging product", Limit: 100})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hasNext || len(all) != len(names) {
+			t.Fatalf("full list = %d items has_next=%v, want %d and false", len(all), hasNext, len(names))
+		}
+		for i := 1; i < len(all); i++ {
+			if all[i-1].ID <= all[i].ID {
+				t.Fatalf("list is not ordered id DESC: %d then %d", all[i-1].ID, all[i].ID)
+			}
+		}
+		page, hasNext, err := repos.products.List(ctx, outbound.ProductFilter{Search: "paging product", Limit: 2})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !hasNext || len(page) != 2 || page[0].ID != all[0].ID || page[1].ID != all[1].ID {
+			t.Fatalf("first page = %+v has_next=%v, want %d/%d and true", page, hasNext, all[0].ID, all[1].ID)
+		}
+		last, hasNext, err := repos.products.List(ctx, outbound.ProductFilter{Search: "paging product", Limit: 2, Skip: 2})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hasNext || len(last) != 2 || last[0].ID != all[2].ID || last[1].ID != all[3].ID {
+			t.Fatalf("last page = %+v has_next=%v, want %d/%d and false", last, hasNext, all[2].ID, all[3].ID)
+		}
+		past, hasNext, err := repos.products.List(ctx, outbound.ProductFilter{Search: "paging product", Limit: 2, Skip: 4})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hasNext || len(past) != 0 {
+			t.Fatalf("past-the-end page = %d items has_next=%v, want 0 and false", len(past), hasNext)
+		}
+	})
+
+	t.Run("update money and null", func(t *testing.T) {
+		product := create("CONTRACT-PROD-UPDATE", "Contract Update", decimal.RequireFromString("1"), decimal.RequireFromString("1"), 1, 0)
+		product.Name = "Contract Updated"
+		product.Price = decimal.RequireFromString("11.005")
+		product.Cost = decimal.RequireFromString("2.344")
+		product.SizeValue = nil
+		product.MeasurementUnitID = nil
+		product.StockQuantity = 4
+		if err := repos.products.Update(ctx, product.ID, product); err != nil {
+			t.Fatal(err)
+		}
+		got, err := repos.products.Get(ctx, product.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Name != "Contract Updated" || got.SizeValue != nil || got.MeasurementUnitID != nil || got.StockQuantity != 4 {
+			t.Fatalf("updated product = %+v", got)
+		}
+		if !got.Price.Equal(decimal.RequireFromString("11.01")) || !got.Cost.Equal(decimal.RequireFromString("2.34")) {
+			t.Fatalf("updated money = %s/%s, want 11.01/2.34", got.Price, got.Cost)
+		}
+		if err := repos.products.Update(ctx, product.ID+1000, product); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("update missing row error = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("delete and conflict", func(t *testing.T) {
+		product := create("CONTRACT-PROD-DELETE", "Contract Delete", decimal.RequireFromString("1"), decimal.RequireFromString("1"), 1, 0)
+		deleted, err := repos.products.Delete(ctx, product.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if deleted.ID != product.ID || deleted.SKU != product.SKU {
+			t.Fatalf("deleted = %+v, want %+v", deleted, product)
+		}
+		if _, err := repos.products.Get(ctx, product.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("Get after delete error = %v, want ErrNotFound", err)
+		}
+		if _, err := repos.products.Delete(ctx, product.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("second delete error = %v, want ErrNotFound", err)
+		}
+
+		referenced := create("CONTRACT-PROD-REFERENCED", "Contract Referenced", decimal.RequireFromString("1"), decimal.RequireFromString("1"), 1, 0)
+		cost := any("1.00")
+		if backend == "sqlite" {
+			cost = int64(100)
+		}
+		if err := repos.gorm.Exec("INSERT INTO supplier_catalogs (product_id, last_quoted_cost) VALUES (?, ?)", referenced.ID, cost).Error; err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repos.products.Delete(ctx, referenced.ID); !errors.Is(err, domain.ErrForeignKeyViolation) {
+			t.Fatalf("delete referenced product error = %v, want ErrForeignKeyViolation", err)
+		}
+		if _, err := repos.products.Get(ctx, referenced.ID); err != nil {
+			t.Fatalf("referenced product must survive the failed delete: %v", err)
+		}
+	})
+
+	t.Run("stats use sale price", func(t *testing.T) {
+		before, err := repos.products.Stats(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		create("CONTRACT-MONEY-10", "Money Ten", decimal.RequireFromString("0.10"), decimal.RequireFromString("0.05"), 1, 0)
+		create("CONTRACT-MONEY-20", "Money Twenty", decimal.RequireFromString("0.20"), decimal.RequireFromString("0.10"), 1, 0)
+		after, err := repos.products.Stats(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if after.TotalProducts-before.TotalProducts != 2 {
+			t.Errorf("total products delta = %d, want 2", after.TotalProducts-before.TotalProducts)
+		}
+		if after.TotalStock-before.TotalStock != 2 {
+			t.Errorf("total stock delta = %d, want 2", after.TotalStock-before.TotalStock)
+		}
+		if after.LowStockCount-before.LowStockCount != 0 {
+			t.Errorf("low stock delta = %d, want 0", after.LowStockCount-before.LowStockCount)
+		}
+		want := before.TotalInventoryValue.Add(decimal.RequireFromString("0.30"))
+		if !after.TotalInventoryValue.Equal(want) {
+			t.Fatalf("inventory value = %s, want %s", after.TotalInventoryValue, want)
+		}
+	})
+}
+
 func testCatalogDeleteForeignKey(t *testing.T, repos *repositories) {
 	t.Helper()
 	ctx := context.Background()

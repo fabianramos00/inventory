@@ -51,6 +51,7 @@ func main() {
 		Brands:           application.NewBrandService(stores.Brands),
 		Materials:        application.NewMaterialService(stores.Materials),
 		MeasurementUnits: application.NewMeasurementUnitService(stores.MeasurementUnits),
+		Products:         application.NewProductService(stores.Products),
 		Logger:           logger,
 		Backend:          stores.Backend,
 		DevMode:          true,

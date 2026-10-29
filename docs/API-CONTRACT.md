@@ -133,7 +133,7 @@ is both safer and compatible with the UI.
 - Database: `NUMERIC(12,2)`.
 - Go: `shopspring/decimal`.
 - JSON: number with up to two decimals.
-- Input validation rejects more than two decimal places.
+- Values with more than two decimals round half away from zero to two decimals; PostgreSQL `NUMERIC(12,2)` stores the rounded value.
 
 ### Dates and times
 
@@ -146,10 +146,10 @@ is both safer and compatible with the UI.
 
 `search` is optional, trimmed, and limited to 256 characters. It matches the
 entity's name fields as defined by the legacy repository. Do not change the
-match columns while porting. Catalog search treats `%` and `_` literally as a
-deliberate difference from legacy `ILIKE` wildcards; see
-[MIGRATION.md](MIGRATION.md#known-legacy-quirks) and
-[DECISIONS.md](DECISIONS.md#adr-0015--catalog-search-treats-sql-wildcards-literally).
+match columns while porting. Inventory search (catalog names and product
+name+SKU) treats `%` and `_` literally as a deliberate difference from legacy
+`ILIKE` wildcards; see [MIGRATION.md](MIGRATION.md#known-legacy-quirks) and
+[DECISIONS.md](DECISIONS.md#adr-0015--inventory-search-treats-sql-wildcards-literally).
 
 ## Endpoints
 
@@ -185,7 +185,11 @@ deliberate difference from legacy `ILIKE` wildcards; see
 `stock_status`: `in_stock`, `low_stock`, `out_of_stock`.
 
 Product list items include the related category, material, brand, and
-measurement unit. Missing `sku` is generated as `SKU-XXXXXXXX`.
+measurement unit. Missing `sku` is generated as `SKU-XXXXXXXX`. Create, update,
+and delete return `200` with the plain product, without relations. Product
+updates are partial: omitted fields stay unchanged; `size_value` and
+`measurement_unit_id` accept `null` to clear them; `null` for any other field
+is `422`. Product `price` and `cost` round half away from zero to two decimals.
 
 ### Sales and clients
 

@@ -239,7 +239,7 @@ values and token material never reach logs. Queries that need precise locking
 or aggregation may still be written by hand without introducing a second
 persistence abstraction.
 
-## ADR-0015 — Catalog search treats SQL wildcards literally
+## ADR-0015 — Inventory search treats SQL wildcards literally
 
 **Status:** Accepted
 
@@ -247,11 +247,48 @@ persistence abstraction.
 so `%` and `_` in the term acted as SQL wildcards. The SQLite Go-side filter
 folds case in Go over a full-table scan, which cannot reproduce `ILIKE`
 wildcard semantics. Backend parity requires the same observable behavior on
-PostgreSQL and SQLite.
+PostgreSQL and SQLite. Product search has the same constraint and additionally
+matches both `name` and `sku`.
 
-**Decision:** Catalog search performs literal substring matching on both
-backends. PostgreSQL uses `strpos(lower(name), lower(?)) > 0`; SQLite uses Go
-case folding. `%` and `_` are ordinary characters.
+**Decision:** Inventory search performs literal substring matching on both
+backends. PostgreSQL uses `strpos(lower(name), lower(?)) > 0` (plus `sku` for
+products); SQLite uses Go case folding. `%` and `_` are ordinary characters.
 
 **Consequences:** Results are consistent across backends, but `%` and `_` no
 longer act as wildcards, a documented deviation from the legacy API.
+
+## ADR-0016 — SQLite money is stored as integer cents
+
+**Status:** Accepted
+
+**Context:** PostgreSQL stores money as `NUMERIC(12,2)` and Go reads it as a
+decimal. SQLite has no exact decimal type; storing `REAL` would lose precision
+and break the money invariant. The Phase 3 SQLite schema already declares the
+money columns as `INTEGER`.
+
+**Decision:** Keep the legacy column names unchanged. SQLite stores money as
+integer cents. The GORM adapter normalizes at the boundary: reads convert
+integer cents with `decimal.New(cents, -2)`; writes round to two decimals and
+use `Shift(2).IntPart()`. PostgreSQL keeps `NUMERIC(12,2)`; the adapter reads it
+as text with `decimal.NewFromString` and writes `StringFixed(2)`. Aggregates
+such as `SUM(stock_quantity * price)` stay integer on SQLite until the same
+conversion.
+
+**Consequences:** Money never passes through `float64`, and sums are exact on
+both backends. Every future money column and aggregate must use the same
+normalization. Raw SQL written against SQLite must remember that values are
+cents, not currency units.
+
+## ADR-0017 — Reject unknown JSON fields at the HTTP boundary
+
+**Status:** Accepted
+
+**Context:** Legacy Pydantic ignores unknown fields. Go already uses
+`DisallowUnknownFields`, which caught the real `min_stock_quantity` drift
+between clients and the API.
+
+**Decision:** Reject unknown fields on JSON bodies with `422 VALIDATION_ERROR`.
+
+**Consequences:** The Go API is stricter than legacy, catching client/API drift
+early. Clients must send exact field names. The difference is documented in
+[MIGRATION.md](MIGRATION.md#known-legacy-quirks).

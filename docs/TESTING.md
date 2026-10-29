@@ -13,7 +13,7 @@ behavior. They are not optional polish.
 | Go repository contract | `testing` + PostgreSQL/SQLite | Same port cases against both adapters |
 | Go bootstrap | `testing` | `DB_MODE` selection and SQLite fallback |
 | Frontend unit | Vitest | Hooks, formatters, utilities, components |
-| Frontend E2E | Playwright | Login, inventory, sales, orders, users, keyboard |
+| Frontend E2E | Playwright | Login and users (inventory/sales/orders pending) |
 | Contract parity | Go test | Same fixtures against FastAPI and Go |
 
 ## Commands
@@ -158,6 +158,9 @@ Cases:
 - Catalog CRUD for categories, brands, materials, and measurement units on both
   backends: create, get, update, delete, and `domain.ErrNotFound` for missing
   rows and updates.
+- Product CRUD on both backends: relations, exact money reads/writes, stats,
+  name+SKU search, filters, pagination, update null clearing, and delete
+  conflicts.
 - Duplicate category name/code, brand name, material name, and unit
   name/abbreviation map to `domain.ErrConflict`.
 - Deleting a category, brand, material, or unit referenced by a product maps to
@@ -169,8 +172,8 @@ Cases:
 SQLite now has the full Phase 3 business schema (`00001_auth.sql` plus
 `00002_catalog.sql` through `00006_sales.sql`). Go service, handler, and
 persistence contract coverage for catalog exists on both backends; the live
-legacy FastAPI fixture run is still pending. Product, sales, order, and
-dashboard repositories are still pending.
+legacy FastAPI fixture run is still pending. Sales, order, and dashboard
+repositories are still pending.
 
 Refresh-token timestamps use `gormstore.Timestamp`, which writes a fixed-width
 UTC format (`2006-01-02T15:04:05.000000000Z`) so the lexicographic
@@ -234,6 +237,27 @@ absence of `GET` by id for materials and measurement units (404).
 `frontend/e2e/users.spec.ts` runs the full stack: real login, create a unique
 user from the Usuarios page, search, rename, toggle active, and delete.
 
+### Products slice
+
+`internal/application/product_test.go` covers SKU generation and collision
+retry, create defaults and explicit nulls, name/SKU/size/ID/money validation,
+half-away-from-zero rounding, partial updates, optional-field clearing,
+partial-update null semantics, conflict/not-found propagation, list filters,
+and stats pass-through.
+
+`internal/adapters/inbound/httpapi/product_test.go` covers bearer auth on all
+six routes, list filters and pagination, invalid `stock_status` and filter IDs,
+list/get detail relations, plain create/update/delete responses, money as JSON
+numbers, `404 Product not found`, `UNIQUE_VIOLATION`, `FOREIGN_KEY_VIOLATION`,
+`422 VALIDATION_ERROR`, and the null-versus-omitted update mapping.
+
+`internal/adapters/outbound/persistence/contract_test.go` runs the same product
+fixture on PostgreSQL and SQLite: create/get relations, money exactness
+(`0.10 + 0.20` stats), `0.10`/`0.20` storage, search over name and SKU, literal
+`%`/`_`, catalog and stock-status filters, `id DESC` pagination, update money
+and nullable fields, delete, delete conflict, and stats using sale price.
+SQLite additionally asserts `price` is stored as integer cents.
+
 ## Phase 2 auth coverage
 
 The following is covered now:
@@ -259,8 +283,8 @@ The following is covered now:
   environment so the password never appears in argv, and the test secret is
   at least 32 bytes.
 
-Deferred: product CRUD and stats, sales/stock, purchase orders, dashboard, and
-the full 67-endpoint parity matrix. The Users CRUD slice and the catalog slice
+Deferred: sales/stock, purchase orders, dashboard, and the full 67-endpoint
+parity matrix. The Users CRUD slice, the catalog slice, and the products slice
 are covered now (application, handler, repository contract, and, for Users,
 full-stack E2E).
 
@@ -274,20 +298,26 @@ Vitest + Testing Library:
 - Formatters: `es-CO`, COP, `DD/MM/YYYY`.
 - Component tests: dialogs trap focus, Escape closes, labels are associated,
   errors have `role="alert"`.
-- Form validation: required fields, numeric ranges, delivered vs quantity,
-  amount paid vs total.
+- Product form validation: name 150, sku 100, size 20, price/cost > 0,
+  non-negative stock and low-stock threshold, required category/brand/material,
+  and inline errors for every validated field.
+- Other form validation: required fields, numeric ranges, delivered vs
+  quantity, amount paid vs total.
 
 Playwright:
 
+- Automated Playwright currently covers auth (`auth.spec.ts`) and users
+  (`users.spec.ts`) only; `frontend/playwright.config.ts` `testMatch` excludes
+  the other specs.
 - Login success and failure.
-- Inventory list, filter, create, edit, delete.
-- Sale creation with insufficient stock.
-- Sale item edit and deletion restore stock.
-- Purchase order receiving.
 - User creation and role visibility.
 - Users CRUD against the real API: create, search, rename, toggle active,
   delete.
-- Keyboard-only dialog and dropdown flows.
+- Inventory list/pagination/search and the product form are covered by Vitest,
+  not Playwright.
+- Full Playwright inventory, sales, and purchase-order flows remain pending.
+  The mocked `lists.spec.ts` is not in the configured run and several of its
+  routes are not mounted.
 
 Use hash URLs (`/#/inventory`) for the desktop router. Run against Vite dev
 plus a test Go API. Add a manual Wails smoke test before release: launch,
@@ -346,7 +376,7 @@ fixtures in replay mode. Do not mark parity as passing without a run.
 | Auth | 3 | Covered (Phase 2) |
 | Users | 5 | Covered (this slice) |
 | Inventory — catalog | 18 | Backend contract covered; legacy FastAPI parity pending |
-| Inventory — products | 6 | Pending |
+| Inventory — products | 6 | Backend contract covered; legacy FastAPI parity pending |
 | Sales + clients | 15 | Pending |
 | Supply chain | 16 | Pending |
 | Dashboard | 4 | Pending |

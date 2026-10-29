@@ -88,10 +88,13 @@ be recreated: delete the local file at `SQLITE_PATH` (default
 re-run migrations on the next start. Migrations are forward-only; there is no
 in-place upgrade from the monolith.
 
-The full business schema now exists in SQLite. Business repositories and
-handlers are still pending; the schema being present does not mean the offline
-business modules work yet. The two goose version tables are independent, so
-SQLite and PostgreSQL version numbers do not match.
+The full business schema now exists in SQLite. Catalog and product
+repositories/handlers are implemented on both backends. Identity (clients and
+providers), sales, and supply-chain (supplier catalogs and purchase orders)
+repositories and handlers are still pending; the schema being present does not
+mean those offline business modules work yet. Dashboard aggregates are also
+pending. The two goose version tables are independent, so SQLite and
+PostgreSQL version numbers do not match.
 
 `DB_MODE=auto` (default) probes PostgreSQL with a 3-second timeout and falls
 back to SQLite on failure. `DB_MODE=postgres` fails hard. `DB_MODE=sqlite`
@@ -152,7 +155,7 @@ For each module:
 1. The 13 business tables now exist in SQLite, split by domain across
    `00002_catalog.sql` through `00006_sales.sql`.
 2. Preserve integer stock, integer-cent money, and UTC text timestamps in the
-   pending business adapters.
+   remaining business adapters. SQLite money is integer cents; see [ADR-0016](DECISIONS.md#adr-0016--sqlite-money-is-stored-as-integer-cents).
 3. Add adapter contract tests that run the same fixtures against PostgreSQL
    and SQLite.
 4. Document any SQL-semantic differences (`ILIKE`, enums, `RETURNING`,
@@ -180,14 +183,21 @@ For each module:
 | Dashboard | Top products sum delivered quantity but rank by subtotal | Preserve; document |
 | Orders | Deleting a received order does not reverse stock | Preserve until approved |
 | Search wildcards | Legacy `ILIKE` treats `%` and `_` as wildcards | Escape/treat literally on both backends; see ADR-0015 |
-| Products | `sku` is generated when omitted | Preserve |
+| Products | `sku` is generated when omitted | Preserve; retry generated collisions |
 | Products | `size_value` is a string | Preserve |
+| Products | `price_history` is declared but never written by the legacy API | Preserve; do not record price changes |
+| Products | Update omits unchanged fields; explicit null clears only `size_value` and `measurement_unit_id` | Go is stricter: explicit null clears only `size_value`/`measurement_unit_id`; null for any other product field is `422`. |
+| Unknown JSON fields | Pydantic ignores extra fields | Go rejects them with `422 VALIDATION_ERROR`; see ADR-0017 |
+| Non-positive path IDs | FastAPI treats id 0/negative as not found (`404`) | Go returns `422 VALIDATION_ERROR` for id <= 0; documented difference |
+| Product whitespace | Legacy preserves leading/trailing whitespace in name/SKU | Go trims name and supplied SKU before validation |
+| Products | Legacy `ILIKE` searches name and SKU with wildcards | Treat `%`/`_` literally on both backends; see ADR-0015 |
+| Money (SQLite) | SQLite has no exact decimal type | Store integer cents, convert at the adapter boundary; see ADR-0016 |
 | Purchase order detail | Returns the order without items; items are a separate endpoint | Preserve |
 | Sales | `amount_paid > total_amount` is accepted and marks the sale paid | Preserve; document |
 | Enums | PostgreSQL stores uppercase enum labels; the API uses lowercase | Map explicitly in every Go read/filter/write |
 | Defaults | Several legacy defaults are Python-side only (`stock_quantity`, `low_stock_threshold`, `amount_paid`, `delivered_quantity`, `total_amount`) | Supply them explicitly in Go inserts |
 | Validation | FastAPI `422` detail is an array | Normalize to a string detail + code |
-| Frontend types | `Product` type uses `stock`/`min_stock`/`unit`; API returns `stock_quantity`/`low_stock_threshold`/related objects | Fix frontend to match API |
+| Frontend product fields | `Product` type reads `stock_quantity` and `low_stock_threshold` and treats related category/brand/material/unit objects as nullable; legacy `stock`/`min_stock`/`unit` remain optional aliases | API fields are authoritative; frontend matches the API |
 | Locale | UI uses `es-PE` while backend uses Bogotá | New rule: `es-CO` / COP |
 
 ## Cutover criteria
