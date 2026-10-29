@@ -373,7 +373,7 @@ func startGoServer(t *testing.T, super seedUser, regular *seedUser) *side {
 	t.Cleanup(func() { _ = stores.Closer() })
 
 	passwords := security.NewPasswordHasher(cfg.BcryptRounds)
-	users := application.NewUserService(stores.Users, passwords)
+	users := application.NewUserService(stores.Users, stores.RefreshTokens, passwords)
 	create := func(seed seedUser) {
 		_, err := users.Create(context.Background(), inbound.CreateUserInput{
 			Email:       seed.Email,
