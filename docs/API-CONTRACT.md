@@ -353,6 +353,83 @@ Known legacy gap to preserve in v1:
 | PUT | `/supply-chain/purchase-orders/{id}/items/{item_id}` | Partial |
 | DELETE | `/supply-chain/purchase-orders/{id}/items/{item_id}` | |
 
+#### Providers
+
+Provider shape:
+
+```json
+{
+  "id": 1,
+  "name": "Distribuidora Metálica",
+  "contact_info": "Juan Pérez",
+  "email": "ventas@example.com",
+  "phone": "3001234567"
+}
+```
+
+- No timestamps. `created_by_id` comes from the bearer token and is not
+  returned.
+- `GET /supply-chain/providers` returns `{items, has_next, skip, limit}`,
+  ordered `id DESC`; `limit` defaults to 100 and caps at 200.
+- `search` is trimmed, capped at 256 characters, and matches `name`, `email`,
+  and `phone` only, case-insensitively. `contact_info` is not searched. `%`
+  and `_` are literal characters.
+- `name` is required, trimmed, and at most 255 characters. `contact_info`
+  (500), `email` (255), and `phone` (50) are optional, trimmed, and stored as
+  `null` when empty. No email or phone format validation.
+- Create accepts omitted, `null`, or empty optional fields. Update is partial:
+  omitted fields stay unchanged, explicit `null` or an empty string clears an
+  optional field, and `null`/blank `name` is `422 VALIDATION_ERROR`.
+- Duplicate names are allowed. Deleting a provider referenced by a purchase
+  order or supplier catalog is `400 FOREIGN_KEY_VIOLATION`; a missing provider
+  is `404 Provider not found`.
+
+#### Supplier catalogs
+
+Supplier catalog shape:
+
+```json
+{
+  "id": 1,
+  "product_id": 3,
+  "provider_id": 1,
+  "supplier_sku": "PROV-001",
+  "last_quoted_cost": 12.5,
+  "lead_time": 7,
+  "provider": {
+    "id": 1,
+    "name": "Distribuidora Metálica",
+    "contact_info": "Juan Pérez",
+    "email": "ventas@example.com",
+    "phone": "3001234567"
+  },
+  "products": {
+    "id": 3,
+    "sku": "SKU-1234ABCD",
+    "name": "Martillo",
+    "size_value": "16 oz",
+    "measurement_unit_id": 2,
+    "price": 19.9,
+    "cost": 10.0,
+    "stock_quantity": 4,
+    "low_stock_threshold": 5,
+    "brand_id": 1,
+    "category_id": 1,
+    "material_id": 1
+  }
+}
+```
+
+- Read-only in this phase: list and get only. Rows are created or updated when
+  a purchase order is received.
+- `last_quoted_cost` is money and is serialized as an exact JSON number;
+  `lead_time` is a nullable integer number of days. `products` is the plain
+  product object with no relations.
+- Lists return `{items, has_next, skip, limit}`, order `id DESC`, and share the
+  100/200 rules. `provider_id` and `product_id` filters apply only when
+  positive.
+- Missing catalog: `404 Supplier catalog not found`.
+
 Creating an order requires at least one item. One item per product per order.
 `status` transitions to `received` increment stock and upsert the supplier
 catalog.

@@ -323,6 +323,46 @@ Never log passwords, tokens, authorization headers, or full request bodies.
   PostgreSQL keeps microseconds and SQLite keeps nanoseconds, so exactness
   beyond microseconds is backend-specific.
 
+## Providers
+
+- Endpoints under `/api/v1/supply-chain/providers`: list, create, get, update,
+  and delete. Any active user may call them; the response is
+  `{id,name,contact_info,email,phone}` with no timestamps.
+- Lists return `{items, has_next, skip, limit}`, order `id DESC`, and share the
+  default/cap (100/200) and search limit (256 runes) rules. `search` is trimmed
+  and matches `name`, `email`, and `phone` only; `contact_info` is not searched.
+- `name` is required, trimmed, and at most 255 characters. `contact_info`,
+  `email`, and `phone` are optional, trimmed, and stored as `null` when empty;
+  their limits are 500, 255, and 50. Email and phone formats are not validated.
+- Create sets `created_by_id` from the authenticated user and never exposes it.
+  Update is partial: omitted fields stay unchanged, explicit `null` or an empty
+  string clears an optional field, and `null`/blank `name` is `422`. A no-op
+  update leaves the row unchanged.
+- Duplicate names are allowed; the table has no unique constraint. Deleting a
+  provider referenced by a purchase order or supplier catalog maps to `400
+  FOREIGN_KEY_VIOLATION`; missing providers map to `404 Provider not found`.
+- Search treats `%` and `_` literally on both backends. PostgreSQL uses
+  `strpos(lower(column), lower(?)) > 0` over the three fields; SQLite scans the
+  table and folds case in Go (`ponytail:` add FTS5 when the provider table
+  makes the scan measurable).
+
+## Supplier catalogs
+
+- Read-only endpoints under `/api/v1/supply-chain/supplier-catalogs`: list and
+  get. There are no create/update/delete routes in this phase; catalog rows are
+  written only when a purchase order is received.
+- Responses include `id`, `product_id`, `provider_id`, `supplier_sku`,
+  `last_quoted_cost`, `lead_time`, the full `provider` object, and the plain
+  `products` object (no catalog relations), matching legacy.
+- Lists return `{items, has_next, skip, limit}`, order `id DESC`, and share the
+  100/200 pagination rules. `provider_id` and `product_id` filters apply only
+  when positive.
+- `last_quoted_cost` is money. PostgreSQL reads `NUMERIC(12,2)` as text and
+  writes/reads decimals; SQLite stores integer cents and converts with
+  `decimal.New(cents, -2)`. JSON carries a number. `lead_time` is a nullable
+  integer number of days.
+- Missing rows map to `404 Supplier catalog not found`.
+
 ## Sales
 
 - Endpoints under `/api/v1/sales`: list, create, stats, get, update, delete,
@@ -415,9 +455,10 @@ is used. Generate and persist `SECRET_KEY` when missing.
 - SQLite uses goose dialect `sqlite3`. Version 1 creates the auth tables
   (`users`, `refresh_tokens`); versions 2–6 create the Phase 3 business schema
   split by domain: catalog, identity, products, purchases, sales.
-- The catalog, product, client, and sales repositories and handlers are
-  implemented. Providers, supply chain, and dashboard remain pending. Do not
-  translate business tables piecemeal; parity tests come with the adapters.
+- The catalog, product, client, provider, supplier catalog, and sales
+  repositories and handlers are implemented. Purchase orders and dashboard
+  remain pending. Do not translate business tables piecemeal; parity tests come
+  with the adapters.
 - Every migration is forward-only unless a rollback is safe and tested.
 - Run at startup when `AUTO_MIGRATE=true`; otherwise expose an explicit
   migrate command.

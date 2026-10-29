@@ -18,6 +18,8 @@ type Deps struct {
 	Products         inbound.ProductUseCase
 	Clients          inbound.ClientUseCase
 	Sales            inbound.SaleUseCase
+	Providers        inbound.ProviderUseCase
+	SupplierCatalogs inbound.SupplierCatalogUseCase
 	Logger           *slog.Logger
 	Backend          string
 	DevMode          bool
@@ -40,6 +42,8 @@ func NewRouter(deps Deps) http.Handler {
 	productsHandler := NewProductHandler(deps.Products, logger)
 	clientsHandler := NewClientHandler(deps.Clients, logger)
 	salesHandler := NewSaleHandler(deps.Sales, logger)
+	providersHandler := NewProviderHandler(deps.Providers, logger)
+	supplierCatalogsHandler := NewSupplierCatalogHandler(deps.SupplierCatalogs, logger)
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "database": backend})
@@ -70,6 +74,14 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("GET /api/v1/sales/clients/{id}", clientsHandler.Get)
 	mux.HandleFunc("PUT /api/v1/sales/clients/{id}", clientsHandler.Update)
 	mux.HandleFunc("DELETE /api/v1/sales/clients/{id}", clientsHandler.Delete)
+
+	mux.HandleFunc("GET /api/v1/supply-chain/providers", providersHandler.List)
+	mux.HandleFunc("POST /api/v1/supply-chain/providers", providersHandler.Create)
+	mux.HandleFunc("GET /api/v1/supply-chain/providers/{id}", providersHandler.Get)
+	mux.HandleFunc("PUT /api/v1/supply-chain/providers/{id}", providersHandler.Update)
+	mux.HandleFunc("DELETE /api/v1/supply-chain/providers/{id}", providersHandler.Delete)
+	mux.HandleFunc("GET /api/v1/supply-chain/supplier-catalogs", supplierCatalogsHandler.List)
+	mux.HandleFunc("GET /api/v1/supply-chain/supplier-catalogs/{id}", supplierCatalogsHandler.Get)
 
 	mux.HandleFunc("GET /api/v1/sales", salesHandler.List)
 	mux.HandleFunc("POST /api/v1/sales", salesHandler.Create)

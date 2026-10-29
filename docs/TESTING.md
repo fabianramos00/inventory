@@ -171,9 +171,10 @@ Cases:
 
 SQLite now has the full Phase 3 business schema (`00001_auth.sql` plus
 `00002_catalog.sql` through `00006_sales.sql`). Go service, handler, and
-persistence contract coverage for catalog, products, clients, and sales exists
-on both backends; the live legacy FastAPI fixture run is still pending.
-Provider, supply-chain, and dashboard repositories are still pending.
+persistence contract coverage for catalog, products, clients, sales, providers,
+and supplier catalogs exists on both backends; the live legacy FastAPI fixture
+run is still pending for all of them. Purchase orders and dashboard remain
+pending.
 
 Refresh-token timestamps use `gormstore.Timestamp`, which writes a fixed-width
 UTC format (`2006-01-02T15:04:05.000000000Z`) so the lexicographic
@@ -284,6 +285,32 @@ round-trip, update null clearing, duplicate identity card, multiple null
 identity cards, search over every field with accents, literal wildcards,
 pagination, delete, delete conflict, and `domain.ErrNotFound`.
 
+### Providers and supplier catalogs slice
+
+`internal/application/provider_test.go` covers name/optional trimming, empty
+optional values becoming `null`, length validation, `created_by_id`, partial
+updates with explicit-null clearing, no-op updates that skip the repository,
+blank/null name rejection, and repository error propagation.
+`supplier_catalog_test.go` covers filter and pagination pass-through and
+not-found propagation.
+
+`internal/adapters/inbound/httpapi/provider_test.go` covers bearer auth on all
+seven supply-chain routes, list shape/defaults/search/pagination, provider CRUD
+without timestamps or `created_by_id`, `created_by_id` coming from the token,
+duplicate names, null-versus-omitted update mapping, accents and literal `%`/`_`
+search pass-through, `404 Provider not found`, and
+`FOREIGN_KEY_VIOLATION`. `supplier_catalog_test.go` covers list shape, filters,
+non-positive filter handling, exact money, relations, plain `products`, and
+`404 Supplier catalog not found`.
+
+`internal/adapters/outbound/persistence/provider_contract_test.go` runs provider
+CRUD, no-op updates, duplicate names, search over name/email/phone (not
+`contact_info`), accents, literal `%`/`_`, pagination, and delete conflicts
+against purchase orders and supplier catalogs on PostgreSQL and SQLite.
+`supplier_catalog_contract_test.go` covers list/get, provider and product
+relations, exact money, SQLite integer cents, filters, non-positive filter
+handling, `id DESC` ordering, pagination, and `domain.ErrNotFound`.
+
 ### Sales slice
 
 `internal/application/sale_service_test.go` and `sale_test.go` cover create
@@ -340,8 +367,9 @@ The following is covered now:
 
 Deferred: purchase orders, dashboard, and the full 67-endpoint parity matrix.
 The Users CRUD slice, the catalog slice, the products slice, the clients
-slice, and the sales slice are covered now (application, handler, repository
-contract, and, for Users, full-stack E2E).
+slice, the providers slice, the supplier catalog slice, and the sales slice are
+covered now (application, handler, repository contract, and, for Users,
+full-stack E2E).
 
 ## Frontend tests
 
@@ -434,7 +462,9 @@ fixtures in replay mode. Do not mark parity as passing without a run.
 | Inventory — products | 6 | Backend contract covered; legacy FastAPI parity pending |
 | Clients | 5 | Backend contract covered; legacy FastAPI parity pending |
 | Sales | 10 | Backend contract covered; legacy FastAPI parity pending |
-| Supply chain | 16 | Pending |
+| Supply chain — providers | 5 | Backend contract covered; legacy FastAPI parity pending |
+| Supply chain — supplier catalogs | 2 | Backend contract covered; legacy FastAPI parity pending |
+| Supply chain — purchase orders | 9 | Pending |
 | Dashboard | 4 | Pending |
 | **Total** | **67** | Pending |
 

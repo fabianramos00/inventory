@@ -21,18 +21,20 @@ import (
 
 // repositories is one backend wired to the port interfaces services consume.
 type repositories struct {
-	users      outbound.UserRepository
-	tokens     outbound.RefreshTokenRepository
-	categories outbound.CatalogRepository[domain.Category]
-	brands     outbound.CatalogRepository[domain.Brand]
-	materials  outbound.CatalogRepository[domain.Material]
-	units      outbound.CatalogRepository[domain.MeasurementUnit]
-	products   outbound.ProductRepository
-	clients    outbound.ClientRepository
-	sales      outbound.SaleRepository
-	uow        outbound.UnitOfWork
-	stock      outbound.StockRepository
-	gorm       *gorm.DB
+	users            outbound.UserRepository
+	tokens           outbound.RefreshTokenRepository
+	categories       outbound.CatalogRepository[domain.Category]
+	brands           outbound.CatalogRepository[domain.Brand]
+	materials        outbound.CatalogRepository[domain.Material]
+	units            outbound.CatalogRepository[domain.MeasurementUnit]
+	products         outbound.ProductRepository
+	clients          outbound.ClientRepository
+	sales            outbound.SaleRepository
+	providers        outbound.ProviderRepository
+	supplierCatalogs outbound.SupplierCatalogRepository
+	uow              outbound.UnitOfWork
+	stock            outbound.StockRepository
+	gorm             *gorm.DB
 }
 
 func TestRepositoryContract(t *testing.T) {
@@ -56,6 +58,8 @@ func TestRepositoryContract(t *testing.T) {
 			t.Run("products", func(t *testing.T) { testProducts(t, repos, backend.name) })
 			t.Run("clients", func(t *testing.T) { testClients(t, repos) })
 			t.Run("sales", func(t *testing.T) { testSales(t, repos) })
+			t.Run("providers", func(t *testing.T) { testProviders(t, repos) })
+			t.Run("supplier catalogs", func(t *testing.T) { testSupplierCatalogs(t, repos) })
 		})
 	}
 	postgresIDs, postgresRan := searchIDs["postgres"]
@@ -86,18 +90,20 @@ func openSQLiteRepositories(t *testing.T) *repositories {
 
 func newRepositories(gormDB *gorm.DB) *repositories {
 	return &repositories{
-		users:      gormstore.NewUserStore(gormDB),
-		tokens:     gormstore.NewRefreshTokenStore(gormDB),
-		categories: gormstore.NewCategoryStore(gormDB),
-		brands:     gormstore.NewBrandStore(gormDB),
-		materials:  gormstore.NewMaterialStore(gormDB),
-		units:      gormstore.NewMeasurementUnitStore(gormDB),
-		products:   gormstore.NewProductStore(gormDB),
-		clients:    gormstore.NewClientStore(gormDB),
-		sales:      gormstore.NewSaleStore(gormDB),
-		uow:        gormstore.NewUnitOfWork(gormDB),
-		stock:      gormstore.NewStockStore(gormDB),
-		gorm:       gormDB,
+		users:            gormstore.NewUserStore(gormDB),
+		tokens:           gormstore.NewRefreshTokenStore(gormDB),
+		categories:       gormstore.NewCategoryStore(gormDB),
+		brands:           gormstore.NewBrandStore(gormDB),
+		materials:        gormstore.NewMaterialStore(gormDB),
+		units:            gormstore.NewMeasurementUnitStore(gormDB),
+		products:         gormstore.NewProductStore(gormDB),
+		clients:          gormstore.NewClientStore(gormDB),
+		sales:            gormstore.NewSaleStore(gormDB),
+		providers:        gormstore.NewProviderStore(gormDB),
+		supplierCatalogs: gormstore.NewSupplierCatalogStore(gormDB),
+		uow:              gormstore.NewUnitOfWork(gormDB),
+		stock:            gormstore.NewStockStore(gormDB),
+		gorm:             gormDB,
 	}
 }
 
@@ -126,7 +132,7 @@ func openPostgresRepositories(t *testing.T) *repositories {
 	if err := db.MigratePostgres(ctx, conn); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.ExecContext(ctx, "TRUNCATE users, categories, materials, brands, measurement_units, products, price_history, clients, sales, sale_items RESTART IDENTITY CASCADE"); err != nil {
+	if _, err := conn.ExecContext(ctx, "TRUNCATE users, categories, materials, brands, measurement_units, products, price_history, clients, sales, sale_items, providers, supplier_catalogs, purchase_orders, order_items RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatal(err)
 	}
 	return newRepositories(gormDB)
@@ -646,6 +652,9 @@ func testProducts(t *testing.T, repos *repositories, backend string) {
 		}
 		if _, err := repos.products.Get(ctx, referenced.ID); err != nil {
 			t.Fatalf("referenced product must survive the failed delete: %v", err)
+		}
+		if err := repos.gorm.Exec("DELETE FROM supplier_catalogs WHERE product_id = ?", referenced.ID).Error; err != nil {
+			t.Fatal(err)
 		}
 	})
 

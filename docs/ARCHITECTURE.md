@@ -149,8 +149,8 @@ SQLite:
   goose.
 - The auth tables and the full Phase 3 business schema exist today
   (`00001_auth.sql` plus `00002_catalog.sql` through `00006_sales.sql`).
-  Catalog, product, client, and sales repositories and handlers are implemented;
-  providers, supply chain, and dashboard remain pending.
+  Catalog, product, client, provider, supplier catalog, and sales repositories
+  and handlers are implemented; purchase orders and dashboard remain pending.
 - Booleans are stored as `0`/`1`; timestamps are stored as fixed-width UTC
   text so lexical comparisons stay correct, and parsing accepts RFC 3339
   with variable fractional seconds.

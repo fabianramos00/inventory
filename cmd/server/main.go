@@ -54,6 +54,8 @@ func main() {
 		Products:         application.NewProductService(stores.Products),
 		Clients:          application.NewClientService(stores.Clients),
 		Sales:            application.NewSaleService(stores.Sales, stores.UnitOfWork),
+		Providers:        application.NewProviderService(stores.Providers),
+		SupplierCatalogs: application.NewSupplierCatalogService(stores.SupplierCatalogs),
 		Logger:           logger,
 		Backend:          stores.Backend,
 		DevMode:          true,

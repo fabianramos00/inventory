@@ -88,13 +88,12 @@ be recreated: delete the local file at `SQLITE_PATH` (default
 re-run migrations on the next start. Migrations are forward-only; there is no
 in-place upgrade from the monolith.
 
-The full business schema now exists in SQLite. Catalog, product, client, and
-sales repositories/handlers are implemented on both backends. Providers and
-supply-chain (supplier catalogs and purchase orders) repositories and handlers
-are still pending; the schema being present does not mean those offline
-business modules work yet. Dashboard aggregates are also pending. The two
-goose version tables are independent, so SQLite and PostgreSQL version numbers
-do not match.
+The full business schema now exists in SQLite. Catalog, product, client,
+provider, supplier catalog, and sales repositories/handlers are implemented on
+both backends. Purchase orders and dashboard aggregates are still pending; the
+schema being present does not mean those offline business modules work yet. The
+two goose version tables are independent, so SQLite and PostgreSQL version
+numbers do not match.
 
 `DB_MODE=auto` (default) probes PostgreSQL with a 3-second timeout and falls
 back to SQLite on failure. `DB_MODE=postgres` fails hard. `DB_MODE=sqlite`
@@ -197,6 +196,11 @@ For each module:
 | Clients | Legacy `PUT` uses `exclude_unset`, so explicit `null` clears and omitted fields stay | Preserve; `null`/empty/blank `name` is `422` instead of violating the NOT NULL column |
 | Clients | Legacy search uses `ILIKE` over name, identity card, email, and phone | Case-insensitive literal substring on both backends; `%`/`_` are ordinary characters |
 | Clients | Legacy does not validate email or phone format | Preserve; no format validation |
+| Providers | Legacy search uses `ILIKE` over name, email, and phone; `contact_info` is not searched | Case-insensitive literal substring on name/email/phone; `%`/`_` are ordinary characters |
+| Providers | Legacy has no timestamps and allows duplicate names | Preserve; response is `{id,name,contact_info,email,phone}` and no unique name constraint |
+| Providers | `created_by_id` is set from the authenticated user but not returned | Set on create from the token; omit from every response |
+| Supplier catalogs | Legacy is read-only through the API; rows are written when an order is received | Keep list/get read-only in this phase; no create/update/delete routes |
+| Supplier catalogs | Legacy `last_quoted_cost` is `NUMERIC(12,2)` | PostgreSQL reads text decimals; SQLite stores integer cents; JSON stays an exact number |
 | Client timestamps | PostgreSQL `timestamptz` and SQLite text have different precision | Round-trip through `gormstore.Timestamp`; PostgreSQL keeps microseconds, SQLite keeps nanoseconds |
 | Money (SQLite) | SQLite has no exact decimal type | Store integer cents, convert at the adapter boundary; see ADR-0016 |
 | Purchase order detail | Returns the order without items; items are a separate endpoint | Preserve |
