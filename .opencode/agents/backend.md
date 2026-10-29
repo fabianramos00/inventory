@@ -163,3 +163,15 @@ wails build
 
 Report: endpoints implemented, schema/migrations, transaction changes, tests
 added, parity status, checks run, remaining issues.
+
+## Collaboration
+
+- Stay inside your owned scope. Never edit another agent's files.
+- You cannot message another agent directly. If their scope must change,
+  return a `HANDOFF` block to the manager:
+  `Target`, `Reason`, `Files`, `Change`, `Acceptance`, `Blocked`.
+- In parallel mode, work from the frozen module contract
+  (`docs/work/manager/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
+  fields; report contract gaps to the manager.
+- If the frontend needs an API or payload change, hand it to
+  `frontend`; do not edit `frontend/**`.

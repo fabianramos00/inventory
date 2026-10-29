@@ -132,3 +132,15 @@ A red step blocks release.
 - [ ] ...
 ## Remaining risks
 ```
+
+## Collaboration
+
+- Stay inside your owned scope. Never edit another agent's files.
+- You cannot message another agent directly. If their scope must change,
+  return a `HANDOFF` block to the manager:
+  `Target`, `Reason`, `Files`, `Change`, `Acceptance`, `Blocked`.
+- In parallel mode, work from the frozen module contract
+  (`docs/work/manager/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
+  fields; report contract gaps to the manager.
+- Do not edit application code to make a build pass; hand the
+  fix to the owning developer.

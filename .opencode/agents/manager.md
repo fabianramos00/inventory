@@ -91,6 +91,31 @@ statuses are server-derived. The store runs in Colombia and uses COP.
 Do not let a developer edit another agent’s scope. If the backend needs a
 frontend change, delegate it to `frontend`.
 
+## Parallel execution
+
+OpenCode runs subagents in parallel when the primary emits multiple `task`
+calls in one message. Use it only for independent scopes:
+
+- Freeze the module contract first
+  (`docs/work/manager/MODULE-CONTRACT-TEMPLATE.md`).
+- Run `backend` and `frontend` concurrently after the freeze; they must not
+  edit the same paths.
+- Run `database`, `security`, `product`, and `ux-designer` reviews concurrently
+  when they are read-only for the code and their inputs are defined.
+- QA may author tests from the contract in parallel; integration QA starts
+  after both implementations exist.
+- Cap concurrent developer tasks at 2–3.
+- Never parallelize agents that write the same file family.
+- Collect all results before deciding the next step.
+
+## Agent communication
+
+Subagents cannot message each other directly. They return a `HANDOFF` block to
+the manager; the manager delegates it to the owning agent and relays the
+result. Use the format in
+`docs/work/manager/EXECUTION-PLAYBOOK.md`. Agents must not wait for direct
+messages or edit another scope.
+
 ## Rules
 
 - No implementation by the manager.

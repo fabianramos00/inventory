@@ -196,6 +196,40 @@ repositories.
 Database schema changes are proposed by `database` and implemented by
 `backend`. Security findings are implemented by the owning developer.
 
+## Parallel execution and handoffs
+
+The manager may run independent subagent tasks in parallel by emitting multiple
+`task` calls in one message. Parallel work is allowed only when file scopes do
+not overlap and the module contract is frozen.
+
+- Freeze the contract first using
+  `docs/work/manager/MODULE-CONTRACT-TEMPLATE.md`.
+- `backend` and `frontend` may run concurrently after the freeze; neither edits
+  the other's scope.
+- Read-only reviews (`database`, `security`, `product`, `ux-designer`) may run
+  alongside implementation when their inputs are defined.
+- `qa` may author tests from the contract in parallel; integration verification
+  starts after both implementations exist.
+- Cap concurrent developer tasks at 2–3. Never parallelize agents that write
+  the same file family.
+
+Subagents do not message each other directly. If another scope must change,
+return a `HANDOFF` block to the manager:
+
+```text
+HANDOFF
+Target: frontend | backend | devops | qa | database | security | product | ux-designer
+Reason: <one sentence>
+Files: <exact paths>
+Change: <what must change>
+Acceptance: <how to verify>
+Blocked: yes | no
+```
+
+The manager delegates the handoff to the owning agent and relays the result.
+Subagents must not wait for direct messages and must not edit another agent's
+scope.
+
 ## Definition of Done
 
 A task is done only when:
