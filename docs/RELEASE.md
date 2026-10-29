@@ -157,6 +157,29 @@ service/database setup is reliable in CI.
 scripts/verify.sh
 ```
 
+## Local release verification
+
+Session 3 verification, 2026-10-29 (Linux amd64, WebKitGTK 4.1):
+
+- Wails build: `pnpm install --frozen-lockfile && pnpm build` followed by
+  `wails build -tags webkit2_41` succeeded and produced
+  `build/bin/inventory-desktop`. The binary stays ignored and is not committed.
+- Backup/restore: `pg_dump` of `inventory_desktop_test` from the
+  `inventory-postgres-1` container restored into a throwaway
+  `inventory_desktop_restore_test` database. The restored database had the
+  same 16 public tables and matching representative rows (`users`,
+  `products`, `goose_db_version`); the restore database was dropped afterwards.
+- Full local suite: `scripts/verify.sh` with `INVENTORY_TEST_DATABASE_URL`
+  pointed at `inventory_desktop_test` passed gofmt, `go vet`, Go unit tests,
+  PostgreSQL tests, Vitest (197 tests), ESLint (warnings only), the frontend
+  build, and `git diff --check`.
+
+Blocked until credentials or other OS hosts are available:
+
+- Windows and macOS Wails builds and installer packaging.
+- Authenticode signing, Developer ID signing, and notarization.
+- Published SHA-256 checksums and the manual smoke test on Windows and macOS.
+
 ## Release checklist
 
 - [ ] Version bumped in `wails.json`.
