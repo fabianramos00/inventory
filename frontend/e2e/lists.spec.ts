@@ -60,7 +60,7 @@ function inventoryRoutes(): Routes {
       const items = search
         ? [{ ...product(99), name: `Ana ${search}` }]
         : Array.from({ length: 10 }, (_, index) => product(skip + index + 1))
-      return { body: { items, total: 30, page: skip / 10 + 1, size: 10, pages: 3 } }
+      return { body: { items, has_next: skip + 10 < 30, skip, limit: 10 } }
     },
   }
 }
@@ -101,13 +101,13 @@ const cases = [
   },
   {
     name: 'Inventario',
-    path: '/inventory',
+    path: '/#/inventory',
     listPath: '/api/v1/inventory/products',
     placeholder: 'Nombre o ID...',
     firstRow: 'Producto 1',
     secondRow: 'Producto 11',
-    pageTwo: 'Página 2 de 3',
-    pageOne: 'Página 1 de 3',
+    pageTwo: 'Página 2',
+    pageOne: 'Página 1',
     routes: inventoryRoutes(),
   },
 ]

@@ -1,5 +1,5 @@
 import api from '@/lib/axios'
-import type { PaginatedResponse, Product, CreateProductInput, FilterOption, InventoryStatsData } from '@/types'
+import type { PaginatedResponse, CursorPaginatedResponse, Product, CreateProductInput, FilterOption, InventoryStatsData } from '@/types'
 
 export interface ProductsParams {
   skip?: number
@@ -19,7 +19,7 @@ export interface CatalogParams {
 
 export const inventoryApi = {
   getProducts: (params?: ProductsParams) =>
-    api.get<PaginatedResponse<Product>>('/inventory/products', { params }),
+    api.get<CursorPaginatedResponse<Product>>('/inventory/products', { params }),
 
   getProduct: (id: number) =>
     api.get<Product>(`/inventory/products/${id}`),

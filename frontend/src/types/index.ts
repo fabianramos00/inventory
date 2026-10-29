@@ -32,20 +32,25 @@ export interface Product {
   id: number
   name: string
   sku: string
-  category: Category
-  stock: number
-  min_stock: number
-  unit: string
+  category: Category | null
   price: number
   // Extended fields returned by the API
   stock_quantity?: number
   low_stock_threshold?: number
   size_value?: string | null
+  brand_id?: number
+  category_id?: number
+  material_id?: number
+  measurement_unit_id?: number | null
   measurement_unit?: { id: number; name: string; abbreviation: string } | null
   material?: { id: number; name: string } | null
   brand?: { id: number; name: string } | null
   cost?: number
   sale_price?: number
+  // Legacy aliases kept for compatibility with older payloads
+  stock?: number
+  min_stock?: number
+  unit?: string
 }
 
 // ─── Provider / Supplier ─────────────────────────────────────────────────────
@@ -200,7 +205,7 @@ export interface CreateProductInput {
   price: number
   cost: number
   stock_quantity: number
-  min_stock_quantity: number
+  low_stock_threshold: number
 }
 
 // ─── InventoryStats ───────────────────────────────────────────────────────────────

@@ -45,17 +45,17 @@ const ENTITY_FIELDS: Record<EntityType, FieldConfig[]> = {
 }
 
 const productSchema = z.object({
-  name: z.string().min(1, 'Nombre es requerido').max(255),
-  sku: z.string().max(100).optional(),
+  name: z.string().min(1, 'Nombre es requerido').max(150, 'Nombre debe tener máximo 150 caracteres'),
+  sku: z.string().max(100, 'SKU debe tener máximo 100 caracteres').optional(),
   brand_id: z.number().int().min(1, 'Marca es requerida'),
   category_id: z.number().int().min(1, 'Categoría es requerida'),
   material_id: z.number().int().min(1, 'Material es requerido'),
-  size_value: z.string().nullable().optional(),
+  size_value: z.string().max(20, 'Tamaño debe tener máximo 20 caracteres').nullable().optional(),
   measurement_unit_id: z.number().nullable().optional(),
-  price: z.number().min(0, 'Precio debe ser mayor a 0'),
-  cost: z.number().min(0, 'Costo debe ser mayor a 0'),
-  stock_quantity: z.number().int().min(0, 'Cantidad debe ser mayor a 0'),
-  min_stock_quantity: z.number().int().min(0, 'Cantidad mínima debe ser mayor a 0'),
+  price: z.number().positive('Precio debe ser mayor a 0'),
+  cost: z.number().positive('Costo debe ser mayor a 0'),
+  stock_quantity: z.number().int().min(0, 'Cantidad no puede ser negativa'),
+  min_stock_quantity: z.number().int().min(0, 'Cantidad mínima no puede ser negativa'),
 })
 
 type ProductFormInputs = z.infer<typeof productSchema>
@@ -63,6 +63,10 @@ type ProductFormInputs = z.infer<typeof productSchema>
 function getProductStatus(stock: number, threshold: number) {
   if (stock === 0) return 'out_of_stock'
   return stock <= threshold ? 'low_stock' : 'in_stock'
+}
+
+function withOption(options: FilterOption[], option: FilterOption) {
+  return options.some(o => o.id === option.id) ? options : [...options, option]
 }
 
 export default function ProductForm() {
@@ -112,14 +116,20 @@ export default function ProductForm() {
     if (p.category) {
       setCategoryInitialOptions([{ id: p.category.id, name: p.category.name }])
       setValue('category_id', p.category.id)
+    } else if (p.category_id != null) {
+      setValue('category_id', p.category_id)
     }
     if (p.brand) {
       setBrandInitialOptions([{ id: p.brand.id, name: p.brand.name }])
       setValue('brand_id', p.brand.id)
+    } else if (p.brand_id != null) {
+      setValue('brand_id', p.brand_id)
     }
     if (p.material) {
       setMaterialInitialOptions([{ id: p.material.id, name: p.material.name }])
       setValue('material_id', p.material.id)
+    } else if (p.material_id != null) {
+      setValue('material_id', p.material_id)
     }
     setValue('size_value', p.size_value ?? undefined)
     if (p.measurement_unit) {
@@ -129,6 +139,8 @@ export default function ProductForm() {
         abbreviation: p.measurement_unit.abbreviation,
       }])
       setValue('measurement_unit_id', p.measurement_unit.id)
+    } else if (p.measurement_unit_id != null) {
+      setValue('measurement_unit_id', p.measurement_unit_id)
     }
     setValue('price', p.price ?? 0)
     setValue('cost', p.cost ?? 0)
@@ -210,7 +222,7 @@ export default function ProductForm() {
         brand_id: rest.brand_id,
         category_id: rest.category_id,
         material_id: rest.material_id,
-        min_stock_quantity: rest.min_stock_quantity,
+        low_stock_threshold: rest.min_stock_quantity,
         cost: rest.cost,
         price: price,
         stock_quantity: rest.stock_quantity,
@@ -227,6 +239,7 @@ export default function ProductForm() {
         navigate('/inventory', { state: { successMessage: 'Producto creado exitosamente' } })
       } else {
         const response = await inventoryApi.updateProduct(Number(id), { ...payload, sku })
+        queryClient.invalidateQueries({ queryKey: ['product', Number(id)] })
         queryClient.invalidateQueries({ queryKey: ['products'] })
         queryClient.invalidateQueries({ queryKey: ['inventoryStats'] })
         queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
@@ -393,7 +406,10 @@ export default function ProductForm() {
                       inventoryApi.getCategories({ search: search || undefined, skip: 0, limit: 10 })
                         .then(r => r.data.items || [])
                     }
-                    onSelect={(opt) => setValue('category_id', opt.id, { shouldValidate: true })}
+                    onSelect={(opt) => {
+                      setCategoryInitialOptions(prev => withOption(prev, opt))
+                      setValue('category_id', opt.id, { shouldValidate: true })
+                    }}
                     onAddNew={() => setActiveModal('category')}
                     initialOptions={categoryInitialOptions}
                     error={errors.category_id?.message}
@@ -418,7 +434,10 @@ export default function ProductForm() {
                       inventoryApi.getBrands({ search: search || undefined, skip: 0, limit: 10 })
                         .then(r => r.data.items || [])
                     }
-                    onSelect={(opt) => setValue('brand_id', opt.id, { shouldValidate: true })}
+                    onSelect={(opt) => {
+                      setBrandInitialOptions(prev => withOption(prev, opt))
+                      setValue('brand_id', opt.id, { shouldValidate: true })
+                    }}
                     onAddNew={() => setActiveModal('brand')}
                     initialOptions={brandInitialOptions}
                     error={errors.brand_id?.message}
@@ -443,7 +462,10 @@ export default function ProductForm() {
                       inventoryApi.getMaterials({ search: search || undefined, skip: 0, limit: 10 })
                         .then(r => r.data.items || [])
                     }
-                    onSelect={(opt) => setValue('material_id', opt.id, { shouldValidate: true })}
+                    onSelect={(opt) => {
+                      setMaterialInitialOptions(prev => withOption(prev, opt))
+                      setValue('material_id', opt.id, { shouldValidate: true })
+                    }}
                     onAddNew={() => setActiveModal('material')}
                     initialOptions={materialInitialOptions}
                     error={errors.material_id?.message}
@@ -464,6 +486,7 @@ export default function ProductForm() {
                     placeholder="ej: 10, 5.5, 12 x 5"
                     {...register('size_value')}
                   />
+                  {errors.size_value && <p className={styles.errorMessage}>{errors.size_value.message}</p>}
                 </dd>
               ) : (
                 <dd className={`${styles.specValue} ${styles.mono}`}>{productData?.size_value || '-'}</dd>
@@ -484,7 +507,10 @@ export default function ProductForm() {
                       inventoryApi.getMeasurementUnits({ search: search || undefined, skip: 0, limit: 10 })
                         .then(r => r.data.items || [])
                     }
-                    onSelect={(opt) => setValue('measurement_unit_id', opt.id, { shouldValidate: true })}
+                    onSelect={(opt) => {
+                      setMeasurementUnitInitialOptions(prev => withOption(prev, opt))
+                      setValue('measurement_unit_id', opt.id, { shouldValidate: true })
+                    }}
                     onAddNew={() => setActiveModal('measurementUnit')}
                     formatLabel={(opt) => opt.abbreviation ? `${opt.abbreviation} — ${opt.name}` : opt.name}
                     initialOptions={measurementUnitInitialOptions}

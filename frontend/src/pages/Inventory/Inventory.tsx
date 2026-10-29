@@ -127,7 +127,7 @@ export default function Inventory() {
 
   const debouncedSearch = useDebouncedValue(search, 300, () => setPage(1))
 
-  const { products, total, totalPages, stats, isLoading, isFetching, isError, refetch, deleteMutation } = useInventory({
+  const { products, hasNext, stats, isLoading, isFetching, isError, refetch, deleteMutation } = useInventory({
     page,
     search: debouncedSearch,
     filters: {
@@ -287,8 +287,7 @@ export default function Inventory() {
             ) : undefined}
             minWidth="760px"
             currentPage={page}
-            totalPages={totalPages}
-            totalItems={total}
+            hasNext={hasNext}
             skeletonRows={5}
             skeletonColumns={7}
             stickyFirstColumn
@@ -336,14 +335,14 @@ export default function Inventory() {
                     </td>
                     <td className={styles.colBrand}><span className={styles.brandCell}>{p.brand?.name || '-'}</span></td>
                     <td className={`${styles.colStock} num`}>
-                      <span className={styles.stockValue}>{formatNumber(stock)} <span className={styles.stockUnit}>{p.unit}</span></span>
+                      <span className={styles.stockValue}>{formatNumber(stock)} <span className={styles.stockUnit}>{unit}</span></span>
                       <StockMeter
                         value={stock}
                         max={threshold || stock || 1}
                         tone={status === 'out_of_stock' ? 'danger' : status === 'low_stock' ? 'warning' : 'neutral'}
                         label={`${p.name}: ${stock} ${unit} de mínimo ${threshold}`}
                       />
-                      <span className={styles.minText}>Mín. {formatNumber(threshold)} {p.unit}</span>
+                      <span className={styles.minText}>Mín. {formatNumber(threshold)} {unit}</span>
                     </td>
                     <td className={`${styles.colPrice} num`}>
                       <span className={styles.priceCell}>{formatCurrency(p.price || 0)}</span>

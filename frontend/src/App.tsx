@@ -10,6 +10,8 @@ import Home from '@/pages/Home/Home'
 import Login from '@/pages/Login/Login'
 
 const Users = lazy(() => import('@/pages/Users/Users'))
+const Inventory = lazy(() => import('@/pages/Inventory/Inventory'))
+const ProductForm = lazy(() => import('@/pages/ProductForm/ProductForm'))
 
 export default function App() {
   return (
@@ -23,6 +25,9 @@ export default function App() {
               <Route element={<PrivateRoute />}>
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Home />} />
+                  <Route path="/inventory" element={<Inventory />} />
+                  <Route path="/inventory/create" element={<ProductForm />} />
+                  <Route path="/inventory/product/:id" element={<ProductForm />} />
                 </Route>
                 <Route element={<SuperuserRoute />}>
                   <Route element={<AppLayout />}>

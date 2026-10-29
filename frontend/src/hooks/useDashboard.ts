@@ -40,9 +40,19 @@ export function useDashboard() {
     queryKey: ['dashboardLowStock'],
     queryFn: async () => {
       const response = await inventoryApi.getProducts({ skip: 0, limit: PAGE_LIMIT, stock_status: 'low_stock' })
-      return { items: response.data.items, total: response.data.total ?? response.data.items.length }
+      return { items: response.data.items, total: response.data.items.length }
     },
   })
+
+  const stats = useQuery({
+    queryKey: ['inventoryStats'],
+    queryFn: async () => {
+      const response = await inventoryApi.getStats()
+      return response.data
+    },
+  })
+
+  const lowStockTotal = stats.data?.low_stock_count ?? lowStock.data?.total
 
   return {
     summary: summary.data,
@@ -50,8 +60,8 @@ export function useDashboard() {
     topProducts: topProducts.data,
     orderStatus: orderStatus.data,
     lowStock: lowStock.data?.items,
-    lowStockTotal: lowStock.data?.total,
-    isLoading: summary.isLoading || trend.isLoading || topProducts.isLoading || orderStatus.isLoading || lowStock.isLoading,
+    lowStockTotal,
+    isLoading: summary.isLoading || trend.isLoading || topProducts.isLoading || orderStatus.isLoading || lowStock.isLoading || stats.isLoading,
     errors: {
       summary: summary.isError,
       trend: trend.isError,
@@ -64,7 +74,10 @@ export function useDashboard() {
       trend: trend.refetch,
       topProducts: topProducts.refetch,
       orderStatus: orderStatus.refetch,
-      lowStock: lowStock.refetch,
+      lowStock: () => {
+        lowStock.refetch()
+        stats.refetch()
+      },
     },
   }
 }

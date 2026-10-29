@@ -50,8 +50,7 @@ export function useInventory({ page, search, filters }: UseInventoryParams) {
 
   return {
     products: data?.items ?? [],
-    total: data?.total ?? 0,
-    totalPages: data?.pages ?? 1,
+    hasNext: data?.has_next ?? false,
     stats: statsData ? {
       totalProducts: statsData.total_products || 0,
       totalStock: statsData.total_stock || 0,
