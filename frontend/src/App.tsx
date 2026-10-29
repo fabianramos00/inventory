@@ -6,6 +6,7 @@ import PrivateRoute from '@/components/PrivateRoute'
 import SuperuserRoute from '@/components/SuperuserRoute'
 import AppLayout from '@/components/layout/AppLayout'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import OfflineDatabaseBanner from '@/components/OfflineDatabaseBanner/OfflineDatabaseBanner'
 import Login from '@/pages/Login/Login'
 
 const Dashboard = lazy(() => import('@/pages/Dashboard/Dashboard'))
@@ -22,6 +23,7 @@ const Providers = lazy(() => import('@/pages/Providers/Providers'))
 export default function App() {
   return (
     <AuthProvider>
+      <OfflineDatabaseBanner />
       <HashRouter>
         <AuthExpiredListener />
         <ErrorBoundary>

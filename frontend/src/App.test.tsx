@@ -1,7 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { fetchHealth } from '@/lib/api/health'
 
+vi.mock('@/lib/api/health', () => ({ fetchHealth: vi.fn() }))
 vi.mock('@/pages/Login/Login', () => ({ default: () => <div>login-page</div> }))
 vi.mock('@/pages/Dashboard/Dashboard', () => ({ default: () => <div>dashboard-page</div> }))
 vi.mock('@/pages/Inventory/Inventory', () => ({ default: () => <div>inventory-page</div> }))
@@ -34,6 +36,8 @@ describe('App routes', () => {
   beforeEach(() => {
     localStorage.clear()
     window.location.hash = ''
+    vi.mocked(fetchHealth).mockReset()
+    vi.mocked(fetchHealth).mockResolvedValue({ status: 'ok', database: 'postgres' })
   })
 
   it.each([
@@ -141,5 +145,40 @@ describe('App routes', () => {
     expect(await screen.findByText('providers-page')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Proveedores' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBeNull()
+  })
+})
+
+describe('offline database banner', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    window.location.hash = ''
+    vi.mocked(fetchHealth).mockReset()
+  })
+
+  it('is visible on the login screen when the database is sqlite', async () => {
+    vi.mocked(fetchHealth).mockResolvedValue({ status: 'ok', database: 'sqlite' })
+    renderAt('#/login')
+
+    const banner = await screen.findByRole('status')
+    expect(banner.textContent).toContain('no se sincronizan')
+    expect(screen.getByText('login-page')).toBeTruthy()
+  })
+
+  it('is absent when the database is postgres', async () => {
+    vi.mocked(fetchHealth).mockResolvedValue({ status: 'ok', database: 'postgres' })
+    renderAt('#/login')
+
+    expect(await screen.findByText('login-page')).toBeTruthy()
+    await waitFor(() => expect(fetchHealth).toHaveBeenCalled())
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('renders the app without a banner when health fails', async () => {
+    vi.mocked(fetchHealth).mockRejectedValue(new Error('health unavailable'))
+    renderAt('#/login')
+
+    expect(await screen.findByText('login-page')).toBeTruthy()
+    await waitFor(() => expect(fetchHealth).toHaveBeenCalled())
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })

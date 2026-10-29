@@ -101,6 +101,22 @@ Current routes are `/#/login`, the protected `/#/` Dashboard, `/#/inventory`,
 until later phases restore the full table from
 [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Playwright specs must use hash URLs.
 
+### Health check and offline banner
+
+- `GET /healthz` is unauthenticated and returns
+  `{ status: "ok", database: "sqlite" | "postgres" }`.
+- `src/lib/api/health.ts` derives the root URL by stripping the `/api/v1`
+  suffix from `getApiBaseUrl()`, then requests `/healthz` before login. It uses
+  the plain axios client so no bearer token or refresh flow is involved.
+- `OfflineDatabaseBanner` renders inside `App` above the router, so it is
+  visible on `/#/login` and on every protected route. It renders only when
+  `database === "sqlite"`; it renders nothing for `postgres` or when the health
+  request fails. Health failure never blocks startup.
+- The banner is non-dismissable and uses `role="status"` without taking focus.
+  Its Spanish copy explains that data is stored locally on this computer, is
+  not synchronized, and the local file is not encrypted; users must protect
+  the equipment and keep backups.
+
 ### Browser assumptions to review
 
 | Assumption | Desktop action |
