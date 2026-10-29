@@ -430,9 +430,74 @@ Supplier catalog shape:
   positive.
 - Missing catalog: `404 Supplier catalog not found`.
 
-Creating an order requires at least one item. One item per product per order.
-`status` transitions to `received` increment stock and upsert the supplier
-catalog.
+#### Purchase orders
+
+Order shape:
+
+```json
+{
+  "id": 1,
+  "provider_id": 3,
+  "status": "sent",
+  "payment_status": "pending",
+  "order_date": "2026-10-24T15:04:05Z",
+  "total_amount": 42.5,
+  "provider": {
+    "id": 3,
+    "name": "Distribuidora Metálica",
+    "contact_info": "Juan Pérez",
+    "email": "ventas@example.com",
+    "phone": "3001234567"
+  }
+}
+```
+
+Item shape:
+
+```json
+{
+  "id": 1,
+  "order_id": 1,
+  "product_id": 3,
+  "quantity": 2,
+  "unit_cost": 10.25,
+  "subtotal": 20.5,
+  "supplier_sku": "PROV-001",
+  "product_name": "Martillo",
+  "product_sku": "SKU-1234ABCD",
+  "brand_name": "Truper",
+  "material_name": "Acero",
+  "category_name": "Herramientas"
+}
+```
+
+- `created_by` is never returned; `created_by_id` comes from the token on
+  create. `order_date` is set at create and is RFC 3339 UTC.
+- `total_amount` is the sum of item subtotals, calculated server-side.
+- Statuses are `pending`, `sent`, `received`, `cancelled`; payment statuses are
+  `pending`, `paid`.
+- `GET /supply-chain/purchase-orders` returns `{items, has_next, skip, limit}`,
+  ordered `id DESC`, with the shared 100/200 rules. Filters: `provider_id`,
+  `status`, `payment_status`, `min_date`, `max_date`; dates are RFC 3339,
+  inclusive, and compared to `order_date`. Invalid dates or enums are `422`.
+- Create requires an existing provider (`400 Provider with id X not found`),
+  at least one item, one item per product, `quantity > 0`,
+  `unit_cost >= 0`, and `supplier_sku` of at most 100 characters. A missing
+  product is `404 Product with id X not found`.
+- Creating directly with `status: received` does **not** apply stock or
+  supplier catalogs; only the update transition does (legacy behavior).
+- Update is partial over `provider_id`, `status`, `payment_status`; explicit
+  null is `422`. Changing a non-`received` order to `received` locks the item
+  products in ascending id order, increments stock by each item quantity, and
+  upserts `supplier_catalogs` with cost, whole-day lead time since
+  `order_date`, and the supplier SKU when non-empty. An order already
+  `received` changes neither stock nor catalogs.
+- Delete removes items and the order and never reverses received stock.
+- `GET /supply-chain/purchase-orders/{id}/items` verifies the order, orders
+  `id ASC`, and uses the shared pagination rules. Item add/update/delete
+  recalculate the order total. Duplicate products are `400`; a missing item is
+  `404 Order item not found`. Item mutations on a received order are allowed
+  and do not adjust stock or catalogs (legacy behavior).
 
 ### Dashboard
 

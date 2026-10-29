@@ -20,6 +20,7 @@ type Deps struct {
 	Sales            inbound.SaleUseCase
 	Providers        inbound.ProviderUseCase
 	SupplierCatalogs inbound.SupplierCatalogUseCase
+	PurchaseOrders   inbound.PurchaseOrderUseCase
 	Logger           *slog.Logger
 	Backend          string
 	DevMode          bool
@@ -44,6 +45,7 @@ func NewRouter(deps Deps) http.Handler {
 	salesHandler := NewSaleHandler(deps.Sales, logger)
 	providersHandler := NewProviderHandler(deps.Providers, logger)
 	supplierCatalogsHandler := NewSupplierCatalogHandler(deps.SupplierCatalogs, logger)
+	purchaseOrdersHandler := NewPurchaseOrderHandler(deps.PurchaseOrders, logger)
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "database": backend})
@@ -82,6 +84,16 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/supply-chain/providers/{id}", providersHandler.Delete)
 	mux.HandleFunc("GET /api/v1/supply-chain/supplier-catalogs", supplierCatalogsHandler.List)
 	mux.HandleFunc("GET /api/v1/supply-chain/supplier-catalogs/{id}", supplierCatalogsHandler.Get)
+
+	mux.HandleFunc("GET /api/v1/supply-chain/purchase-orders", purchaseOrdersHandler.List)
+	mux.HandleFunc("POST /api/v1/supply-chain/purchase-orders", purchaseOrdersHandler.Create)
+	mux.HandleFunc("GET /api/v1/supply-chain/purchase-orders/{id}", purchaseOrdersHandler.Get)
+	mux.HandleFunc("PUT /api/v1/supply-chain/purchase-orders/{id}", purchaseOrdersHandler.Update)
+	mux.HandleFunc("DELETE /api/v1/supply-chain/purchase-orders/{id}", purchaseOrdersHandler.Delete)
+	mux.HandleFunc("GET /api/v1/supply-chain/purchase-orders/{id}/items", purchaseOrdersHandler.ListItems)
+	mux.HandleFunc("POST /api/v1/supply-chain/purchase-orders/{id}/items", purchaseOrdersHandler.AddItem)
+	mux.HandleFunc("PUT /api/v1/supply-chain/purchase-orders/{id}/items/{item_id}", purchaseOrdersHandler.UpdateItem)
+	mux.HandleFunc("DELETE /api/v1/supply-chain/purchase-orders/{id}/items/{item_id}", purchaseOrdersHandler.DeleteItem)
 
 	mux.HandleFunc("GET /api/v1/sales", salesHandler.List)
 	mux.HandleFunc("POST /api/v1/sales", salesHandler.Create)

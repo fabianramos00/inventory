@@ -66,6 +66,10 @@ func (u *fakeUnitOfWork) WithinTx(ctx context.Context, fn func(context.Context, 
 		Products: &fakeProductRepo{env: u.env},
 		Clients:  &fakeClientRepo{env: u.env},
 		Stock:    &fakeStockRepo{env: u.env},
+		// Sale use cases never touch the purchase-order stores.
+		Orders:    nil,
+		Catalogs:  nil,
+		Providers: nil,
 	})
 	if err != nil {
 		u.env.restore(snapshot)

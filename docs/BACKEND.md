@@ -36,6 +36,7 @@ internal/
     product.go          product validation, SKU generation, and use cases
     client.go           client validation and use cases
     sale.go             sale totals, statuses, stock, and item mutations
+    purchase_order.go   order totals, receiving, catalog upsert, item mutations
     inventory.go
     supply_chain.go
     dashboard.go
@@ -47,11 +48,13 @@ internal/
       product.go        ProductUseCase, filters, and partial-update inputs
       client.go         ClientUseCase, list filter, and partial-update inputs
       sale.go           SaleUseCase, filters, and create/update/item inputs
+      purchase_order.go PurchaseOrderUseCase, filters, and item inputs
       users.go          UserUseCase, UserList, create/update inputs
     outbound/
       catalog.go        CatalogRepository and ProductRepository interfaces
       client.go         ClientRepository interface
       sale.go           SaleRepository interface
+      purchase_order.go PurchaseOrderRepository interface
       stock.go          StockRepository interface
       uow.go            UnitOfWork and TxRepos
       users.go          UserRepository interface
@@ -62,6 +65,7 @@ internal/
   domain/
     catalog.go          Category, Brand, Material, MeasurementUnit, Product
     client.go           Client
+    purchase_order.go   PurchaseOrder and OrderItem
     user.go             User, RefreshToken (no JSON tags)
     errors.go           domain sentinel errors (not found, conflict, validation, auth)
   adapters/
@@ -75,6 +79,7 @@ internal/
         product.go      product CRUD, stats handlers, and money JSON DTOs
         client.go       client CRUD handlers and request/response DTOs
         sale.go         sale/item handlers, filters, and response DTOs
+        purchase_order.go order/item handlers and response DTOs
         user_dto.go     shared user response DTO and mapper
         users.go        user CRUD handlers and superuser guard
     outbound/
@@ -85,6 +90,7 @@ internal/
           product.go    product queries and money normalization
           client.go     client queries and timestamp round-trip
           sale.go       sale/item queries, status mapping, money conversion
+          purchase_order.go order/item queries, status mapping, receiving lock
           stock.go      sorted locking and conditional stock deltas
           uow.go        transaction boundary and tx-bound stores
           user_model.go
@@ -363,6 +369,43 @@ Never log passwords, tokens, authorization headers, or full request bodies.
   integer number of days.
 - Missing rows map to `404 Supplier catalog not found`.
 
+## Purchase orders
+
+- Endpoints under `/api/v1/supply-chain/purchase-orders`: list, create, get,
+  update, delete, item list/add/update/delete. All require an active user.
+- The order response is `{id, provider_id, status, payment_status, order_date,
+  total_amount, provider}`; `created_by` is never returned. `created_by_id`
+  comes from the bearer token on create. `order_date` is set once at create and
+  serialized as RFC 3339 UTC.
+- `total_amount` is the sum of item subtotals, calculated by the service.
+  Money uses `decimal.Decimal`; PostgreSQL stores `NUMERIC(12,2)` and SQLite
+  stores integer cents. Statuses are lowercase in the API and uppercase in the
+  database.
+- Lists return `{items, has_next, skip, limit}`, order `id DESC`, and share the
+  100/200 pagination rules. Filters: `provider_id`, `status`,
+  `payment_status`, `min_date`, `max_date` (RFC 3339, inclusive, compared to
+  `order_date`). Invalid dates or enums are `422`.
+- Create requires an existing provider (`400 Provider with id X not found`),
+  at least one item, one item per product, `quantity > 0`,
+  `unit_cost >= 0`, and a supplier SKU of at most 100 characters. Missing
+  products are `404 Product with id X not found`. Creating directly with
+  `status: received` stores the order but does **not** apply stock or catalogs;
+  only the update transition does (legacy behavior).
+- Update is partial over `provider_id`, `status`, and `payment_status`.
+  Explicit nulls are `422`. Transitioning from any non-`received` status to
+  `received` locks the item products in ascending id order, increments stock by
+  each item quantity, and upserts `supplier_catalogs` by `(product_id,
+  provider_id)` with the item cost, the whole-day lead time since `order_date`,
+  and the supplier SKU when non-empty. The transition is idempotent: an order
+  already `received` changes neither stock nor catalogs.
+- Deleting an order deletes its items then the order and never reverses
+  received stock.
+- Item list responses are ordered `id ASC` and include product name/SKU plus
+  brand, material, and category names. Item mutations recalculate the order
+  total. Duplicate products are `400`; a missing item is `404 Order item not
+  found`. On received orders item mutations are allowed and do not adjust stock
+  or catalogs (legacy behavior).
+
 ## Sales
 
 - Endpoints under `/api/v1/sales`: list, create, stats, get, update, delete,
@@ -396,8 +439,8 @@ Never log passwords, tokens, authorization headers, or full request bodies.
 ## Transactions and stock
 
 Services own mutations through `outbound.UnitOfWork.WithinTx`, which provides
-`outbound.TxRepos` (`Sales`, `Products`, `Clients`, `Stock`). Repositories do
-not start nested transactions.
+`outbound.TxRepos` (`Sales`, `Products`, `Clients`, `Stock`, `Orders`,
+`Catalogs`, `Providers`). Repositories do not start nested transactions.
 
 Sale creation:
 
@@ -423,15 +466,22 @@ Order receiving:
 
 ```text
 BEGIN
-  lock order
+  SELECT ... FROM purchase_orders WHERE id = ? FOR UPDATE
+  reread status (another writer may have committed)
   if old status != received and new status == received:
+    load items
+    StockRepository.LockForUpdate(product ids sorted ascending)
+    verify every product exists
     for each item:
       increment product stock
       upsert supplier catalog (cost, lead time, supplier SKU)
+  update order status/provider/payment
 COMMIT
 ```
 
-Status and totals are derived on the server. Never trust client totals.
+The order row lock serializes concurrent receiving transitions, so the stock
+increment happens exactly once. Status and totals are derived on the server.
+Never trust client totals.
 
 ## Configuration
 
@@ -455,10 +505,10 @@ is used. Generate and persist `SECRET_KEY` when missing.
 - SQLite uses goose dialect `sqlite3`. Version 1 creates the auth tables
   (`users`, `refresh_tokens`); versions 2–6 create the Phase 3 business schema
   split by domain: catalog, identity, products, purchases, sales.
-- The catalog, product, client, provider, supplier catalog, and sales
-  repositories and handlers are implemented. Purchase orders and dashboard
-  remain pending. Do not translate business tables piecemeal; parity tests come
-  with the adapters.
+- The catalog, product, client, provider, supplier catalog, purchase order,
+  and sales repositories and handlers are implemented. Dashboard remains
+  pending. Do not translate business tables piecemeal; parity tests come with
+  the adapters.
 - Every migration is forward-only unless a rollback is safe and tested.
 - Run at startup when `AUTO_MIGRATE=true`; otherwise expose an explicit
   migrate command.

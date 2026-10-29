@@ -181,6 +181,10 @@ For each module:
 | Dashboard | `inventory_value` uses sale price, not cost | Preserve; document |
 | Dashboard | Top products sum delivered quantity but rank by subtotal | Preserve; document |
 | Orders | Deleting a received order does not reverse stock | Preserve until approved |
+| Orders | Creating an order directly with `status: received` does not apply stock or catalogs; only the update transition does | Preserve; document the gap |
+| Orders | Item add/update/delete on a received order does not adjust stock or catalogs | Preserve; document the gap |
+| Orders | Status and payment enums are lowercase in the API and uppercase in PostgreSQL/SQLite | Map explicitly in every read/filter/write |
+| Orders | Legacy order create validates the provider with `400` but relies on the product FK; Go validates products and returns `404` | Preserve the documented `404 Product with id X not found` |
 | Search wildcards | Legacy `ILIKE` treats `%` and `_` as wildcards | Escape/treat literally on both backends; see ADR-0015 |
 | Products | `sku` is generated when omitted | Preserve; retry generated collisions |
 | Products | `size_value` is a string | Preserve |

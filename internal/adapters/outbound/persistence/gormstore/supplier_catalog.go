@@ -80,6 +80,65 @@ func (s *supplierCatalogStore) List(ctx context.Context, skip, limit int, provid
 	return items, hasNext, nil
 }
 
+func (s *supplierCatalogStore) Upsert(ctx context.Context, catalog *domain.SupplierCatalog) error {
+	var (
+		id          int64
+		existingSKU sql.NullString
+	)
+	err := s.db.WithContext(ctx).Raw(
+		"SELECT id, supplier_sku FROM supplier_catalogs WHERE product_id = ? AND provider_id = ? ORDER BY id LIMIT 1",
+		catalog.ProductID, catalog.ProviderID,
+	).Row().Scan(&id, &existingSKU)
+	if errors.Is(err, sql.ErrNoRows) {
+		var newID int64
+		err := s.db.WithContext(ctx).Raw(
+			`INSERT INTO supplier_catalogs
+				(product_id, provider_id, supplier_sku, last_quoted_cost, lead_time)
+			 VALUES (?, ?, ?, ?, ?)
+			 RETURNING id`,
+			catalog.ProductID,
+			catalog.ProviderID,
+			nonEmptyString(catalog.SupplierSKU),
+			s.moneyToDB(catalog.LastQuotedCost),
+			catalog.LeadTime,
+		).Scan(&newID).Error
+		if err != nil {
+			return storeError("create supplier catalog", err)
+		}
+		catalog.ID = newID
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find supplier catalog: %w", err)
+	}
+
+	sku := catalog.SupplierSKU
+	if sku == nil || *sku == "" {
+		sku = nullString(existingSKU)
+	}
+	result := s.db.WithContext(ctx).Exec(
+		`UPDATE supplier_catalogs SET
+			supplier_sku = ?, last_quoted_cost = ?, lead_time = ?
+		 WHERE id = ?`,
+		sku,
+		s.moneyToDB(catalog.LastQuotedCost),
+		catalog.LeadTime,
+		id,
+	)
+	if result.Error != nil {
+		return storeError("update supplier catalog", result.Error)
+	}
+	catalog.ID = id
+	return nil
+}
+
+func nonEmptyString(value *string) *string {
+	if value == nil || *value == "" {
+		return nil
+	}
+	return value
+}
+
 func (s *supplierCatalogStore) selectSQL() string {
 	return `SELECT
 		sc.id, sc.product_id, sc.provider_id, sc.supplier_sku, ` + s.moneySQL("sc.last_quoted_cost") + `, sc.lead_time,
@@ -182,6 +241,14 @@ func (s *supplierCatalogStore) scanCatalog(row rowScanner) (*domain.SupplierCata
 		}
 	}
 	return catalog, nil
+}
+
+func (s *supplierCatalogStore) moneyToDB(value decimal.Decimal) any {
+	rounded := value.Round(2)
+	if s.sqlite {
+		return rounded.Shift(2).IntPart()
+	}
+	return rounded.StringFixed(2)
 }
 
 func (s *supplierCatalogStore) moneyFromDB(value any) (decimal.Decimal, error) {

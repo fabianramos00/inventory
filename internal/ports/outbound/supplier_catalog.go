@@ -9,4 +9,5 @@ import (
 type SupplierCatalogRepository interface {
 	List(ctx context.Context, skip, limit int, providerID, productID *int64) ([]*domain.SupplierCatalog, bool, error)
 	Get(ctx context.Context, id int64) (*domain.SupplierCatalog, error)
+	Upsert(ctx context.Context, catalog *domain.SupplierCatalog) error
 }

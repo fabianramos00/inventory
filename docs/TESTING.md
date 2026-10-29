@@ -173,8 +173,8 @@ SQLite now has the full Phase 3 business schema (`00001_auth.sql` plus
 `00002_catalog.sql` through `00006_sales.sql`). Go service, handler, and
 persistence contract coverage for catalog, products, clients, sales, providers,
 and supplier catalogs exists on both backends; the live legacy FastAPI fixture
-run is still pending for all of them. Purchase orders and dashboard remain
-pending.
+run is still pending for all of them. Purchase orders are implemented and
+contract-tested; dashboard remains pending.
 
 Refresh-token timestamps use `gormstore.Timestamp`, which writes a fixed-width
 UTC format (`2006-01-02T15:04:05.000000000Z`) so the lexicographic
@@ -340,6 +340,42 @@ and joined names, filters, pagination, stats, unit-of-work commit/rollback,
 and `ErrInsufficientStock`. `sale_concurrency_test.go` runs two PostgreSQL
 sales against one unit of stock and proves exactly one succeeds.
 
+### Purchase orders slice
+
+`internal/application/purchase_order_test.go` covers create validation (empty
+and duplicate items, quantity, negative cost, SKU length, enums, missing
+provider `400`, missing product `404`), decimal totals and derived statuses,
+`created_by` from the token, the create-with-`received` stock/catalog gap,
+receiving stock increments and catalog upsert (cost, whole-day lead time,
+non-empty supplier SKU), idempotent receiving, partial updates, item
+add/update/delete total recalculation, received-item mutations leaving stock
+and catalogs untouched, and delete not reversing received stock.
+
+`internal/adapters/inbound/httpapi/purchase_order_test.go` covers bearer auth
+on all nine routes, filters and date parsing/pass-through, invalid
+enums/dates/provider ids, response shape (including the provider relation and
+no `created_by`), token-derived `created_by_id`, presence-aware update fields,
+item response shape and ordering, and `400`/`404`/`422` error mapping. That
+test only checks the parsed `min_date`/`max_date` reach the service filter;
+database-level inclusive bounds are covered by
+`internal/adapters/inbound/httpapi/purchase_order_qa_test.go`.
+
+`internal/adapters/inbound/httpapi/purchase_order_integration_test.go` runs the
+real router, service, and GORM adapters on SQLite and PostgreSQL: order and
+item CRUD, money and RFC 3339 timestamps, filters, pagination, receiving stock
+and supplier catalog upsert through the read API, idempotent receiving,
+received-item mutations, delete without reversal, the create-received gap, and
+validation errors.
+
+`internal/adapters/outbound/persistence/purchase_order_contract_test.go` runs
+the same fixture on both backends: order/item CRUD, uppercase enum storage,
+money (PostgreSQL NUMERIC text, SQLite integer cents) and timestamp round-trip,
+provider relation, item joined names, item ordering and recalculated totals,
+filters, pagination, catalog upsert preserving an existing supplier SKU, and
+`domain.ErrNotFound`. `purchase_order_concurrency_test.go` runs two concurrent
+PostgreSQL transitions to `received` and proves one stock increment and one
+catalog row.
+
 ## Phase 2 auth coverage
 
 The following is covered now:
@@ -365,11 +401,11 @@ The following is covered now:
   environment so the password never appears in argv, and the test secret is
   at least 32 bytes.
 
-Deferred: purchase orders, dashboard, and the full 67-endpoint parity matrix.
-The Users CRUD slice, the catalog slice, the products slice, the clients
-slice, the providers slice, the supplier catalog slice, and the sales slice are
-covered now (application, handler, repository contract, and, for Users,
-full-stack E2E).
+Deferred: dashboard and the full 67-endpoint parity matrix. The Users CRUD
+slice, the catalog slice, the products slice, the clients slice, the providers
+slice, the supplier catalog slice, the sales slice, and the purchase order
+slice are covered now (application, handler, repository contract, integration,
+and, for Users, full-stack E2E).
 
 ## Frontend tests
 
@@ -464,7 +500,7 @@ fixtures in replay mode. Do not mark parity as passing without a run.
 | Sales | 10 | Backend contract covered; legacy FastAPI parity pending |
 | Supply chain — providers | 5 | Backend contract covered; legacy FastAPI parity pending |
 | Supply chain — supplier catalogs | 2 | Backend contract covered; legacy FastAPI parity pending |
-| Supply chain — purchase orders | 9 | Pending |
+| Supply chain — purchase orders | 9 | Backend contract covered; legacy FastAPI parity pending |
 | Dashboard | 4 | Pending |
 | **Total** | **67** | Pending |
 

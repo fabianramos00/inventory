@@ -3,10 +3,13 @@ package outbound
 import "context"
 
 type TxRepos struct {
-	Sales    SaleRepository
-	Products ProductRepository
-	Clients  ClientRepository
-	Stock    StockRepository
+	Sales     SaleRepository
+	Products  ProductRepository
+	Clients   ClientRepository
+	Stock     StockRepository
+	Orders    PurchaseOrderRepository
+	Catalogs  SupplierCatalogRepository
+	Providers ProviderRepository
 }
 
 type UnitOfWork interface {

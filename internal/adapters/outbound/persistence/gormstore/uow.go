@@ -21,10 +21,13 @@ func NewUnitOfWork(db *gorm.DB) outbound.UnitOfWork {
 func (u *unitOfWork) WithinTx(ctx context.Context, fn func(context.Context, outbound.TxRepos) error) error {
 	return u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return fn(ctx, outbound.TxRepos{
-			Sales:    NewSaleStore(tx),
-			Products: NewProductStore(tx),
-			Clients:  NewClientStore(tx),
-			Stock:    NewStockStore(tx),
+			Sales:     NewSaleStore(tx),
+			Products:  NewProductStore(tx),
+			Clients:   NewClientStore(tx),
+			Stock:     NewStockStore(tx),
+			Orders:    NewPurchaseOrderStore(tx),
+			Catalogs:  NewSupplierCatalogStore(tx),
+			Providers: NewProviderStore(tx),
 		})
 	})
 }

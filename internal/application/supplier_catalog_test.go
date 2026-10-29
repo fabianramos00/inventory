@@ -20,6 +20,8 @@ type fakeSupplierCatalogStore struct {
 	getResult    *domain.SupplierCatalog
 	getErr       error
 	getID        int64
+	upserted     []*domain.SupplierCatalog
+	upsertErr    error
 }
 
 func (f *fakeSupplierCatalogStore) List(_ context.Context, skip, limit int, providerID, productID *int64) ([]*domain.SupplierCatalog, bool, error) {
@@ -30,6 +32,11 @@ func (f *fakeSupplierCatalogStore) List(_ context.Context, skip, limit int, prov
 func (f *fakeSupplierCatalogStore) Get(_ context.Context, id int64) (*domain.SupplierCatalog, error) {
 	f.getID = id
 	return f.getResult, f.getErr
+}
+
+func (f *fakeSupplierCatalogStore) Upsert(_ context.Context, catalog *domain.SupplierCatalog) error {
+	f.upserted = append(f.upserted, catalog)
+	return f.upsertErr
 }
 
 func TestSupplierCatalogListPassesFiltersAndPagination(t *testing.T) {
