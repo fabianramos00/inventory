@@ -155,7 +155,7 @@ pnpm test:e2e
   return a `HANDOFF` block to the manager:
   `Target`, `Reason`, `Files`, `Change`, `Acceptance`, `Blocked`.
 - In parallel mode, work from the frozen module contract
-  (`docs/work/manager/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
+  (`docs/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
   fields; report contract gaps to the manager.
 - You may author tests from the frozen contract in parallel;
   integration verification starts only after backend and frontend exist.

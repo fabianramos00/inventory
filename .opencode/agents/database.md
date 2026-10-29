@@ -176,7 +176,7 @@ Key relationships:
   return a `HANDOFF` block to the manager:
   `Target`, `Reason`, `Files`, `Change`, `Acceptance`, `Blocked`.
 - In parallel mode, work from the frozen module contract
-  (`docs/work/manager/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
+  (`docs/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
   fields; report contract gaps to the manager.
 - You are a read-only reviewer; hand schema or query changes to
   `backend`.

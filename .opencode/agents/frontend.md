@@ -148,7 +148,7 @@ issues.
   return a `HANDOFF` block to the manager:
   `Target`, `Reason`, `Files`, `Change`, `Acceptance`, `Blocked`.
 - In parallel mode, work from the frozen module contract
-  (`docs/work/manager/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
+  (`docs/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
   fields; report contract gaps to the manager.
 - If the API or payload must change, hand it to `backend`; do
   not edit Go or migrations.

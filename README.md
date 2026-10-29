@@ -60,7 +60,6 @@ AGENTS.md                  rules for every agent
 opencode.json              opencode config and legacy references
 .opencode/agents/          specialized agents
 docs/                      architecture, domain, API, role docs
-docs/work/                 non-developer reports and specifications
 internal/domain/           entities and domain errors
 internal/ports/inbound/    use-case interfaces
 internal/ports/outbound/   repository and security interfaces
@@ -123,8 +122,9 @@ fallback API base is `http://127.0.0.1:8787/api/v1`; run
 
 `manager` is the default agent. It frames work and delegates to the
 specialists. Developer roles (`frontend`, `backend`, `devops`, `qa`) are the
-only roles allowed to write code or commit. Non-developer roles write only
-Markdown under `docs/work/`.
+only roles allowed to write code or commit. Non-developer reports are written
+under `docs/work/<role>/` only when a role needs a persistent deliverable; the
+directory is not tracked when empty.
 
 After changing `opencode.json` or any file in `.opencode/agents/`, restart
 opencode so the configuration reloads.

@@ -203,7 +203,7 @@ The manager may run independent subagent tasks in parallel by emitting multiple
 not overlap and the module contract is frozen.
 
 - Freeze the contract first using
-  `docs/work/manager/MODULE-CONTRACT-TEMPLATE.md`.
+  `docs/MODULE-CONTRACT-TEMPLATE.md`.
 - `backend` and `frontend` may run concurrently after the freeze; neither edits
   the other's scope.
 - Read-only reviews (`database`, `security`, `product`, `ux-designer`) may run

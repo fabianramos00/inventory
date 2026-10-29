@@ -97,7 +97,7 @@ OpenCode runs subagents in parallel when the primary emits multiple `task`
 calls in one message. Use it only for independent scopes:
 
 - Freeze the module contract first
-  (`docs/work/manager/MODULE-CONTRACT-TEMPLATE.md`).
+  (`docs/MODULE-CONTRACT-TEMPLATE.md`).
 - Run `backend` and `frontend` concurrently after the freeze; they must not
   edit the same paths.
 - Run `database`, `security`, `product`, and `ux-designer` reviews concurrently
@@ -113,7 +113,7 @@ calls in one message. Use it only for independent scopes:
 Subagents cannot message each other directly. They return a `HANDOFF` block to
 the manager; the manager delegates it to the owning agent and relays the
 result. Use the format in
-`docs/work/manager/EXECUTION-PLAYBOOK.md`. Agents must not wait for direct
+`docs/EXECUTION-PLAYBOOK.md`. Agents must not wait for direct
 messages or edit another scope.
 
 ## Rules

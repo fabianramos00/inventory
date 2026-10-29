@@ -175,6 +175,8 @@ WebView (React) ── HTTP loopback ── Go API ── PostgreSQL
 
 ## Audit checklist
 
+Latest Phase 3 audit: [SECURITY-AUDIT.md](SECURITY-AUDIT.md).
+
 - [ ] Auth flows: login, refresh rotation, logout, inactive user, superuser.
 - [ ] All 67 endpoints require auth except the documented four.
 - [ ] No endpoint trusts client totals or statuses.

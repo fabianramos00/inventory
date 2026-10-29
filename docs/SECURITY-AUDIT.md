@@ -6,10 +6,9 @@ limits, input validation, SQL access, logging/errors, config and SQLite
 storage, and the React session flow.
 
 **Method:** static review only. No shell commands were run (role denies shell),
-no code, tests, migrations, or configuration were modified. Prior reports
-`docs/work/security/phase-2-auth-review.md` and
-`docs/work/security/phase-2-sqlite-security-review.md` are treated as the
-baseline; their IDs are re-checked, not re-counted.
+no code, tests, migrations, or configuration were modified. Phase 2 findings are
+carried in this audit's tables; the original Phase 2 review files were removed
+during documentation cleanup.
 
 **Date:** 2026-10-29.
 
