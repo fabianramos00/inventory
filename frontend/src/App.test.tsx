@@ -8,6 +8,7 @@ vi.mock('@/pages/ProductForm/ProductForm', () => ({ default: () => <div>product-
 vi.mock('@/pages/Sales/Sales', () => ({ default: () => <div>sales-page</div> }))
 vi.mock('@/pages/SaleForm/SaleForm', () => ({ default: () => <div>sale-form-page</div> }))
 vi.mock('@/pages/Clients/Clients', () => ({ default: () => <div>clients-page</div> }))
+vi.mock('@/pages/Providers/Providers', () => ({ default: () => <div>providers-page</div> }))
 
 function authenticate() {
   localStorage.setItem('token', 'access-token')
@@ -40,6 +41,7 @@ describe('App routes', () => {
     ['#/sales/create', 'sale-form-page', '#/sales/create'],
     ['#/sales/12', 'sale-form-page', '#/sales/12'],
     ['#/clients', 'clients-page', '#/clients'],
+    ['#/providers', 'providers-page', '#/providers'],
   ])('renders %s for an authenticated user', async (hash, text, expectedHash) => {
     authenticate()
     renderAt(hash)
@@ -56,6 +58,7 @@ describe('App routes', () => {
     '#/sales/create',
     '#/sales/12',
     '#/clients',
+    '#/providers',
   ])(
     'redirects %s to login when unauthenticated',
     async (hash) => {
@@ -96,6 +99,15 @@ describe('App routes', () => {
 
     expect(await screen.findByText('clients-page')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Clientes' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('marks the Proveedores sidebar link as active', async () => {
+    authenticate()
+    renderAt('#/providers')
+
+    expect(await screen.findByText('providers-page')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Proveedores' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBeNull()
   })
 })

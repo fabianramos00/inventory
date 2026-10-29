@@ -93,8 +93,8 @@ only the router wrapper changes. Browser dev may keep `BrowserRouter` behind
 
 Current routes are `/#/login`, the protected `/#/` Home, `/#/inventory`,
 `/#/inventory/create`, `/#/inventory/product/:id`, `/#/sales`,
-`/#/sales/create`, `/#/sales/:id`, `/#/clients`, and the superuser-only
-`/#/users` page, all under `AppLayout` except login. Declare
+`/#/sales/create`, `/#/sales/:id`, `/#/clients`, `/#/providers`, and the
+superuser-only `/#/users` page, all under `AppLayout` except login. Declare
 `/#/sales/create` before `/#/sales/:id`. The remaining page files stay in
 `src/pages` without routes until later phases restore the full table from
 [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Playwright specs must use hash URLs.
@@ -126,6 +126,9 @@ Current routes are `/#/login`, the protected `/#/` Home, `/#/inventory`,
   invalidate the related list, stats, and dashboard keys. Product updates
   also invalidate `['product', Number(id)]` so the detail view refetches the
   saved product and its relations.
+- Provider changes invalidate `['providers']`. Provider create omits empty
+  optional fields; provider edit sends explicit `null` for cleared
+  `contact_info`, `email`, or `phone`.
 - Sale create/delete and sale-item add/update/delete change stock. Updating a
   sale changes only payment and client details; it does not change stock.
   These mutations invalidate `['sales']`, `['salesStats']`, `['products']`,
@@ -145,10 +148,11 @@ Current routes are `/#/login`, the protected `/#/` Home, `/#/inventory`,
   `getAPIErrorMessage(error, fallback)`; plain `Error` messages and the
   Spanish fallback are used when no detail exists. Error boxes use
   `role="alert"`.
-- Product, sales, and client list responses use the cursor shape
-  `{ items, has_next, skip, limit }`. The product write payload uses
+- Product, sales, client, and provider list responses use the cursor shape
+  `{ items, has_next, skip, limit }`. Provider search matches name, email, and
+  phone; `contact_info` is not searched. The product write payload uses
   `low_stock_threshold`; the legacy `min_stock`/`min_stock_quantity` names are
-  not sent. Sales and client pagination use `has_next`, never `total`/`pages`.
+  not sent. Sales, client, and provider pagination use `has_next`, never `total`/`pages`.
 - Keep `isLoading` for skeletons and `isFetching` for background refreshes.
 
 ## Auth

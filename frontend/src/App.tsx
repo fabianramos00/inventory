@@ -15,6 +15,7 @@ const ProductForm = lazy(() => import('@/pages/ProductForm/ProductForm'))
 const Sales = lazy(() => import('@/pages/Sales/Sales'))
 const SaleForm = lazy(() => import('@/pages/SaleForm/SaleForm'))
 const Clients = lazy(() => import('@/pages/Clients/Clients'))
+const Providers = lazy(() => import('@/pages/Providers/Providers'))
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
                   <Route path="/sales/create" element={<SaleForm />} />
                   <Route path="/sales/:id" element={<SaleForm />} />
                   <Route path="/clients" element={<Clients />} />
+                  <Route path="/providers" element={<Providers />} />
                 </Route>
                 <Route element={<SuperuserRoute />}>
                   <Route element={<AppLayout />}>

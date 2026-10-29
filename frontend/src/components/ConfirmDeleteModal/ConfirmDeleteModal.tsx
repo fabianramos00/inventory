@@ -71,7 +71,7 @@ export default function ConfirmDeleteModal({ productName, onConfirm, onClose, ti
           <p className={styles.warning}>Esta acción no puede deshacerse.</p>
         </div>
 
-        {error && <div className={styles.error}>{error}</div>}
+        {error && <div className={styles.error} role="alert">{error}</div>}
 
         <div className={styles.actions}>
           <button

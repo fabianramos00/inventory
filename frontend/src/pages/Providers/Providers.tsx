@@ -31,7 +31,7 @@ export default function Providers() {
 
   const debouncedSearch = useDebouncedValue(search, 300, () => setPage(1))
 
-  const { providers, totalPages, isLoading, isFetching, isError, refetch, deleteMutation, invalidate } = useProviders({ page, search: debouncedSearch })
+  const { providers, hasNext, isLoading, isFetching, isError, refetch, deleteMutation, invalidate } = useProviders({ page, search: debouncedSearch })
 
   const {
     target: providerToDelete,
@@ -54,9 +54,9 @@ export default function Providers() {
     if (!editingProvider) return editingProvider
     const payload = {
       name: values.name,
-      ...(values.contact_info && { contact_info: values.contact_info }),
-      ...(values.email && { email: values.email }),
-      ...(values.phone && { phone: values.phone }),
+      contact_info: values.contact_info || null,
+      email: values.email || null,
+      phone: values.phone || null,
     }
     const response = await providersApi.updateProvider(editingProvider.id, payload)
     return response.data
@@ -109,7 +109,7 @@ export default function Providers() {
       <CommandBar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Buscar proveedor por nombre o contacto..."
+        placeholder="Buscar proveedor por nombre, correo o teléfono..."
       />
 
       {isLoading ? (
@@ -163,9 +163,9 @@ export default function Providers() {
 
           <Pagination
             currentPage={page}
-            totalPages={totalPages}
             onPageChange={setPage}
             isLoading={isFetching}
+            hasNext={hasNext}
           />
         </>
       )}

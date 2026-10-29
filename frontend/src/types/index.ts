@@ -57,9 +57,9 @@ export interface Product {
 export interface Provider {
   id: number
   name: string
-  contact_info?: string
-  email?: string
-  phone?: string
+  contact_info: string | null
+  email: string | null
+  phone: string | null
 }
 
 // ─── Client ───────────────────────────────────────────────────────────────────
