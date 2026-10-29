@@ -61,7 +61,9 @@ WebView (React) ── HTTP loopback ── Go API ── PostgreSQL
   expected issuer and HS256. A token minted for the SQLite dataset is rejected
   by PostgreSQL and vice versa, even when user IDs collide.
 - Refresh token: 32 random bytes, stored as a SHA-256 hash, rotated on every
-  use, revoked on logout.
+  use, revoked on logout, and all revoked for a user when an admin changes
+  that user's password. Access tokens issued before the reset remain valid
+  until they expire (at most 30 minutes) because they are stateless.
 - bcrypt cost 12 in production; 4 only in tests.
 - Login rate limit: 5 attempts per minute per client.
 - Reject inactive users on login and on every authenticated request.

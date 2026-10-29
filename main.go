@@ -43,7 +43,7 @@ func main() {
 		refreshTokens,
 		cfg.RefreshTokenTTL(),
 	)
-	userService := application.NewUserService(stores.Users, passwords)
+	userService := application.NewUserService(stores.Users, stores.RefreshTokens, passwords)
 	handler := httpapi.NewRouter(httpapi.Deps{
 		Auth:             authService,
 		Users:            userService,

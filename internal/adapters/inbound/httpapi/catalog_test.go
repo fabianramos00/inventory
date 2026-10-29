@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"inventory-desktop/internal/adapters/inbound/httpapi"
+	"inventory-desktop/internal/application"
 	"inventory-desktop/internal/domain"
 	"inventory-desktop/internal/ports/inbound"
 )
@@ -577,6 +578,87 @@ func TestCatalogCRUD(t *testing.T) {
 			t.Fatalf("response = %+v", body)
 		}
 	})
+}
+
+type memoryBrandStore struct {
+	brands map[int64]*domain.Brand
+}
+
+func (m *memoryBrandStore) Get(_ context.Context, id int64) (*domain.Brand, error) {
+	brand, ok := m.brands[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return brand, nil
+}
+
+func (m *memoryBrandStore) List(context.Context, int, int, string) ([]*domain.Brand, bool, error) {
+	return nil, false, nil
+}
+
+func (m *memoryBrandStore) Create(_ context.Context, brand *domain.Brand) (*domain.Brand, error) {
+	brand.ID = int64(len(m.brands) + 1)
+	m.brands[brand.ID] = brand
+	return brand, nil
+}
+
+func (m *memoryBrandStore) Update(_ context.Context, id int64, brand *domain.Brand) error {
+	m.brands[id] = brand
+	return nil
+}
+
+func (m *memoryBrandStore) Delete(context.Context, int64) (*domain.Brand, error) {
+	return nil, domain.ErrNotFound
+}
+
+func TestCatalogBrandLogoURLValidation(t *testing.T) {
+	logo := "https://example.com/old.png"
+	brand := &domain.Brand{ID: 5, Name: "Existing", LogoURL: &logo}
+	store := &memoryBrandStore{brands: map[int64]*domain.Brand{5: brand}}
+	auth := &stubAuthService{tokens: map[string]*domain.User{
+		"user": {ID: 2, FullName: "Regular User", Email: "regular@example.com", IsActive: true},
+	}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
+		Auth:   auth,
+		Users:  &stubUserService{},
+		Brands: application.NewBrandService(store),
+		Logger: logger,
+	}))
+	t.Cleanup(server.Close)
+
+	rejected := []map[string]any{
+		{"name": "Acme", "logo_url": "javascript:alert(1)"},
+		{"name": "Acme", "logo_url": "data:image/png;base64,AAAA"},
+		{"name": "Acme", "logo_url": "/logo.png"},
+	}
+	for _, body := range rejected {
+		status, raw := userRequest(t, http.MethodPost, server.URL+"/api/v1/inventory/brands", "user", body)
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("create %v status = %d body = %s, want 422", body["logo_url"], status, raw)
+		}
+		if got := decodeUserError(t, raw); got.Code != "VALIDATION_ERROR" {
+			t.Errorf("create %v code = %q, want VALIDATION_ERROR", body["logo_url"], got.Code)
+		}
+	}
+
+	status, raw := userRequest(t, http.MethodPut, server.URL+"/api/v1/inventory/brands/5", "user", map[string]any{"logo_url": "javascript:alert(1)"})
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("update status = %d body = %s, want 422", status, raw)
+	}
+
+	status, raw = userRequest(t, http.MethodPost, server.URL+"/api/v1/inventory/brands", "user", map[string]any{"name": "Acme", "logo_url": "https://example.com/logo.png"})
+	if status != http.StatusOK {
+		t.Fatalf("valid create status = %d body = %s, want 200", status, raw)
+	}
+
+	status, raw = userRequest(t, http.MethodPut, server.URL+"/api/v1/inventory/brands/5", "user", map[string]any{"logo_url": ""})
+	if status != http.StatusOK {
+		t.Fatalf("clear status = %d body = %s, want 200", status, raw)
+	}
+	if store.brands[5].LogoURL != nil {
+		t.Errorf("logo_url = %v, want nil after clearing", store.brands[5].LogoURL)
+	}
 }
 
 func TestCatalogQueryAndBodyValidation(t *testing.T) {

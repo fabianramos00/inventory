@@ -16,11 +16,12 @@ var _ inbound.UserUseCase = (*UserService)(nil)
 
 type UserService struct {
 	users     outbound.UserRepository
+	tokens    outbound.RefreshTokenRepository
 	passwords outbound.PasswordHasher
 }
 
-func NewUserService(users outbound.UserRepository, passwords outbound.PasswordHasher) *UserService {
-	return &UserService{users: users, passwords: passwords}
+func NewUserService(users outbound.UserRepository, tokens outbound.RefreshTokenRepository, passwords outbound.PasswordHasher) *UserService {
+	return &UserService{users: users, tokens: tokens, passwords: passwords}
 }
 
 func (s *UserService) List(ctx context.Context, skip, limit int, search string) (*inbound.UserList, error) {
@@ -82,6 +83,7 @@ func (s *UserService) Update(ctx context.Context, id int64, input inbound.Update
 		}
 		user.Email = email
 	}
+	passwordChanged := false
 	if input.Password != nil && *input.Password != "" {
 		if err := validatePassword(*input.Password); err != nil {
 			return nil, err
@@ -91,6 +93,7 @@ func (s *UserService) Update(ctx context.Context, id int64, input inbound.Update
 			return nil, fmt.Errorf("hash password: %w", err)
 		}
 		user.HashedPassword = hash
+		passwordChanged = true
 	}
 	if input.FullName != nil {
 		user.FullName = strings.TrimSpace(*input.FullName)
@@ -103,6 +106,13 @@ func (s *UserService) Update(ctx context.Context, id int64, input inbound.Update
 	}
 	if err := s.users.Update(ctx, user); err != nil {
 		return nil, err
+	}
+	if passwordChanged {
+		// Access tokens are stateless, so a reset cannot revoke them before
+		// they expire. Refresh tokens are revoked here instead.
+		if err := s.tokens.RevokeAllForUser(ctx, user.ID); err != nil {
+			return nil, err
+		}
 	}
 	return user, nil
 }

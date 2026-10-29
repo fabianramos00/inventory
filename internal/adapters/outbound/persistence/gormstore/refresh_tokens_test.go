@@ -16,6 +16,47 @@ import (
 // normalizes stored timestamps. modernc returns TEXT timestamps through
 // time.RFC3339Nano, which trims zero fractions, so the adapter must accept
 // whole-second and trailing-zero values instead of requiring nine digits.
+func TestRevokeAllForUserOnlyAffectsTargetUser(t *testing.T) {
+	ctx := context.Background()
+	gormDB, conn, err := db.OpenSQLiteGORM(filepath.Join(t.TempDir(), "inventory.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	if err := db.MigrateSQLite(ctx, conn); err != nil {
+		t.Fatal(err)
+	}
+
+	users := NewUserStore(gormDB)
+	tokens := NewRefreshTokenStore(gormDB)
+	first := &domain.User{FullName: "First", Email: "first@sqlite.test", HashedPassword: "hash", IsActive: true}
+	second := &domain.User{FullName: "Second", Email: "second@sqlite.test", HashedPassword: "hash", IsActive: true}
+	for _, user := range []*domain.User{first, second} {
+		if err := users.Create(ctx, user); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	now := time.Date(2026, time.October, 26, 12, 0, 0, 0, time.UTC)
+	expiresAt := now.Add(24 * time.Hour)
+	if err := tokens.Create(ctx, first.ID, "first-token", expiresAt); err != nil {
+		t.Fatal(err)
+	}
+	if err := tokens.Create(ctx, second.ID, "second-token", expiresAt); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tokens.RevokeAllForUser(ctx, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tokens.FindValid(ctx, "first-token", now); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("revoked token error = %v, want ErrNotFound", err)
+	}
+	if userID, err := tokens.FindValid(ctx, "second-token", now); err != nil || userID != second.ID {
+		t.Fatalf("second token = %d, %v, want %d, nil", userID, err, second.ID)
+	}
+}
+
 func TestRefreshTokenExpiryRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	gormDB, conn, err := db.OpenSQLiteGORM(filepath.Join(t.TempDir(), "inventory.sqlite"))

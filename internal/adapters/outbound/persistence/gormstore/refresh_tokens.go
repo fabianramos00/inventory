@@ -94,3 +94,13 @@ func (r *RefreshTokenStore) Revoke(ctx context.Context, tokenHash string) error 
 	}
 	return nil
 }
+
+func (r *RefreshTokenStore) RevokeAllForUser(ctx context.Context, userID int64) error {
+	result := r.db.WithContext(ctx).Model(&refreshTokenModel{}).
+		Where("user_id = ? AND revoked = ?", userID, false).
+		Update("revoked", true)
+	if result.Error != nil {
+		return fmt.Errorf("revoke user refresh tokens: %w", result.Error)
+	}
+	return nil
+}

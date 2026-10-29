@@ -64,17 +64,19 @@ type rotatedRefreshToken struct {
 }
 
 type fakeRefreshTokenRepository struct {
-	validUserID int64
-	hasValid    bool
-	findErr     error
-	rotateErr   error
-	revokeErr   error
+	validUserID  int64
+	hasValid     bool
+	findErr      error
+	rotateErr    error
+	revokeErr    error
+	revokeAllErr error
 
-	findHash string
-	findNow  time.Time
-	created  []createdRefreshToken
-	rotated  []rotatedRefreshToken
-	revoked  []string
+	findHash     string
+	findNow      time.Time
+	created      []createdRefreshToken
+	rotated      []rotatedRefreshToken
+	revoked      []string
+	revokedUsers []int64
 }
 
 func (f *fakeRefreshTokenRepository) Create(_ context.Context, userID int64, hash string, expiresAt time.Time) error {
@@ -107,6 +109,17 @@ func (f *fakeRefreshTokenRepository) Revoke(_ context.Context, hash string) erro
 		return f.revokeErr
 	}
 	f.revoked = append(f.revoked, hash)
+	return nil
+}
+
+func (f *fakeRefreshTokenRepository) RevokeAllForUser(_ context.Context, userID int64) error {
+	if f.revokeAllErr != nil {
+		return f.revokeAllErr
+	}
+	f.revokedUsers = append(f.revokedUsers, userID)
+	if f.validUserID == userID {
+		f.hasValid = false
+	}
 	return nil
 }
 
@@ -376,6 +389,29 @@ func TestRefreshInactiveUser(t *testing.T) {
 	}
 	if len(h.access.issued) != 0 {
 		t.Errorf("issued %d access tokens, want 0", len(h.access.issued))
+	}
+}
+
+func TestPasswordResetRevokesRefreshToken(t *testing.T) {
+	user := activeUser()
+	h := newAuthHarness(user)
+	h.tokens.validUserID = user.ID
+	h.tokens.hasValid = true
+	users := NewUserService(h.users, h.tokens, h.hasher)
+
+	password := "newsecret1"
+	if _, err := users.Update(context.Background(), user.ID, inbound.UpdateUserInput{Password: &password}); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if len(h.tokens.revokedUsers) != 1 || h.tokens.revokedUsers[0] != user.ID {
+		t.Fatalf("revoked users = %v, want [%d]", h.tokens.revokedUsers, user.ID)
+	}
+
+	if _, err := h.service.Refresh(context.Background(), "old-token"); !errors.Is(err, domain.ErrInvalidRefresh) {
+		t.Fatalf("Refresh() after reset error = %v, want ErrInvalidRefresh", err)
+	}
+	if len(h.tokens.rotated) != 0 {
+		t.Errorf("rotated %d tokens, want 0", len(h.tokens.rotated))
 	}
 }
 

@@ -11,4 +11,5 @@ type RefreshTokenRepository interface {
 	FindValid(ctx context.Context, tokenHash string, now time.Time) (int64, error)
 	Rotate(ctx context.Context, oldHash, newHash string, now, expiresAt time.Time) error
 	Revoke(ctx context.Context, tokenHash string) error
+	RevokeAllForUser(ctx context.Context, userID int64) error
 }

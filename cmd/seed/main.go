@@ -49,7 +49,7 @@ func main() {
 	defer stores.Closer()
 
 	passwords := security.NewPasswordHasher(cfg.BcryptRounds)
-	users := application.NewUserService(stores.Users, passwords)
+	users := application.NewUserService(stores.Users, stores.RefreshTokens, passwords)
 	existing, err := stores.Users.GetByEmail(ctx, *email)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {
 		logger.Error("look up user failed", "error", err)

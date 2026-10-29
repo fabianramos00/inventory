@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"unicode/utf8"
 
@@ -144,7 +145,7 @@ func newBrand(input inbound.CreateBrandInput) (*domain.Brand, error) {
 	if err != nil {
 		return nil, err
 	}
-	logoURL, err := cleanOptional(input.LogoURL, "logo_url", maxBrandLogoURL)
+	logoURL, err := cleanLogoURL(input.LogoURL)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +161,7 @@ func applyBrandUpdate(entity *domain.Brand, input inbound.UpdateBrandInput) erro
 		entity.Name = name
 	}
 	if input.LogoURL != nil {
-		logoURL, err := cleanOptional(input.LogoURL, "logo_url", maxBrandLogoURL)
+		logoURL, err := cleanLogoURL(input.LogoURL)
 		if err != nil {
 			return err
 		}
@@ -236,6 +237,19 @@ func requiredAbbreviation(value string) (string, error) {
 		return "", fmt.Errorf("%w: abbreviation must be at most %d characters", domain.ErrValidation, maxUnitAbbreviation)
 	}
 	return value, nil
+}
+
+func cleanLogoURL(value *string) (*string, error) {
+	cleaned, err := cleanOptional(value, "logo_url", maxBrandLogoURL)
+	if err != nil || cleaned == nil {
+		return cleaned, err
+	}
+	parsed, err := url.Parse(*cleaned)
+	if err != nil || parsed.Host == "" ||
+		(!strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https")) {
+		return nil, fmt.Errorf("%w: logo_url must be an http or https URL", domain.ErrValidation)
+	}
+	return cleaned, nil
 }
 
 func cleanOptional(value *string, field string, max int) (*string, error) {

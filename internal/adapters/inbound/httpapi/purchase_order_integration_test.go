@@ -468,7 +468,7 @@ func newPOBackend(t *testing.T, name string, gormDB *gorm.DB, conn *sql.DB) *poB
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	b.server = httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
 		Auth:             authService,
-		Users:            application.NewUserService(users, hasher),
+		Users:            application.NewUserService(users, gormstore.NewRefreshTokenStore(gormDB), hasher),
 		Products:         application.NewProductService(products),
 		Providers:        application.NewProviderService(providers),
 		SupplierCatalogs: application.NewSupplierCatalogService(gormstore.NewSupplierCatalogStore(gormDB)),

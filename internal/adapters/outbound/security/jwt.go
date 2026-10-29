@@ -50,6 +50,7 @@ func (i *AccessTokenIssuer) Parse(raw string) (int64, error) {
 	},
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 		jwt.WithIssuer(i.issuer),
+		jwt.WithExpirationRequired(),
 	)
 	if err != nil || !token.Valid {
 		return 0, ErrInvalidToken

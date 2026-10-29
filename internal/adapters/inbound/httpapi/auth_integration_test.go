@@ -91,15 +91,16 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	tokens := gormstore.NewRefreshTokenStore(gormDB)
 	authService := application.NewAuthService(
 		users,
-		gormstore.NewRefreshTokenStore(gormDB),
+		tokens,
 		passwords,
 		security.NewAccessTokenIssuer("test-secret", 30*time.Minute, "inventory-desktop/postgres"),
 		security.NewRefreshTokenService(),
 		7*24*time.Hour,
 	)
-	userService := application.NewUserService(users, passwords)
+	userService := application.NewUserService(users, tokens, passwords)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{Auth: authService, Users: userService, Logger: logger, DevMode: true}))
 	defer server.Close()

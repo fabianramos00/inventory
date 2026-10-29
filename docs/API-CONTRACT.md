@@ -182,6 +182,10 @@ name+SKU) treats `%` and `_` literally as a deliberate difference from legacy
 | DELETE | `/inventory/products/{id}` | |
 | GET | `/inventory/products/stats/overview` | `total_products`, `total_stock`, `low_stock_count`, `total_inventory_value` |
 
+`logo_url` accepts only an absolute `http` or `https` URL (maximum 255
+characters), or `null`/an empty string to clear it. Any other scheme
+(`javascript:`, `data:`, `ftp:`) or a relative value is `422`.
+
 `stock_status`: `in_stock`, `low_stock`, `out_of_stock`.
 
 Product list items include the related category, material, brand, and

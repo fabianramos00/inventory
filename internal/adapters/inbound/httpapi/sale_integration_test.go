@@ -448,7 +448,7 @@ func newSIBackend(t *testing.T, name string, gormDB *gorm.DB, conn *sql.DB) *siB
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	b.server = httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
 		Auth:    authService,
-		Users:   application.NewUserService(users, hasher),
+		Users:   application.NewUserService(users, gormstore.NewRefreshTokenStore(gormDB), hasher),
 		Sales:   application.NewSaleService(b.sales, gormstore.NewUnitOfWork(gormDB)),
 		Logger:  logger,
 		Backend: name,

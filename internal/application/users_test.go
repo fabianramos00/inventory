@@ -114,6 +114,7 @@ func (f *fakeUserHasher) Verify(password, hash string) bool {
 type userHarness struct {
 	service *UserService
 	store   *fakeUserStore
+	tokens  *fakeRefreshTokenRepository
 	hasher  *fakeUserHasher
 }
 
@@ -126,9 +127,11 @@ func newUserHarness(users ...*domain.User) *userHarness {
 		}
 	}
 	hasher := &fakeUserHasher{}
+	tokens := &fakeRefreshTokenRepository{}
 	return &userHarness{
-		service: NewUserService(store, hasher),
+		service: NewUserService(store, tokens, hasher),
 		store:   store,
+		tokens:  tokens,
 		hasher:  hasher,
 	}
 }
@@ -355,6 +358,44 @@ func TestUserUpdateEmailAndPassword(t *testing.T) {
 	}
 	if len(h.hasher.hashed) != 1 || h.hasher.hashed[0] != "newpassword123" {
 		t.Errorf("hashed passwords = %v, want [newpassword123]", h.hasher.hashed)
+	}
+}
+
+func TestUserUpdatePasswordRevokesRefreshTokens(t *testing.T) {
+	existing := userRecord(1, "ada@example.com")
+	h := newUserHarness(existing)
+	password := "newpassword123"
+
+	if _, err := h.service.Update(context.Background(), 1, inbound.UpdateUserInput{Password: &password}); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if len(h.tokens.revokedUsers) != 1 || h.tokens.revokedUsers[0] != 1 {
+		t.Fatalf("revoked users = %v, want [1]", h.tokens.revokedUsers)
+	}
+}
+
+func TestUserUpdateWithoutPasswordKeepsRefreshTokens(t *testing.T) {
+	existing := userRecord(1, "ada@example.com")
+	h := newUserHarness(existing)
+	name := "Ada Byron"
+
+	if _, err := h.service.Update(context.Background(), 1, inbound.UpdateUserInput{FullName: &name}); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if len(h.tokens.revokedUsers) != 0 {
+		t.Fatalf("revoked users = %v, want none", h.tokens.revokedUsers)
+	}
+}
+
+func TestUserUpdatePasswordRevocationFailurePropagates(t *testing.T) {
+	existing := userRecord(1, "ada@example.com")
+	h := newUserHarness(existing)
+	h.tokens.revokeAllErr = errors.New("revoke failed")
+	password := "newpassword123"
+
+	_, err := h.service.Update(context.Background(), 1, inbound.UpdateUserInput{Password: &password})
+	if err == nil || err.Error() != "revoke failed" {
+		t.Fatalf("Update() error = %v, want the revocation error", err)
 	}
 }
 

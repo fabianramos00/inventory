@@ -307,7 +307,7 @@ func newPIBackend(t *testing.T, name string, gormDB *gorm.DB, conn *sql.DB) *piB
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	b.server = httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
 		Auth:             authService,
-		Users:            application.NewUserService(b.users, hasher),
+		Users:            application.NewUserService(b.users, b.tokens, hasher),
 		Categories:       application.NewCategoryService(b.categories),
 		Brands:           application.NewBrandService(b.brands),
 		Materials:        application.NewMaterialService(b.materials),

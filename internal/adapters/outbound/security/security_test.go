@@ -36,6 +36,22 @@ func TestAccessTokenIssuerRejectsExpiredToken(t *testing.T) {
 	}
 }
 
+func TestAccessTokenIssuerRejectsTokenWithoutExpiration(t *testing.T) {
+	issuer := NewAccessTokenIssuer("secret", time.Minute, "inventory-desktop/sqlite")
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
+		Issuer:  "inventory-desktop/sqlite",
+		Subject: "7",
+	})
+	raw, err := token.SignedString([]byte("secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := issuer.Parse(raw); err == nil {
+		t.Fatal("expected a token without exp to be rejected")
+	}
+}
+
 func TestAccessTokenIssuerBindsIssuerAndTokenID(t *testing.T) {
 	issuer := NewAccessTokenIssuer("secret", time.Minute, "inventory-desktop/sqlite")
 	token, err := issuer.Issue(7)

@@ -43,7 +43,7 @@ func main() {
 		refreshTokens,
 		cfg.RefreshTokenTTL(),
 	)
-	userService := application.NewUserService(stores.Users, passwords)
+	userService := application.NewUserService(stores.Users, stores.RefreshTokens, passwords)
 	handler := httpapi.NewRouter(httpapi.Deps{
 		Auth:             authService,
 		Users:            userService,
@@ -60,7 +60,7 @@ func main() {
 		Dashboard:        application.NewDashboardService(stores.Dashboard),
 		Logger:           logger,
 		Backend:          stores.Backend,
-		DevMode:          true,
+		DevMode:          cfg.DevMode,
 	})
 
 	port := os.Getenv("PORT")
@@ -76,7 +76,9 @@ func main() {
 		logger.Error("http server failed to start", "error", err)
 		os.Exit(1)
 	}
-	logger.Info("api server listening", "addr", server.Addr())
+	if cfg.DevMode {
+		logger.Info("api server listening", "addr", server.Addr())
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

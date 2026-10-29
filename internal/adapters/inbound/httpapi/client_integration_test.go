@@ -172,7 +172,7 @@ func newCiBackend(t *testing.T, name string, gormDB *gorm.DB, conn *sql.DB) *ciB
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
 		Auth:    authService,
-		Users:   application.NewUserService(users, hasher),
+		Users:   application.NewUserService(users, tokens, hasher),
 		Clients: application.NewClientService(clients),
 		Logger:  logger,
 		Backend: name,

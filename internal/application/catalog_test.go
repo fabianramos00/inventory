@@ -124,8 +124,13 @@ func TestBrandCreateValidation(t *testing.T) {
 		{name: "empty name", input: inbound.CreateBrandInput{Name: ""}, wantErr: true},
 		{name: "name at max", input: inbound.CreateBrandInput{Name: repeat("a", 150)}},
 		{name: "name too long", input: inbound.CreateBrandInput{Name: repeat("a", 151)}, wantErr: true},
-		{name: "logo at max", input: inbound.CreateBrandInput{Name: "Acme", LogoURL: ptr(repeat("l", 255))}},
-		{name: "logo too long", input: inbound.CreateBrandInput{Name: "Acme", LogoURL: ptr(repeat("l", 256))}, wantErr: true},
+		{name: "logo at max", input: inbound.CreateBrandInput{Name: "Acme", LogoURL: ptr("https://example.com/" + repeat("l", 235))}},
+		{name: "logo too long", input: inbound.CreateBrandInput{Name: "Acme", LogoURL: ptr("https://example.com/" + repeat("l", 236))}, wantErr: true},
+		{name: "empty logo clears", input: inbound.CreateBrandInput{Name: "Acme", LogoURL: ptr("")}},
+		{name: "relative logo", input: inbound.CreateBrandInput{Name: "Acme", LogoURL: ptr("/logo.png")}, wantErr: true},
+		{name: "javascript logo", input: inbound.CreateBrandInput{Name: "Acme", LogoURL: ptr("javascript:alert(1)")}, wantErr: true},
+		{name: "data logo", input: inbound.CreateBrandInput{Name: "Acme", LogoURL: ptr("data:image/png;base64,AAAA")}, wantErr: true},
+		{name: "ftp logo", input: inbound.CreateBrandInput{Name: "Acme", LogoURL: ptr("ftp://example.com/logo.png")}, wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -244,7 +249,7 @@ func TestCategoryPartialUpdate(t *testing.T) {
 
 func TestBrandMaterialAndUnitPartialUpdate(t *testing.T) {
 	t.Run("brand", func(t *testing.T) {
-		store := &fakeCatalogStore[domain.Brand]{getResult: &domain.Brand{ID: 1, Name: "Acme", LogoURL: ptr("logo")}}
+		store := &fakeCatalogStore[domain.Brand]{getResult: &domain.Brand{ID: 1, Name: "Acme", LogoURL: ptr("https://example.com/logo.png")}}
 		service := NewBrandService(store)
 		entity, err := service.Update(context.Background(), 1, inbound.UpdateBrandInput{LogoURL: ptr("")})
 		if err != nil {
@@ -252,6 +257,9 @@ func TestBrandMaterialAndUnitPartialUpdate(t *testing.T) {
 		}
 		if entity.Name != "Acme" || entity.LogoURL != nil {
 			t.Fatalf("updated brand = %+v, want name kept and logo cleared", entity)
+		}
+		if _, err := service.Update(context.Background(), 1, inbound.UpdateBrandInput{LogoURL: ptr("javascript:alert(1)")}); !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("javascript logo error = %v, want ErrValidation", err)
 		}
 	})
 
