@@ -131,8 +131,11 @@ PostgreSQL:
   goose on the same `*sql.DB` GORM exposes.
 - Schema is a faithful translation of the legacy Alembic schema.
 - Every write that spans rows uses a transaction.
-- Stock mutations lock product rows (`SELECT ... FOR UPDATE`) before changing
-  quantities.
+- Services own the transaction boundary through `outbound.UnitOfWork`
+  (`WithinTx`) and receive transaction-bound repositories in `outbound.TxRepos`.
+  Sale and stock mutations also use `outbound.StockRepository`; PostgreSQL locks
+  product rows in ascending id order with `SELECT ... FOR UPDATE`, while SQLite
+  uses its single connection and the same sorted select without locking syntax.
 - Money is `NUMERIC(12,2)`; Go reads it into `shopspring/decimal`.
 
 SQLite:
@@ -146,8 +149,8 @@ SQLite:
   goose.
 - The auth tables and the full Phase 3 business schema exist today
   (`00001_auth.sql` plus `00002_catalog.sql` through `00006_sales.sql`).
-  Catalog repositories and handlers are implemented; the remaining business
-  modules are still pending.
+  Catalog, product, client, and sales repositories and handlers are implemented;
+  providers, supply chain, and dashboard remain pending.
 - Booleans are stored as `0`/`1`; timestamps are stored as fixed-width UTC
   text so lexical comparisons stay correct, and parsing accepts RFC 3339
   with variable fractional seconds.

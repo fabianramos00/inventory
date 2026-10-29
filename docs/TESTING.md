@@ -171,9 +171,9 @@ Cases:
 
 SQLite now has the full Phase 3 business schema (`00001_auth.sql` plus
 `00002_catalog.sql` through `00006_sales.sql`). Go service, handler, and
-persistence contract coverage for catalog, products, and clients exists on both
-backends; the live legacy FastAPI fixture run is still pending. Sales, order,
-and dashboard repositories are still pending.
+persistence contract coverage for catalog, products, clients, and sales exists
+on both backends; the live legacy FastAPI fixture run is still pending.
+Provider, supply-chain, and dashboard repositories are still pending.
 
 Refresh-token timestamps use `gormstore.Timestamp`, which writes a fixed-width
 UTC format (`2006-01-02T15:04:05.000000000Z`) so the lexicographic
@@ -284,6 +284,35 @@ round-trip, update null clearing, duplicate identity card, multiple null
 identity cards, search over every field with accents, literal wildcards,
 pagination, delete, delete conflict, and `domain.ErrNotFound`.
 
+### Sales slice
+
+`internal/application/sale_service_test.go` and `sale_test.go` cover create
+validation (empty/duplicate items, quantity, delivered bound, negative money,
+enum values), totals and derived statuses, overpayment, `debt_amount`,
+`created_at`/`updated_at`, unknown product/client references, insufficient
+stock with rollback, item add/update/delete stock deltas, sale deletion stock
+restoration, and the empty-sale pending rule.
+
+`internal/adapters/inbound/httpapi/sale_test.go` covers bearer auth on all ten
+routes, filters and date/enum validation, the sale response shape (including
+`debt_amount`, `created_by`, and `client`), `created_by_id` coming from the
+token rather than the body, presence-aware update fields, item response shape
+and ordering, stats shape, 404s, duplicate-product `400`, insufficient-stock
+`400`, and the error envelope without leaked internals.
+
+`internal/adapters/inbound/httpapi/sale_integration_test.go` runs the real
+router, service, stock port, and GORM adapters against SQLite and PostgreSQL:
+create/list/get/stats/update/delete, item add/update/delete, stock changes,
+filters, exact decimal money, RFC 3339 timestamps, duplicate-product rejection,
+and stock restoration.
+
+`internal/adapters/outbound/persistence/sale_contract_test.go` runs the same
+sale fixture on both backends: sale and item CRUD, uppercase enum storage,
+money and timestamp round-trip, `created_by`/`client` relations, item ordering
+and joined names, filters, pagination, stats, unit-of-work commit/rollback,
+and `ErrInsufficientStock`. `sale_concurrency_test.go` runs two PostgreSQL
+sales against one unit of stock and proves exactly one succeeds.
+
 ## Phase 2 auth coverage
 
 The following is covered now:
@@ -309,10 +338,10 @@ The following is covered now:
   environment so the password never appears in argv, and the test secret is
   at least 32 bytes.
 
-Deferred: sales/stock, purchase orders, dashboard, and the full 67-endpoint
-parity matrix. The Users CRUD slice, the catalog slice, the products slice, and
-the clients slice are covered now (application, handler, repository contract,
-and, for Users, full-stack E2E).
+Deferred: purchase orders, dashboard, and the full 67-endpoint parity matrix.
+The Users CRUD slice, the catalog slice, the products slice, the clients
+slice, and the sales slice are covered now (application, handler, repository
+contract, and, for Users, full-stack E2E).
 
 ## Frontend tests
 
@@ -404,7 +433,7 @@ fixtures in replay mode. Do not mark parity as passing without a run.
 | Inventory — catalog | 18 | Backend contract covered; legacy FastAPI parity pending |
 | Inventory — products | 6 | Backend contract covered; legacy FastAPI parity pending |
 | Clients | 5 | Backend contract covered; legacy FastAPI parity pending |
-| Sales | 10 | Pending |
+| Sales | 10 | Backend contract covered; legacy FastAPI parity pending |
 | Supply chain | 16 | Pending |
 | Dashboard | 4 | Pending |
 | **Total** | **67** | Pending |

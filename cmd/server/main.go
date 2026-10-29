@@ -53,6 +53,7 @@ func main() {
 		MeasurementUnits: application.NewMeasurementUnitService(stores.MeasurementUnits),
 		Products:         application.NewProductService(stores.Products),
 		Clients:          application.NewClientService(stores.Clients),
+		Sales:            application.NewSaleService(stores.Sales, stores.UnitOfWork),
 		Logger:           logger,
 		Backend:          stores.Backend,
 		DevMode:          true,

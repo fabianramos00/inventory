@@ -27,6 +27,8 @@ type Stores struct {
 	MeasurementUnits outbound.CatalogRepository[domain.MeasurementUnit]
 	Products         outbound.ProductRepository
 	Clients          outbound.ClientRepository
+	Sales            outbound.SaleRepository
+	UnitOfWork       outbound.UnitOfWork
 	Closer           func() error
 	Backend          string
 }
@@ -105,6 +107,8 @@ func newStores(gormDB *gorm.DB, conn *sql.DB, backend string) *Stores {
 		MeasurementUnits: gormstore.NewMeasurementUnitStore(gormDB),
 		Products:         gormstore.NewProductStore(gormDB),
 		Clients:          gormstore.NewClientStore(gormDB),
+		Sales:            gormstore.NewSaleStore(gormDB),
+		UnitOfWork:       gormstore.NewUnitOfWork(gormDB),
 		Closer:           conn.Close,
 		Backend:          backend,
 	}

@@ -15,8 +15,8 @@ PostgreSQL is the primary database. The installer does not bundle it. With
 `DB_MODE=auto` (default), the app falls back to local SQLite when PostgreSQL
 is unreachable. `DB_MODE=postgres` fails hard; `DB_MODE=sqlite` forces the
 local backend. SQLite contains the auth tables and the full Phase 3 business
-schema, but the business repositories and handlers are still pending, so
-offline inventory/sales are not available yet.
+schema. Catalog, product, client, and sales handlers are available offline;
+providers, purchase orders, and dashboard aggregates remain pending.
 
 On Linux, Wails must be built with `-tags webkit2_41`. Ubuntu 26.04 ships
 WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`) only, so the 4.0 ABI is unavailable.
@@ -28,7 +28,8 @@ on port `5433`.
 Phase 2 ships the walking skeleton, PostgreSQL and SQLite persistence behind
 ports/adapters, authentication, and the seed command. Inventory, sales, orders,
 and dashboard are deferred to Phase 3. The full SQLite business schema now
-exists; the business modules and their repositories are still pending.
+exists. Catalog, products, clients, and sales are implemented; providers,
+purchase orders, and dashboard remain pending.
 
 ## Versioning
 

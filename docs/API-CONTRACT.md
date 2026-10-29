@@ -247,6 +247,80 @@ Item shape:
   `detail: "Client not found"`.
 - Timestamps are RFC 3339 UTC on both backends.
 
+#### Sales
+
+Sale response:
+
+```json
+{
+  "id": 1,
+  "total_amount": 21.2,
+  "debt_amount": 15.95,
+  "payment_status": "partial",
+  "delivery_status": "partial",
+  "payment_method": "cash",
+  "amount_paid": 5.25,
+  "client_id": 9,
+  "created_at": "2026-10-24T15:04:05Z",
+  "updated_at": null,
+  "created_by_id": 2,
+  "created_by": {
+    "id": 2,
+    "full_name": "Ana Pérez",
+    "email": "ana@example.com",
+    "is_active": true,
+    "is_superuser": false
+  },
+  "client": {
+    "id": 9,
+    "name": "Carlos Ruiz",
+    "identity_card": "1020304050",
+    "email": "carlos@example.com",
+    "phone": "3001234567",
+    "created_at": "2026-10-24T15:04:05Z",
+    "updated_at": null
+  }
+}
+```
+
+- `debt_amount` is `max(total_amount - amount_paid, 0)`.
+- `created_by` is the full user without password fields and is never supplied
+  by the client; it comes from the bearer token.
+- `client` is the full client object or `null`.
+- `payment_status` is `pending`, `partial`, or `paid`; `delivery_status` is
+  `pending`, `partial`, or `delivered`; `payment_method` is `cash`, `credit`,
+  `debit`, or `null`.
+- Every list and detail response includes both relations.
+- Lists order `id DESC`. `start_date` and `end_date` are RFC 3339 instants and
+  inclusive. Invalid dates or enum values return `422 VALIDATION_ERROR`.
+- `no_client=true` returns only sales with `client_id IS NULL`.
+
+Sale item response:
+
+```json
+{
+  "id": 1,
+  "sale_id": 1,
+  "product_id": 3,
+  "quantity": 2,
+  "delivered_quantity": 1,
+  "unit_price": 10.5,
+  "subtotal": 21.0,
+  "product_name": "Martillo",
+  "product_sku": "SKU-1234ABCD",
+  "brand_name": "Truper",
+  "material_name": "Acero",
+  "category_name": "Herramientas"
+}
+```
+
+- `GET /sales/{id}/items` orders `id ASC` with the shared pagination rules.
+- `GET /sales/{id}/items` returns a paginated `SaleItem` list; add/update/delete item return the updated sale.
+- Deleting a sale or an item restores stock. Missing sale is `404 Sale not
+  found`; a missing item under an existing sale is `404 Sale item not found`.
+- Adding a product already present in the sale is `400` with a readable
+  detail. Insufficient stock is `400` with the legacy message.
+
 Creating a sale requires at least one item. One item per product per sale.
 `unit_price` defaults to the product price. The server calculates subtotals,
 total, payment status, and delivery status.

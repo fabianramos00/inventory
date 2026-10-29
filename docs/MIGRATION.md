@@ -88,8 +88,8 @@ be recreated: delete the local file at `SQLITE_PATH` (default
 re-run migrations on the next start. Migrations are forward-only; there is no
 in-place upgrade from the monolith.
 
-The full business schema now exists in SQLite. Catalog, product, and client
-repositories/handlers are implemented on both backends. Providers, sales, and
+The full business schema now exists in SQLite. Catalog, product, client, and
+sales repositories/handlers are implemented on both backends. Providers and
 supply-chain (supplier catalogs and purchase orders) repositories and handlers
 are still pending; the schema being present does not mean those offline
 business modules work yet. Dashboard aggregates are also pending. The two
@@ -201,6 +201,16 @@ For each module:
 | Money (SQLite) | SQLite has no exact decimal type | Store integer cents, convert at the adapter boundary; see ADR-0016 |
 | Purchase order detail | Returns the order without items; items are a separate endpoint | Preserve |
 | Sales | `amount_paid > total_amount` is accepted and marks the sale paid | Preserve; document |
+| Sales | `delivered_quantity` is validated by the legacy add/update paths and by a PostgreSQL CHECK | Validate in the service; Go returns `422`, legacy `400` |
+| Sales | Legacy accepts duplicate product rows in one sale | Go rejects duplicates with `422`; docs require one item per product |
+| Sales | Total `0` with `amount_paid = 0` is `paid` because `0 >= 0` | Go returns `pending` per DOMAIN |
+| Sale timestamps | Legacy may serialize microseconds | Go serializes second-precision RFC 3339; `end_date` filtering is inclusive and compared against the response timestamp |
+| Empty `PUT /sales/{id}` | No update field set | Both leave `updated_at` unchanged in v1; no difference |
+| Sales | Create/update/item paths return the sale with `created_by` and `client` loaded | Preserve; batch-load users and clients in the adapter |
+| Sales | Item list order is `id ASC`; sale lists are `id DESC` | Preserve both orderings |
+| Sales | Deleting a sale or an item restores stock; changing quantity adjusts by the delta | Preserve inside the unit-of-work transaction |
+| Sales | Empty sale after removing every item keeps total `0` and both statuses `pending` | Preserve; special-case empty recalculation |
+| Sales | Legacy never writes `price_history` during sales or product price changes | Preserve; do not add price-history writes |
 | Enums | PostgreSQL stores uppercase enum labels; the API uses lowercase | Map explicitly in every Go read/filter/write |
 | Defaults | Several legacy defaults are Python-side only (`stock_quantity`, `low_stock_threshold`, `amount_paid`, `delivered_quantity`, `total_amount`) | Supply them explicitly in Go inserts |
 | Validation | FastAPI `422` detail is an array | Normalize to a string detail + code |

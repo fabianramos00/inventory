@@ -35,8 +35,8 @@ internal/
     catalog.go          catalog validation and use cases
     product.go          product validation, SKU generation, and use cases
     client.go           client validation and use cases
+    sale.go             sale totals, statuses, stock, and item mutations
     inventory.go
-    sales.go
     supply_chain.go
     dashboard.go
     users.go
@@ -46,10 +46,14 @@ internal/
       catalog.go        CatalogUseCase, list and create/update inputs
       product.go        ProductUseCase, filters, and partial-update inputs
       client.go         ClientUseCase, list filter, and partial-update inputs
+      sale.go           SaleUseCase, filters, and create/update/item inputs
       users.go          UserUseCase, UserList, create/update inputs
     outbound/
       catalog.go        CatalogRepository and ProductRepository interfaces
       client.go         ClientRepository interface
+      sale.go           SaleRepository interface
+      stock.go          StockRepository interface
+      uow.go            UnitOfWork and TxRepos
       users.go          UserRepository interface
       refresh_tokens.go RefreshTokenRepository interface
       password_hasher.go
@@ -70,6 +74,7 @@ internal/
         catalog.go      catalog CRUD handlers and request/response DTOs
         product.go      product CRUD, stats handlers, and money JSON DTOs
         client.go       client CRUD handlers and request/response DTOs
+        sale.go         sale/item handlers, filters, and response DTOs
         user_dto.go     shared user response DTO and mapper
         users.go        user CRUD handlers and superuser guard
     outbound/
@@ -79,6 +84,9 @@ internal/
           catalog.go    catalog models and repositories
           product.go    product queries and money normalization
           client.go     client queries and timestamp round-trip
+          sale.go       sale/item queries, status mapping, money conversion
+          stock.go      sorted locking and conditional stock deltas
+          uow.go        transaction boundary and tx-bound stores
           user_model.go
           refresh_token_model.go
           users.go      UserRepository
@@ -315,22 +323,61 @@ Never log passwords, tokens, authorization headers, or full request bodies.
   PostgreSQL keeps microseconds and SQLite keeps nanoseconds, so exactness
   beyond microseconds is backend-specific.
 
+## Sales
+
+- Endpoints under `/api/v1/sales`: list, create, stats, get, update, delete,
+  item list/add/update/delete. All require an active user.
+- The response shape is `{id, total_amount, debt_amount, payment_status,
+  delivery_status, payment_method, amount_paid, client_id, created_at,
+  updated_at, created_by_id, created_by, client}`. `created_by` is the full
+  user without password fields; `client` is the full client or `null`.
+  `debt_amount` is `max(total_amount - amount_paid, 0)`.
+- Lists support `user_id`, `client_id`, `no_client`, `start_date`, `end_date`,
+  `payment_status`, `delivery_status`, and `payment_method`. Dates are RFC 3339
+  and inclusive; invalid dates or enum values are `422`. Ordering is `id DESC`
+  with the shared 100/200 pagination rules.
+- Create requires at least one item, one item per product, `quantity > 0`,
+  and `0 <= delivered_quantity <= quantity`. `unit_price` defaults to the
+  product price. Totals, payment status, and delivery status are derived by
+  the service. `created_by_id` comes from the authenticated user, never from
+  the body.
+- Update is partial: omitted fields stay unchanged, `payment_method` and
+  `client_id` accept `null` to clear, and `amount_paid` must be present and
+  non-negative when supplied. Overpayment is accepted and marks the sale
+  `paid`, preserving legacy behavior.
+- Item mutations adjust stock by the quantity delta, recalculate the sale,
+  and set `updated_at`. Deleting a sale or one of its items restores stock.
+  An empty sale has total `0` and both statuses `pending`.
+- Status values are lowercase in the API and uppercase in the database. The
+  adapter maps explicitly; see [DOMAIN.md](DOMAIN.md#database-representation).
+- Item list responses are ordered `id ASC` and include product name/SKU plus
+  brand, material, and category names.
+
 ## Transactions and stock
+
+Services own mutations through `outbound.UnitOfWork.WithinTx`, which provides
+`outbound.TxRepos` (`Sales`, `Products`, `Clients`, `Stock`). Repositories do
+not start nested transactions.
 
 Sale creation:
 
 ```text
 BEGIN
-  lock products for update
+  validate client and products
+  StockRepository.LockForUpdate(product ids sorted ascending)
   verify stock for every item
-  decrement stock
+  StockRepository.ApplyDelta(-quantity)
   insert sale
   insert items
 COMMIT
 ```
 
-Any failure rolls back the whole sale. The same rule applies to sale item
-mutations and order receiving.
+Any failure rolls back the whole sale. Item mutations use the same boundary,
+adjusting stock by the delta, recalculating the sale, and setting
+`updated_at`. Deleting a sale locks the product ids, restores each item
+quantity, deletes the items, then deletes the sale. PostgreSQL serializes
+competing stock writers with `SELECT ... FOR UPDATE`; SQLite uses its single
+connection. The same rule applies to order receiving.
 
 Order receiving:
 
@@ -368,8 +415,8 @@ is used. Generate and persist `SECRET_KEY` when missing.
 - SQLite uses goose dialect `sqlite3`. Version 1 creates the auth tables
   (`users`, `refresh_tokens`); versions 2–6 create the Phase 3 business schema
   split by domain: catalog, identity, products, purchases, sales.
-- The catalog, product, and client repositories and handlers are implemented.
-  The remaining business repositories and handlers are still pending. Do not
+- The catalog, product, client, and sales repositories and handlers are
+  implemented. Providers, supply chain, and dashboard remain pending. Do not
   translate business tables piecemeal; parity tests come with the adapters.
 - Every migration is forward-only unless a rollback is safe and tested.
 - Run at startup when `AUTO_MIGRATE=true`; otherwise expose an explicit

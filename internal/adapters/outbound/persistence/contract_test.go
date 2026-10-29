@@ -29,6 +29,9 @@ type repositories struct {
 	units      outbound.CatalogRepository[domain.MeasurementUnit]
 	products   outbound.ProductRepository
 	clients    outbound.ClientRepository
+	sales      outbound.SaleRepository
+	uow        outbound.UnitOfWork
+	stock      outbound.StockRepository
 	gorm       *gorm.DB
 }
 
@@ -52,6 +55,7 @@ func TestRepositoryContract(t *testing.T) {
 			t.Run("catalog", func(t *testing.T) { testCatalog(t, repos, searchIDs, backend.name) })
 			t.Run("products", func(t *testing.T) { testProducts(t, repos, backend.name) })
 			t.Run("clients", func(t *testing.T) { testClients(t, repos) })
+			t.Run("sales", func(t *testing.T) { testSales(t, repos) })
 		})
 	}
 	postgresIDs, postgresRan := searchIDs["postgres"]
@@ -90,6 +94,9 @@ func newRepositories(gormDB *gorm.DB) *repositories {
 		units:      gormstore.NewMeasurementUnitStore(gormDB),
 		products:   gormstore.NewProductStore(gormDB),
 		clients:    gormstore.NewClientStore(gormDB),
+		sales:      gormstore.NewSaleStore(gormDB),
+		uow:        gormstore.NewUnitOfWork(gormDB),
+		stock:      gormstore.NewStockStore(gormDB),
 		gorm:       gormDB,
 	}
 }

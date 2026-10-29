@@ -17,6 +17,7 @@ type Deps struct {
 	MeasurementUnits inbound.CatalogUseCase[domain.MeasurementUnit, inbound.CreateMeasurementUnitInput, inbound.UpdateMeasurementUnitInput]
 	Products         inbound.ProductUseCase
 	Clients          inbound.ClientUseCase
+	Sales            inbound.SaleUseCase
 	Logger           *slog.Logger
 	Backend          string
 	DevMode          bool
@@ -38,6 +39,7 @@ func NewRouter(deps Deps) http.Handler {
 	measurementUnitsHandler := newMeasurementUnitHandler(deps.MeasurementUnits, logger)
 	productsHandler := NewProductHandler(deps.Products, logger)
 	clientsHandler := NewClientHandler(deps.Clients, logger)
+	salesHandler := NewSaleHandler(deps.Sales, logger)
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "database": backend})
@@ -68,6 +70,25 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("GET /api/v1/sales/clients/{id}", clientsHandler.Get)
 	mux.HandleFunc("PUT /api/v1/sales/clients/{id}", clientsHandler.Update)
 	mux.HandleFunc("DELETE /api/v1/sales/clients/{id}", clientsHandler.Delete)
+
+	mux.HandleFunc("GET /api/v1/sales", salesHandler.List)
+	mux.HandleFunc("POST /api/v1/sales", salesHandler.Create)
+
+	// ServeMux cannot distinguish /sales/{id}/items from /sales/clients/{id},
+	// so the sale subtree excludes the literal client routes.
+	salesMux := http.NewServeMux()
+	salesMux.HandleFunc("GET /stats", salesHandler.Stats)
+	salesMux.HandleFunc("GET /{id}", salesHandler.Get)
+	salesMux.HandleFunc("PUT /{id}", salesHandler.Update)
+	salesMux.HandleFunc("DELETE /{id}", salesHandler.Delete)
+	salesMux.HandleFunc("GET /{id}/items", salesHandler.ListItems)
+	salesMux.HandleFunc("POST /{id}/items", salesHandler.AddItem)
+	salesMux.HandleFunc("PUT /{id}/items/{item_id}", salesHandler.UpdateItem)
+	salesMux.HandleFunc("DELETE /{id}/items/{item_id}", salesHandler.DeleteItem)
+	salesMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusNotFound, "Not found", "NOT_FOUND")
+	})
+	mux.Handle("/api/v1/sales/", http.StripPrefix("/api/v1/sales", salesMux))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Not found", "NOT_FOUND")

@@ -292,3 +292,48 @@ between clients and the API.
 **Consequences:** The Go API is stricter than legacy, catching client/API drift
 early. Clients must send exact field names. The difference is documented in
 [MIGRATION.md](MIGRATION.md#known-legacy-quirks).
+
+## ADR-0018 — UnitOfWork and StockRepository for stock mutations
+
+**Status:** Accepted
+
+**Context:** Sale creation, item mutations, deletion, and future order
+receiving must update stock and business rows atomically. Services own those
+transactions, but the application layer cannot import GORM or open a
+`*gorm.DB` transaction directly. Repository methods must also not start nested
+transactions when called from a service boundary.
+
+**Decision:** Add `outbound.UnitOfWork` (`WithinTx`) plus `outbound.TxRepos`
+and a narrow `outbound.StockRepository`. `WithinTx` wraps `db.Transaction` in
+`gormstore` and hands the callback transaction-bound sale, product, client,
+and stock stores. `StockRepository.LockForUpdate` selects product quantities
+in ascending id order, using `FOR UPDATE` on PostgreSQL and a plain ordered
+select on SQLite. `ApplyDelta` is a conditional update that returns
+`domain.ErrInsufficientStock` when the new quantity would be negative. Sale
+services use the read repository for list, get, and stats, and the unit of
+work for every mutation.
+
+**Consequences:** Sales, item changes, and deletion commit or roll back as one
+unit without leaking GORM into the application layer. PostgreSQL serializes
+competing stock writers with row locks; SQLite relies on its single
+connection and transaction. Future order receiving uses the same boundary.
+Helpers that call repositories with a transaction-bound `*gorm.DB` must not
+open another transaction.
+
+## ADR-0019 — Sales edge cases follow DOMAIN over legacy code
+
+**Status:** Accepted
+
+**Context:** The legacy API accepts duplicate product rows in a sale, allows
+`delivered_quantity` above `quantity` on some paths, and marks a zero total with
+zero paid as `paid` because `0 >= 0`. `docs/DOMAIN.md` requires one item per
+product, delivered quantity bounded by quantity, and a zero-total sale to be
+`pending`.
+
+**Decision:** Follow DOMAIN where it conflicts with legacy behavior. Go rejects
+duplicate products and `delivered_quantity > quantity` with `422`, and derives
+`pending` for a zero total with zero paid.
+
+**Consequences:** These are documented divergences in
+[MIGRATION.md](MIGRATION.md#known-legacy-quirks). Clients must rely on DOMAIN,
+not the legacy implementation, for sale validation and status.
