@@ -13,7 +13,7 @@ behavior. They are not optional polish.
 | Go repository contract | `testing` + PostgreSQL/SQLite | Same port cases against both adapters |
 | Go bootstrap | `testing` | `DB_MODE` selection and SQLite fallback |
 | Frontend unit | Vitest | Hooks, formatters, utilities, components |
-| Frontend E2E | Playwright | Login and users (inventory/sales/orders pending) |
+| Frontend E2E | Playwright | Auth, users, inventory, sales, purchase orders, dashboard aggregates |
 | Contract parity | Go test | Same fixtures against FastAPI and Go |
 
 ## Commands
@@ -243,6 +243,11 @@ absence of `GET` by id for materials and measurement units (404).
 `frontend/e2e/users.spec.ts` runs the full stack: real login, create a unique
 user from the Usuarios page, search, rename, toggle active, and delete.
 
+`frontend/e2e/global-setup.ts` logs in once through the real API and stores the
+token pair in `test-results/.auth/admin.json`. The business specs reuse that
+storage state so the loopback login limiter (5 attempts per minute per IP) is
+not exhausted by parallel workers.
+
 ### Products slice
 
 `internal/application/product_test.go` covers SKU generation and collision
@@ -401,8 +406,8 @@ The following is covered now:
   `127.0.0.1:0`.
 - Frontend: rotated refresh token storage, `auth:refreshed` state sync,
   fail-closed production bootstrap, es-CO/COP formatters.
-- Playwright: real login → Home → logout against `cmd/server` and the test
-  database. The seed reads `SEED_EMAIL`/`SEED_PASSWORD`/`SEED_NAME` from the
+- Playwright: real login → Dashboard (`/#/`) → logout against `cmd/server` and
+  the test database. The seed reads `SEED_EMAIL`/`SEED_PASSWORD`/`SEED_NAME` from the
   environment so the password never appears in argv, and the test secret is
   at least 32 bytes.
 
@@ -431,18 +436,28 @@ Vitest + Testing Library:
 
 Playwright:
 
-- Automated Playwright currently covers auth (`auth.spec.ts`) and users
-  (`users.spec.ts`) only; `frontend/playwright.config.ts` `testMatch` excludes
-  the other specs.
-- Login success and failure.
-- User creation and role visibility.
-- Users CRUD against the real API: create, search, rename, toggle active,
+- `frontend/playwright.config.ts` runs the full-stack specs only:
+  `auth.spec.ts`, `users.spec.ts`, `inventory.spec.ts`, `sales.spec.ts`,
+  `orders.spec.ts`, and `dashboard.spec.ts`. The legacy mocked specs
+  (`lists`, `filters`, `delete`, `keyboard`, `form-invalidation`) stay out of
+  the configured run.
+- `helpers.ts` provides API login reuse, unique suffixes, and catalog/product/
+  client/provider seeders. Business rows are created per test with a unique
+  suffix; specs never depend on pre-existing rows.
+- Auth: login and logout against the real API.
+- Users: CRUD against the real API: create, search, rename, toggle active,
   delete.
-- Inventory list/pagination/search and the product form are covered by Vitest,
-  not Playwright.
-- Full Playwright inventory, sales, and purchase-order flows remain pending.
-  The mocked `lists.spec.ts` is not in the configured run and several of its
-  routes are not mounted.
+- Inventory: API-seeded product list/search, product creation through the
+  form, edit, delete, and API state verification.
+- Sales: create through the form, stock decrement, delete, stock restore, and
+  sale removal.
+- Purchase orders: create through the form, receive transition increments
+  stock once, a second receive is a no-op, delete does not reverse stock.
+- Dashboard: the four aggregate endpoints are exercised against seeded sale
+  and purchase-order data, and `/#/` renders the real Dashboard with its KPI
+  labels and chart/table cards.
+- UI assertions use hash URLs, visible state, and `expect.poll` against the API
+  instead of sleeps.
 
 Use hash URLs (`/#/inventory`) for the desktop router. Run against Vite dev
 plus a test Go API. Add a manual Wails smoke test before release: launch,

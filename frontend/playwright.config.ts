@@ -4,7 +4,16 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
   // ponytail: full-stack specs only; the legacy mocked suite still runs manually.
-  testMatch: ['auth.spec.ts', 'users.spec.ts'],
+  testMatch: [
+    'auth.spec.ts',
+    'users.spec.ts',
+    'inventory.spec.ts',
+    'sales.spec.ts',
+    'orders.spec.ts',
+    'dashboard.spec.ts',
+  ],
+  globalSetup: './e2e/global-setup.ts',
+  timeout: 60_000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
@@ -34,6 +43,7 @@ export default defineConfig({
         SEED_EMAIL: 'admin@example.com',
         SEED_PASSWORD: 'admin12345',
         SEED_NAME: 'Admin User',
+        ALLOW_DEV_ORIGINS: 'true',
       },
     },
     {

@@ -3,7 +3,6 @@ import { expect, test } from '@playwright/test'
 const admin = {
   email: 'admin@example.com',
   password: 'admin12345',
-  fullName: 'Admin User',
 }
 
 test('creates, searches, edits, toggles, and deletes a user against the real API', async ({ page }) => {
@@ -16,7 +15,7 @@ test('creates, searches, edits, toggles, and deletes a user against the real API
   await page.getByLabel('Correo electrónico').fill(admin.email)
   await page.getByLabel('Contraseña', { exact: true }).fill(admin.password)
   await page.getByRole('button', { name: 'Ingresar' }).click()
-  await expect(page.getByRole('heading', { name: `Hola, ${admin.fullName}` })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
 
   await page.getByRole('link', { name: 'Usuarios' }).click()
   await expect(page).toHaveURL(/#\/users$/)
