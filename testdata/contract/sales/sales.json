@@ -1,0 +1,148 @@
+{
+  "module": "sales",
+  "endpoints": 10,
+  "fixtures": [
+    {
+      "name": "create sale",
+      "method": "POST",
+      "path": "/api/v1/sales",
+      "auth": "superuser",
+      "body": {
+        "payment_method": "cash",
+        "amount_paid": 5.0,
+        "client_id": "{{client_id}}",
+        "items": [
+          {
+            "product_id": "{{product_id}}",
+            "quantity": 2,
+            "delivered_quantity": 0,
+            "unit_price": 19.9
+          }
+        ]
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "sale_id": "id"
+      }
+    },
+    {
+      "name": "list sales for client",
+      "method": "GET",
+      "path": "/api/v1/sales?client_id={{client_id}}&limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "get sale",
+      "method": "GET",
+      "path": "/api/v1/sales/{{sale_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "update sale payment",
+      "method": "PUT",
+      "path": "/api/v1/sales/{{sale_id}}",
+      "auth": "superuser",
+      "body": {
+        "amount_paid": 39.8
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "sale stats",
+      "method": "GET",
+      "path": "/api/v1/sales/stats",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "compare": "shape",
+      "strict_compare": "full",
+      "body": null
+    },
+    {
+      "name": "list sale items",
+      "method": "GET",
+      "path": "/api/v1/sales/{{sale_id}}/items?limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "sale_item_id": "items.0.id"
+      },
+      "body": null
+    },
+    {
+      "name": "add sale item",
+      "method": "POST",
+      "path": "/api/v1/sales/{{sale_id}}/items",
+      "auth": "superuser",
+      "body": {
+        "product_id": "{{product2_id}}",
+        "quantity": 1,
+        "delivered_quantity": 0,
+        "unit_price": 5.0
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "list sale items after add",
+      "method": "GET",
+      "path": "/api/v1/sales/{{sale_id}}/items?limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "sale_item2_id": "items.1.id"
+      },
+      "body": null
+    },
+    {
+      "name": "update sale item quantity",
+      "method": "PUT",
+      "path": "/api/v1/sales/{{sale_id}}/items/{{sale_item2_id}}",
+      "auth": "superuser",
+      "body": {
+        "quantity": 2
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "delete sale item",
+      "method": "DELETE",
+      "path": "/api/v1/sales/{{sale_id}}/items/{{sale_item2_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "delete sale",
+      "method": "DELETE",
+      "path": "/api/v1/sales/{{sale_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    }
+  ]
+}

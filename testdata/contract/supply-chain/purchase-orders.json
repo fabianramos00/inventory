@@ -1,0 +1,136 @@
+{
+  "module": "supply-chain/purchase-orders",
+  "endpoints": 9,
+  "fixtures": [
+    {
+      "name": "create purchase order",
+      "method": "POST",
+      "path": "/api/v1/supply-chain/purchase-orders",
+      "auth": "superuser",
+      "body": {
+        "provider_id": "{{provider_id}}",
+        "status": "pending",
+        "payment_status": "pending",
+        "items": [
+          {
+            "product_id": "{{product_id}}",
+            "quantity": 2,
+            "unit_cost": 10.0,
+            "supplier_sku": "PARITY-PROV-SKU-1"
+          }
+        ]
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "order_id": "id"
+      }
+    },
+    {
+      "name": "list purchase orders",
+      "method": "GET",
+      "path": "/api/v1/supply-chain/purchase-orders?provider_id={{provider_id}}&limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "get purchase order",
+      "method": "GET",
+      "path": "/api/v1/supply-chain/purchase-orders/{{order_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "update purchase order to received",
+      "method": "PUT",
+      "path": "/api/v1/supply-chain/purchase-orders/{{order_id}}",
+      "auth": "superuser",
+      "body": {
+        "status": "received"
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "list purchase order items",
+      "method": "GET",
+      "path": "/api/v1/supply-chain/purchase-orders/{{order_id}}/items?limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "order_item_id": "items.0.id"
+      },
+      "body": null
+    },
+    {
+      "name": "add purchase order item",
+      "method": "POST",
+      "path": "/api/v1/supply-chain/purchase-orders/{{order_id}}/items",
+      "auth": "superuser",
+      "body": {
+        "product_id": "{{product2_id}}",
+        "quantity": 1,
+        "unit_cost": 2.5,
+        "supplier_sku": "PARITY-PROV-SKU-2"
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "list purchase order items after add",
+      "method": "GET",
+      "path": "/api/v1/supply-chain/purchase-orders/{{order_id}}/items?limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "order_item2_id": "items.1.id"
+      },
+      "body": null
+    },
+    {
+      "name": "update purchase order item",
+      "method": "PUT",
+      "path": "/api/v1/supply-chain/purchase-orders/{{order_id}}/items/{{order_item2_id}}",
+      "auth": "superuser",
+      "body": {
+        "quantity": 3
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "delete purchase order item",
+      "method": "DELETE",
+      "path": "/api/v1/supply-chain/purchase-orders/{{order_id}}/items/{{order_item2_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "delete purchase order",
+      "method": "DELETE",
+      "path": "/api/v1/supply-chain/purchase-orders/{{order_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    }
+  ]
+}

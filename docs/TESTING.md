@@ -410,7 +410,8 @@ The Users CRUD slice, the catalog slice, the products slice, the clients slice,
 the providers slice, the supplier catalog slice, the sales slice, the purchase
 order slice, and the dashboard aggregates are covered now (application,
 handler, repository contract, integration, and, for Users, full-stack E2E).
-The full 67-endpoint legacy parity matrix remains deferred.
+The contract harness under `tests/contract` covers all 67 legacy endpoints; see
+the recorded matrix result below.
 
 ## Frontend tests
 
@@ -451,66 +452,113 @@ login, create a sale, restart, confirm data persists.
 
 The FastAPI app is the reference. The Go API must match it.
 
+Harness: `tests/contract` (build tag `contract`). Fixtures:
+`testdata/contract/`.
+
 ```text
 testdata/contract/
-  auth/
-  inventory/
-  sales/
-  supply-chain/
-  dashboard/
-  users/
+  auth/auth.json
+  users/users.json
+  inventory/catalog.json
+  inventory/products.json
+  clients/clients.json
+  sales/sales.json
+  supply-chain/providers.json
+  supply-chain/supplier-catalogs.json
+  supply-chain/purchase-orders.json
+  dashboard/dashboard.json
+  replay/                 # optional replay recordings
 ```
 
-Each fixture contains:
+Each fixture contains `name`, `method`, `path`, `auth` (`none`, `superuser`,
+or `user`), `body`, and `expect.status`. Optional keys:
 
-```json
-{
-  "method": "GET",
-  "path": "/api/v1/inventory/products?limit=10",
-  "auth": "superuser",
-  "body": null,
-  "expect": { "status": 200 }
-}
-```
+- `capture`: maps a variable name to a response path (`id`, `items.0.id`,
+  `user.id`). Later requests use `{{variable}}` in paths and bodies.
+- `on_conflict`: when a create returns one of the listed statuses, the runner
+  looks the resource up by natural key and reuses it. This keeps `PARITY-`
+  named seed data reusable without cleanup.
+- `compare`: `full` (default), `shape`, or `status`. Global aggregates use
+  `shape` by default; set `CONTRACT_STRICT=1` to use their `strict_compare`
+  mode (`full`) against an isolated legacy database.
+- `content_type`: `form` for `/auth/login`; JSON otherwise.
 
-The parity test:
+The runner:
 
-1. Seeds identical data in both databases.
-2. Sends the same request to `LEGACY_API_URL` and the Go test server.
-3. Compares status code, JSON object shape, array ordering, and values.
-4. Normalizes timestamps and generated IDs before comparison.
-5. Compares money as decimals, never floats.
-6. Writes a diff report to `testdata/contract/report.md` on failure.
+1. Starts an in-process Go `httptest` server on a temporary SQLite database
+   (no port 8787 conflict).
+2. Reads the legacy user profile from `POST /auth/login` and seeds matching
+   Go users, so user fields compare without fixtures depending on local names.
+3. Authenticates both sides and sends the same request to the Go server and
+   `LEGACY_API_URL`.
+4. Seeds through the API with stable `PARITY-` natural keys and captures
+   generated IDs per side. No direct legacy database access.
+5. Compares status, JSON object shape, array ordering, and values. Generated
+   IDs, timestamps, and tokens are normalized; money is compared as a decimal.
+6. Writes `testdata/contract/report.md` on failure, including the request,
+   path-level differences, and skipped fixtures.
 
-Environment:
+### Commands
 
 ```bash
-LEGACY_API_URL=https://inventory-api-2rq4.onrender.com/api/v1 \
+# Live run. LEGACY_API_URL may include /api/v1 or omit it.
+LEGACY_API_URL=http://127.0.0.1:8011 \
+CONTRACT_ALLOW_WRITES=1 CONTRACT_STRICT=1 \
 LEGACY_USER=... LEGACY_PASSWORD=... \
-go test -tags=contract ./...
+LEGACY_REGULAR_USER=... LEGACY_REGULAR_PASSWORD=... \
+  go test -tags=contract ./tests/contract -count=1
+
+# Whole module tree with the tag (contract test skips when the legacy target
+# and replay file are absent).
+go test -tags=contract ./... -count=1
+
+# Record legacy responses, then replay them without a live FastAPI instance.
+CONTRACT_RECORD_DIR=/tmp/contract-replay \
+LEGACY_API_URL=http://127.0.0.1:8011 CONTRACT_ALLOW_WRITES=1 \
+LEGACY_USER=... LEGACY_PASSWORD=... \
+  go test -tags=contract ./tests/contract -count=1
+CONTRACT_REPLAY_FILE=/tmp/contract-replay/replay.json \
+  go test -tags=contract ./tests/contract -count=1
 ```
 
-If the legacy service is unavailable, record the reason and run the saved
-fixtures in replay mode. Do not mark parity as passing without a run.
+`CONTRACT_ALLOW_WRITES=1` is mandatory for a live run because the harness
+creates, updates, and deletes resources. Use only a disposable legacy
+instance and database. Never point it at production or at the user's existing
+`inventory` database. Recorded replay files redact token values, but treat
+them as test data and do not commit credentials.
+
+`LEGACY_REGULAR_USER`/`LEGACY_REGULAR_PASSWORD` are optional. Without them
+the regular-user `403` fixture is skipped with a recorded reason. Money and
+timestamps are normalized only for comparison; the harness never rewrites
+responses.
+
+### Recorded run
+
+Last recorded run: 2026-10-29 against a disposable local FastAPI instance
+(`../inventory-api/.venv`, a new throwaway PostgreSQL database, its own
+`SECRET_KEY` and seeded superuser/regular users). Command: the live strict
+command above. Result: all 67 endpoints passed; replay from the recorded
+responses also passed. The existing `inventory` database was not touched.
 
 ### Parity matrix
 
 | Module | Endpoints | Status |
 |---|---:|---|
-| Auth | 3 | Covered (Phase 2) |
-| Users | 5 | Covered (this slice) |
-| Inventory — catalog | 18 | Backend contract covered; legacy FastAPI parity pending |
-| Inventory — products | 6 | Backend contract covered; legacy FastAPI parity pending |
-| Clients | 5 | Backend contract covered; legacy FastAPI parity pending |
-| Sales | 10 | Backend contract covered; legacy FastAPI parity pending |
-| Supply chain — providers | 5 | Backend contract covered; legacy FastAPI parity pending |
-| Supply chain — supplier catalogs | 2 | Backend contract covered; legacy FastAPI parity pending |
-| Supply chain — purchase orders | 9 | Backend contract covered; legacy FastAPI parity pending |
-| Dashboard | 4 | Backend contract covered; legacy FastAPI parity pending |
-| **Total** | **67** | Pending |
+| Auth | 3 | Passed (local disposable FastAPI run, 2026-10-29) |
+| Users | 5 | Passed (local disposable FastAPI run, 2026-10-29) |
+| Inventory — catalog | 18 | Passed (local disposable FastAPI run, 2026-10-29) |
+| Inventory — products | 6 | Passed (local disposable FastAPI run, 2026-10-29) |
+| Clients | 5 | Passed (local disposable FastAPI run, 2026-10-29) |
+| Sales | 10 | Passed (local disposable FastAPI run, 2026-10-29) |
+| Supply chain — providers | 5 | Passed (local disposable FastAPI run, 2026-10-29) |
+| Supply chain — supplier catalogs | 2 | Passed (local disposable FastAPI run, 2026-10-29) |
+| Supply chain — purchase orders | 9 | Passed (local disposable FastAPI run, 2026-10-29) |
+| Dashboard | 4 | Passed (local disposable FastAPI run, 2026-10-29) |
+| **Total** | **67** | **Passed** |
 
-Update the status column as each module passes. The matrix is the release
-gate.
+`TestFixtureCoverage` fails if a fixture file drops one of the 67 endpoints,
+if a module declares the wrong count, or if an unlisted endpoint appears.
+Update the status column only after a recorded run.
 
 ## Accessibility checks
 

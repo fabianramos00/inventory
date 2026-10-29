@@ -1,0 +1,118 @@
+{
+  "module": "users",
+  "endpoints": 5,
+  "fixtures": [
+    {
+      "name": "create parity user",
+      "method": "POST",
+      "path": "/api/v1/users",
+      "auth": "superuser",
+      "body": {
+        "email": "parity-target@example.com",
+        "password": "parity-target-password",
+        "full_name": "Parity Target",
+        "is_active": true,
+        "is_superuser": false
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "target_user_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/users?search=parity-target%40example.com",
+          "match": {
+            "email": "parity-target@example.com"
+          }
+        }
+      }
+    },
+    {
+      "name": "list parity users",
+      "method": "GET",
+      "path": "/api/v1/users?search=parity-target%40example.com&limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "get parity user",
+      "method": "GET",
+      "path": "/api/v1/users/{{target_user_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "update parity user",
+      "method": "PUT",
+      "path": "/api/v1/users/{{target_user_id}}",
+      "auth": "superuser",
+      "body": {
+        "full_name": "Parity Target Updated"
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "create user for delete",
+      "method": "POST",
+      "path": "/api/v1/users",
+      "auth": "superuser",
+      "body": {
+        "email": "parity-delete@example.com",
+        "password": "parity-delete-password",
+        "full_name": "Parity Delete",
+        "is_active": true,
+        "is_superuser": false
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "delete_user_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/users?search=parity-delete%40example.com",
+          "match": {
+            "email": "parity-delete@example.com"
+          }
+        }
+      }
+    },
+    {
+      "name": "delete parity user",
+      "method": "DELETE",
+      "path": "/api/v1/users/{{delete_user_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "regular user cannot list users",
+      "method": "GET",
+      "path": "/api/v1/users?limit=1",
+      "auth": "user",
+      "expect": {
+        "status": 403
+      },
+      "body": null
+    }
+  ]
+}

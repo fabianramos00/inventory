@@ -1,0 +1,29 @@
+{
+  "module": "supply-chain/supplier-catalogs",
+  "endpoints": 2,
+  "fixtures": [
+    {
+      "name": "list supplier catalogs",
+      "method": "GET",
+      "path": "/api/v1/supply-chain/supplier-catalogs?provider_id={{provider_id}}&limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "catalog_id": "items.0.id"
+      },
+      "body": null
+    },
+    {
+      "name": "get supplier catalog",
+      "method": "GET",
+      "path": "/api/v1/supply-chain/supplier-catalogs/{{catalog_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    }
+  ]
+}

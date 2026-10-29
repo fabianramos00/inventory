@@ -1,0 +1,370 @@
+{
+  "module": "inventory/catalog",
+  "endpoints": 18,
+  "fixtures": [
+    {
+      "name": "create main category",
+      "method": "POST",
+      "path": "/api/v1/inventory/categories",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Cat Main",
+        "code": "PARITY-CAT",
+        "description": "parity category"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "category_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/inventory/categories?search=PARITY%20Cat%20Main",
+          "match": {
+            "name": "PARITY Cat Main"
+          }
+        }
+      }
+    },
+    {
+      "name": "list categories",
+      "method": "GET",
+      "path": "/api/v1/inventory/categories?search=PARITY%20Cat%20Main&limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "get main category",
+      "method": "GET",
+      "path": "/api/v1/inventory/categories/{{category_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "create category for update",
+      "method": "POST",
+      "path": "/api/v1/inventory/categories",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Cat Update",
+        "code": "PARITY-UPD",
+        "description": "before"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "update_category_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/inventory/categories?search=PARITY%20Cat%20Update",
+          "match": {
+            "name": "PARITY Cat Update"
+          }
+        }
+      }
+    },
+    {
+      "name": "update category",
+      "method": "PUT",
+      "path": "/api/v1/inventory/categories/{{update_category_id}}",
+      "auth": "superuser",
+      "body": {
+        "description": "after"
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "delete category",
+      "method": "DELETE",
+      "path": "/api/v1/inventory/categories/{{update_category_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "create main material",
+      "method": "POST",
+      "path": "/api/v1/inventory/materials",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Material Main"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "material_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/inventory/materials?search=PARITY%20Material%20Main",
+          "match": {
+            "name": "PARITY Material Main"
+          }
+        }
+      }
+    },
+    {
+      "name": "list materials",
+      "method": "GET",
+      "path": "/api/v1/inventory/materials?search=PARITY%20Material%20Main&limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "create material for update",
+      "method": "POST",
+      "path": "/api/v1/inventory/materials",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Material Update"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "update_material_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/inventory/materials?search=PARITY%20Material%20Update",
+          "match": {
+            "name": "PARITY Material Update"
+          }
+        }
+      }
+    },
+    {
+      "name": "update material",
+      "method": "PUT",
+      "path": "/api/v1/inventory/materials/{{update_material_id}}",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Material Updated"
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "delete material",
+      "method": "DELETE",
+      "path": "/api/v1/inventory/materials/{{update_material_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "create main brand",
+      "method": "POST",
+      "path": "/api/v1/inventory/brands",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Brand Main",
+        "logo_url": null
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "brand_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/inventory/brands?search=PARITY%20Brand%20Main",
+          "match": {
+            "name": "PARITY Brand Main"
+          }
+        }
+      }
+    },
+    {
+      "name": "list brands",
+      "method": "GET",
+      "path": "/api/v1/inventory/brands?search=PARITY%20Brand%20Main&limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "get main brand",
+      "method": "GET",
+      "path": "/api/v1/inventory/brands/{{brand_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "create brand for update",
+      "method": "POST",
+      "path": "/api/v1/inventory/brands",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Brand Update",
+        "logo_url": "https://example.com/parity.png"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "update_brand_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/inventory/brands?search=PARITY%20Brand%20Update",
+          "match": {
+            "name": "PARITY Brand Update"
+          }
+        }
+      }
+    },
+    {
+      "name": "update brand",
+      "method": "PUT",
+      "path": "/api/v1/inventory/brands/{{update_brand_id}}",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Brand Updated"
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "delete brand",
+      "method": "DELETE",
+      "path": "/api/v1/inventory/brands/{{update_brand_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "create main measurement unit",
+      "method": "POST",
+      "path": "/api/v1/inventory/measurement-units",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Unit Main",
+        "abbreviation": "PUM"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "unit_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/inventory/measurement-units?search=PARITY%20Unit%20Main",
+          "match": {
+            "name": "PARITY Unit Main"
+          }
+        }
+      }
+    },
+    {
+      "name": "list measurement units",
+      "method": "GET",
+      "path": "/api/v1/inventory/measurement-units?search=PARITY%20Unit%20Main&limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "create measurement unit for update",
+      "method": "POST",
+      "path": "/api/v1/inventory/measurement-units",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Unit Update",
+        "abbreviation": "PUU"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "update_unit_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/inventory/measurement-units?search=PARITY%20Unit%20Update",
+          "match": {
+            "name": "PARITY Unit Update"
+          }
+        }
+      }
+    },
+    {
+      "name": "update measurement unit",
+      "method": "PUT",
+      "path": "/api/v1/inventory/measurement-units/{{update_unit_id}}",
+      "auth": "superuser",
+      "body": {
+        "abbreviation": "PUX"
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "delete measurement unit",
+      "method": "DELETE",
+      "path": "/api/v1/inventory/measurement-units/{{update_unit_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    }
+  ]
+}

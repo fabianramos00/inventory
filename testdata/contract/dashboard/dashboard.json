@@ -1,0 +1,54 @@
+{
+  "module": "dashboard",
+  "endpoints": 4,
+  "fixtures": [
+    {
+      "name": "summary",
+      "method": "GET",
+      "path": "/api/v1/dashboard/summary",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "compare": "shape",
+      "strict_compare": "full",
+      "body": null
+    },
+    {
+      "name": "sales trend",
+      "method": "GET",
+      "path": "/api/v1/dashboard/sales-trend",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "compare": "shape",
+      "strict_compare": "full",
+      "body": null
+    },
+    {
+      "name": "top products",
+      "method": "GET",
+      "path": "/api/v1/dashboard/top-products?limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "compare": "shape",
+      "strict_compare": "full",
+      "body": null
+    },
+    {
+      "name": "order status distribution",
+      "method": "GET",
+      "path": "/api/v1/dashboard/order-status-distribution",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "compare": "shape",
+      "strict_compare": "full",
+      "body": null
+    }
+  ]
+}

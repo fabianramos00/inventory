@@ -1,0 +1,107 @@
+{
+  "module": "clients",
+  "endpoints": 5,
+  "fixtures": [
+    {
+      "name": "create main client",
+      "method": "POST",
+      "path": "/api/v1/sales/clients",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Client Main",
+        "identity_card": "PARITY-CLIENT-1",
+        "email": "parity-client@example.com",
+        "phone": "3000000001"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "client_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/sales/clients?search=PARITY%20Client%20Main",
+          "match": {
+            "name": "PARITY Client Main"
+          }
+        }
+      }
+    },
+    {
+      "name": "list clients",
+      "method": "GET",
+      "path": "/api/v1/sales/clients?search=PARITY%20Client%20Main&limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "get main client",
+      "method": "GET",
+      "path": "/api/v1/sales/clients/{{client_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "create client for update and delete",
+      "method": "POST",
+      "path": "/api/v1/sales/clients",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Client Update",
+        "identity_card": "PARITY-CLIENT-2",
+        "email": "parity-client-update@example.com",
+        "phone": "3000000002"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "delete_client_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/sales/clients?search=PARITY%20Client%20Update",
+          "match": {
+            "name": "PARITY Client Update"
+          }
+        }
+      }
+    },
+    {
+      "name": "update client",
+      "method": "PUT",
+      "path": "/api/v1/sales/clients/{{delete_client_id}}",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Client Updated",
+        "phone": "3000000003"
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "delete client",
+      "method": "DELETE",
+      "path": "/api/v1/sales/clients/{{delete_client_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    }
+  ]
+}

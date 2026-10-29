@@ -1,0 +1,169 @@
+{
+  "module": "inventory/products",
+  "endpoints": 6,
+  "fixtures": [
+    {
+      "name": "create main product",
+      "method": "POST",
+      "path": "/api/v1/inventory/products",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Product Hammer",
+        "sku": "PARITY-SKU-HAMMER",
+        "size_value": "16 oz",
+        "measurement_unit_id": "{{unit_id}}",
+        "price": 19.9,
+        "cost": 10.0,
+        "stock_quantity": 1000,
+        "low_stock_threshold": 5,
+        "brand_id": "{{brand_id}}",
+        "category_id": "{{category_id}}",
+        "material_id": "{{material_id}}"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "product_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/inventory/products?search=PARITY%20Product%20Hammer",
+          "match": {
+            "name": "PARITY Product Hammer"
+          }
+        }
+      }
+    },
+    {
+      "name": "create second product",
+      "method": "POST",
+      "path": "/api/v1/inventory/products",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Product Nail",
+        "sku": "PARITY-SKU-NAIL",
+        "size_value": "2 in",
+        "measurement_unit_id": "{{unit_id}}",
+        "price": 5.0,
+        "cost": 2.0,
+        "stock_quantity": 1000,
+        "low_stock_threshold": 5,
+        "brand_id": "{{brand_id}}",
+        "category_id": "{{category_id}}",
+        "material_id": "{{material_id}}"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "product2_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/inventory/products?search=PARITY%20Product%20Nail",
+          "match": {
+            "name": "PARITY Product Nail"
+          }
+        }
+      }
+    },
+    {
+      "name": "list products",
+      "method": "GET",
+      "path": "/api/v1/inventory/products?search=PARITY%20Product%20Hammer&limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "get main product",
+      "method": "GET",
+      "path": "/api/v1/inventory/products/{{product_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "create product for update and delete",
+      "method": "POST",
+      "path": "/api/v1/inventory/products",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Product Delete",
+        "sku": "PARITY-SKU-DELETE",
+        "size_value": "1 in",
+        "measurement_unit_id": "{{unit_id}}",
+        "price": 3.0,
+        "cost": 1.0,
+        "stock_quantity": 10,
+        "low_stock_threshold": 2,
+        "brand_id": "{{brand_id}}",
+        "category_id": "{{category_id}}",
+        "material_id": "{{material_id}}"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "delete_product_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/inventory/products?search=PARITY%20Product%20Delete",
+          "match": {
+            "name": "PARITY Product Delete"
+          }
+        }
+      }
+    },
+    {
+      "name": "update product",
+      "method": "PUT",
+      "path": "/api/v1/inventory/products/{{delete_product_id}}",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Product Delete Updated",
+        "price": 4.5
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "delete product",
+      "method": "DELETE",
+      "path": "/api/v1/inventory/products/{{delete_product_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "product stats",
+      "method": "GET",
+      "path": "/api/v1/inventory/products/stats/overview",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "compare": "shape",
+      "strict_compare": "full",
+      "body": null
+    }
+  ]
+}

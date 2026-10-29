@@ -1,0 +1,107 @@
+{
+  "module": "supply-chain/providers",
+  "endpoints": 5,
+  "fixtures": [
+    {
+      "name": "create main provider",
+      "method": "POST",
+      "path": "/api/v1/supply-chain/providers",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Provider Main",
+        "contact_info": "Parity Contact",
+        "email": "parity-provider@example.com",
+        "phone": "3100000001"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "provider_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/supply-chain/providers?search=PARITY%20Provider%20Main",
+          "match": {
+            "name": "PARITY Provider Main"
+          }
+        }
+      }
+    },
+    {
+      "name": "list providers",
+      "method": "GET",
+      "path": "/api/v1/supply-chain/providers?search=PARITY%20Provider%20Main&limit=10",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "get main provider",
+      "method": "GET",
+      "path": "/api/v1/supply-chain/providers/{{provider_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    },
+    {
+      "name": "create provider for update and delete",
+      "method": "POST",
+      "path": "/api/v1/supply-chain/providers",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Provider Update",
+        "contact_info": "Before",
+        "email": "parity-provider-update@example.com",
+        "phone": "3100000002"
+      },
+      "expect": {
+        "status": 200
+      },
+      "capture": {
+        "delete_provider_id": "id"
+      },
+      "on_conflict": {
+        "statuses": [
+          400
+        ],
+        "find": {
+          "path": "/api/v1/supply-chain/providers?search=PARITY%20Provider%20Update",
+          "match": {
+            "name": "PARITY Provider Update"
+          }
+        }
+      }
+    },
+    {
+      "name": "update provider",
+      "method": "PUT",
+      "path": "/api/v1/supply-chain/providers/{{delete_provider_id}}",
+      "auth": "superuser",
+      "body": {
+        "name": "PARITY Provider Updated",
+        "contact_info": "After"
+      },
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "name": "delete provider",
+      "method": "DELETE",
+      "path": "/api/v1/supply-chain/providers/{{delete_provider_id}}",
+      "auth": "superuser",
+      "expect": {
+        "status": 200
+      },
+      "body": null
+    }
+  ]
+}
