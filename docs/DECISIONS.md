@@ -185,12 +185,12 @@ CGO or an embedded PostgreSQL server adds packaging and operational cost.
 In `auto`, probe PostgreSQL with a 3-second timeout; on failure log a warning
 and open SQLite through `modernc.org/sqlite` (pure Go). SQLite enables foreign
 keys, a busy timeout, and WAL, stores data under the OS config directory, and
-since Phase 3 contains the auth tables and the full business schema.
+contains the auth tables and the full business schema.
 PostgreSQL remains the full-feature backend.
 
 **Consequences:** Standalone installs can authenticate, persist sessions, and
 run the business modules offline. The full SQLite schema and parity tests
-landed in Phase 3. Automatic fallback can hide a misconfigured DSN, so the
+are implemented. Automatic fallback can hide a misconfigured DSN, so the
 warning is logged, the UI shows a persistent offline banner, and
 `DB_MODE=postgres` is available for deployments that must fail hard. Sync is
 not implemented; it will require stable sync IDs, reliable timestamps,
@@ -264,7 +264,7 @@ longer act as wildcards, a documented deviation from the legacy API.
 
 **Context:** PostgreSQL stores money as `NUMERIC(12,2)` and Go reads it as a
 decimal. SQLite has no exact decimal type; storing `REAL` would lose precision
-and break the money invariant. The Phase 3 SQLite schema already declares the
+and break the money invariant. The SQLite schema already declares the
 money columns as `INTEGER`.
 
 **Decision:** Keep the legacy column names unchanged. SQLite stores money as
@@ -291,8 +291,8 @@ between clients and the API.
 **Decision:** Reject unknown fields on JSON bodies with `422 VALIDATION_ERROR`.
 
 **Consequences:** The Go API is stricter than legacy, catching client/API drift
-early. Clients must send exact field names. The difference is documented in
-[MIGRATION.md](MIGRATION.md#known-legacy-quirks).
+early. Clients must send exact field names. This difference from legacy
+Pydantic behavior is intentional.
 
 ## ADR-0018 — UnitOfWork and StockRepository for stock mutations
 
@@ -335,9 +335,9 @@ product, delivered quantity bounded by quantity, and a zero-total sale to be
 duplicate products and `delivered_quantity > quantity` with `422`, and derives
 `pending` for a zero total with zero paid.
 
-**Consequences:** These are documented divergences in
-[MIGRATION.md](MIGRATION.md#known-legacy-quirks). Clients must rely on DOMAIN,
-not the legacy implementation, for sale validation and status.
+**Consequences:** These are intentional divergences from the legacy API.
+Clients must rely on DOMAIN, not the legacy implementation, for sale validation
+and status.
 
 ## ADR-0021 — SQLite offline mode is visible and unencrypted in v1
 

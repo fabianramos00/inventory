@@ -33,7 +33,7 @@ Windows, and macOS.
 - Targets: Linux (amd64), Windows (amd64, WebView2), macOS (universal).
 - Signing: Authenticode on Windows, Developer ID + notarization on macOS,
   checksums on Linux.
-- Current phase: Phase 3 complete. `scripts/verify.sh`, the CI workflow, and
+- Project status: feature-complete. `scripts/verify.sh`, the CI workflow, and
   the Linux Wails build/backup checks are verified. Windows/macOS packaging
   and signing remain blocked on external tooling.
 
@@ -143,8 +143,8 @@ A red step blocks release.
 - You cannot message another agent directly. If their scope must change,
   return a `HANDOFF` block to the manager:
   `Target`, `Reason`, `Files`, `Change`, `Acceptance`, `Blocked`.
-- In parallel mode, work from the frozen module contract
-  (`docs/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
-  fields; report contract gaps to the manager.
+- In parallel mode, work from the frozen module contract and do not
+  invent missing fields; report contract gaps to the manager.
 - Do not edit application code to make a build pass; hand the
   fix to the owning developer.
+- Do not commit unless the user explicitly says 'commit' for the current batch; 'continue'/'improve'/'fix'/'document' is not authorization.

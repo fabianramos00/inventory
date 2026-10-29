@@ -148,7 +148,7 @@ is both safer and compatible with the UI.
 entity's name fields as defined by the legacy repository. Do not change the
 match columns while porting. Inventory search (catalog names and product
 name+SKU) treats `%` and `_` literally as a deliberate difference from legacy
-`ILIKE` wildcards; see [MIGRATION.md](MIGRATION.md#known-legacy-quirks) and
+`ILIKE` wildcards; see
 [DECISIONS.md](DECISIONS.md#adr-0015--inventory-search-treats-sql-wildcards-literally).
 
 ## Endpoints
@@ -236,7 +236,7 @@ Item shape:
   at 200. `search` is trimmed and capped at 256 characters.
 - Search matches `name`, `identity_card`, `email`, and `phone` by
   case-insensitive substring. `%` and `_` are literal characters; see
-  [MIGRATION.md](MIGRATION.md#known-legacy-quirks).
+  [DECISIONS.md](DECISIONS.md#adr-0015--inventory-search-treats-sql-wildcards-literally).
 - `name` is required, trimmed, and non-empty. `identity_card`, `email`, and
   `phone` are optional, trimmed, and stored as `null` when empty. Email and
   phone formats are not validated (legacy behavior).
@@ -424,7 +424,7 @@ Supplier catalog shape:
 }
 ```
 
-- Read-only in this phase: list and get only. Rows are created or updated when
+- Read-only through the API: list and get only. Rows are created or updated when
   a purchase order is received.
 - `last_quoted_cost` is money and is serialized as an exact JSON number;
   `lead_time` is a nullable integer number of days. `products` is the plain
@@ -570,5 +570,4 @@ Time, empty data, and status details:
 6. Removed or renamed fields require a frontend change in the same task.
 7. Error codes may be richer than the legacy API, but `detail` must remain a
    readable string.
-8. Any intentional difference gets an entry in [MIGRATION.md](MIGRATION.md)
-   and [DECISIONS.md](DECISIONS.md).
+8. Any intentional difference is documented in [DECISIONS.md](DECISIONS.md).

@@ -17,7 +17,7 @@ The Go API mirrors the legacy FastAPI `/api/v1` contract. PostgreSQL is the
 primary database; when it is unreachable, the app can run on local SQLite in
 offline mode.
 
-Current phase: **Phase 3 feature-complete.** Release is pending external
+Project status: **feature-complete.** Release is pending external
 packaging and signing.
 
 ## Stack
@@ -79,7 +79,7 @@ opencode.json
 docs/
 ```
 
-Current code (Phase 3):
+Current code:
 
 ```text
 main.go, app.go, main_bindings.go, wails.json
@@ -129,6 +129,20 @@ Cross-boundary changes require the owning agent to make the change. If a
 backend change needs a frontend adjustment, backend reports the required
 change to `frontend`; it does not edit `frontend/`.
 
+## Planning and commit gate
+
+- Every batch starts with a short written plan: scope, files, agents, checks,
+  and expected commit shape. Do not start implementation or delegate work
+  until the user approves the plan.
+- Approval to plan, improve, fix, review, document, continue, or investigate is
+  **not** approval to commit.
+- A commit requires an explicit user instruction containing the word "commit"
+  for the current batch.
+- The manager must list the staged files and commit message before a developer
+  runs `git commit`.
+- If the user does not mention committing, leave the work uncommitted and report
+  it as ready for review.
+
 ## Commit policy
 
 - **No agent commits unless the user explicitly asks.**
@@ -148,7 +162,7 @@ change to `frontend`; it does not edit `frontend/`.
 Every file in `.opencode/agents/` must contain role-specific context, not a
 generic job description. At minimum:
 
-1. Project context: stack, phase, locale, and legacy references.
+1. Project context: stack, status, locale, and legacy references.
 2. Owned paths and explicit read-only areas.
 3. Required reading with exact file paths.
 4. Domain context relevant to the role (business rules, schema, threat
@@ -200,8 +214,7 @@ The manager may run independent subagent tasks in parallel by emitting multiple
 `task` calls in one message. Parallel work is allowed only when file scopes do
 not overlap and the module contract is frozen.
 
-- Freeze the contract first using
-  `docs/MODULE-CONTRACT-TEMPLATE.md`.
+- Freeze the module contract before implementation.
 - `backend` and `frontend` may run concurrently after the freeze; neither edits
   the other's scope.
 - Read-only reviews (`database`, `security`, `product`, `ux-designer`) may run

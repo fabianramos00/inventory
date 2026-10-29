@@ -173,7 +173,7 @@ Cases:
   buckets, top-product ranking by subtotal versus delivered quantity, nullable
   relations, and status-distribution ordering.
 
-SQLite now has the full Phase 3 business schema (`00001_auth.sql` plus
+SQLite has the full business schema (`00001_auth.sql` plus
 `00002_catalog.sql` through `00006_sales.sql`). Go service, handler, and
 persistence contract coverage for catalog, products, clients, sales, providers,
 and supplier catalogs exists on both backends; the live legacy FastAPI fixture
@@ -386,7 +386,7 @@ filters, pagination, catalog upsert preserving an existing supplier SKU, and
 PostgreSQL transitions to `received` and proves one stock increment and one
 catalog row.
 
-## Phase 2 auth coverage
+## Auth coverage
 
 The following is covered now:
 
@@ -547,33 +547,25 @@ the regular-user `403` fixture is skipped with a recorded reason. Money and
 timestamps are normalized only for comparison; the harness never rewrites
 responses.
 
-### Recorded run
-
-Last recorded run: 2026-10-29 against a disposable local FastAPI instance
-(`../inventory-api/.venv`, a new throwaway PostgreSQL database, its own
-`SECRET_KEY` and seeded superuser/regular users). Command: the live strict
-command above. Result: all 67 endpoints passed; replay from the recorded
-responses also passed. The existing `inventory` database was not touched.
-
 ### Parity matrix
 
 | Module | Endpoints | Status |
 |---|---:|---|
-| Auth | 3 | Passed (local disposable FastAPI run, 2026-10-29) |
-| Users | 5 | Passed (local disposable FastAPI run, 2026-10-29) |
-| Inventory — catalog | 18 | Passed (local disposable FastAPI run, 2026-10-29) |
-| Inventory — products | 6 | Passed (local disposable FastAPI run, 2026-10-29) |
-| Clients | 5 | Passed (local disposable FastAPI run, 2026-10-29) |
-| Sales | 10 | Passed (local disposable FastAPI run, 2026-10-29) |
-| Supply chain — providers | 5 | Passed (local disposable FastAPI run, 2026-10-29) |
-| Supply chain — supplier catalogs | 2 | Passed (local disposable FastAPI run, 2026-10-29) |
-| Supply chain — purchase orders | 9 | Passed (local disposable FastAPI run, 2026-10-29) |
-| Dashboard | 4 | Passed (local disposable FastAPI run, 2026-10-29) |
+| Auth | 3 | Passed |
+| Users | 5 | Passed |
+| Inventory — catalog | 18 | Passed |
+| Inventory — products | 6 | Passed |
+| Clients | 5 | Passed |
+| Sales | 10 | Passed |
+| Supply chain — providers | 5 | Passed |
+| Supply chain — supplier catalogs | 2 | Passed |
+| Supply chain — purchase orders | 9 | Passed |
+| Dashboard | 4 | Passed |
 | **Total** | **67** | **Passed** |
 
 `TestFixtureCoverage` fails if a fixture file drops one of the 67 endpoints,
 if a module declares the wrong count, or if an unlisted endpoint appears.
-Update the status column only after a recorded run.
+Update the status column only after a verified run.
 
 ## Accessibility checks
 

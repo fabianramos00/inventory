@@ -6,7 +6,7 @@ REST API backed by PostgreSQL.
 
 ## Status
 
-**Phase 3 complete.** Implemented: Wails shell, embedded React app shell,
+**Project status: feature-complete.** Implemented: Wails shell, embedded React app shell,
 loopback Go API, PostgreSQL and SQLite persistence behind ports/adapters, JWT
 auth, seed command, superuser-only Users CRUD, inventory catalog and products,
 clients, providers, supplier catalogs, sales, purchase orders, and the
@@ -69,7 +69,7 @@ internal/adapters/outbound/persistence/gormstore/ GORM outbound adapter
 internal/adapters/outbound/security/ JWT, bcrypt, refresh tokens
 ```
 
-Implemented through Phase 3: `main.go`, `app.go`, `main_bindings.go`,
+Current implementation: `main.go`, `app.go`, `main_bindings.go`,
 `wails.json`, `internal/`, `migrations/`, `cmd/`, `frontend/`, and the
 development `docker-compose.yml`.
 
@@ -144,7 +144,6 @@ opencode so the configuration reloads.
 | [docs/SECURITY.md](docs/SECURITY.md) | Threat model and security rules |
 | [docs/RELEASE.md](docs/RELEASE.md) | Build, packaging, release |
 | [docs/DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md) | Visual system |
-| [docs/MIGRATION.md](docs/MIGRATION.md) | FastAPI → Go migration plan |
 | [docs/SYNC.md](docs/SYNC.md) | Future offline/sync design constraints |
 
 ## Legacy references

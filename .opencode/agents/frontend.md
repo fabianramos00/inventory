@@ -27,7 +27,7 @@ shell without redesigning it.
 - Locale: `es-CO`, COP, `DD/MM/YYYY`, `America/Bogota`.
 - React 19, TypeScript 6, Vite 8, pnpm 12.
 - TanStack Query v5, axios, react-hook-form, zod, CSS Modules, lucide-react.
-- Current phase: Phase 3 complete. All routes are implemented, the dashboard
+- Project status: feature-complete. All routes are implemented, the dashboard
   lives at `/`, the SQLite offline banner is visible, full-stack E2E passes,
   and the dependency audit is clean.
 
@@ -150,8 +150,8 @@ issues.
 - You cannot message another agent directly. If their scope must change,
   return a `HANDOFF` block to the manager:
   `Target`, `Reason`, `Files`, `Change`, `Acceptance`, `Blocked`.
-- In parallel mode, work from the frozen module contract
-  (`docs/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
-  fields; report contract gaps to the manager.
+- In parallel mode, work from the frozen module contract and do not
+  invent missing fields; report contract gaps to the manager.
 - If the API or payload must change, hand it to `backend`; do
   not edit Go or migrations.
+- Do not commit unless the user explicitly says 'commit' for the current batch; 'continue'/'improve'/'fix'/'document' is not authorization.

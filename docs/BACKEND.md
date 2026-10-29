@@ -360,7 +360,7 @@ Never log passwords, tokens, authorization headers, or full request bodies.
 ## Supplier catalogs
 
 - Read-only endpoints under `/api/v1/supply-chain/supplier-catalogs`: list and
-  get. There are no create/update/delete routes in this phase; catalog rows are
+  get. There are no create/update/delete routes through the API; catalog rows are
   written only when a purchase order is received.
 - Responses include `id`, `product_id`, `provider_id`, `supplier_sku`,
   `last_quoted_cost`, `lead_time`, the full `provider` object, and the plain
@@ -534,7 +534,7 @@ is used. Generate and persist `SECRET_KEY` when missing.
   recreated. A goose row for version `1` alone is not a valid baseline for the
   split set.
 - SQLite uses goose dialect `sqlite3`. Version 1 creates the auth tables
-  (`users`, `refresh_tokens`); versions 2–6 create the Phase 3 business schema
+  (`users`, `refresh_tokens`); versions 2–6 create the full business schema
   split by domain: catalog, identity, products, purchases, sales.
 - The catalog, product, client, provider, supplier catalog, purchase order,
   and sales repositories and handlers are implemented. Dashboard aggregates

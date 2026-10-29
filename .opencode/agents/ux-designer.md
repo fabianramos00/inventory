@@ -101,8 +101,8 @@ a desktop inventory app used at a hardware store counter.
 - You cannot message another agent directly. If their scope must change,
   return a `HANDOFF` block to the manager:
   `Target`, `Reason`, `Files`, `Change`, `Acceptance`, `Blocked`.
-- In parallel mode, work from the frozen module contract
-  (`docs/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
-  fields; report contract gaps to the manager.
+- In parallel mode, work from the frozen module contract and do not
+  invent missing fields; report contract gaps to the manager.
 - Hand implementation details and technical constraints to
   the manager; do not specify components or libraries.
+- You may not commit; report deliverables to the manager and leave them uncommitted.

@@ -172,9 +172,36 @@ WebView (React) ── HTTP loopback ── Go API ── PostgreSQL
 - Checksums are published with the installer.
 - Auto-update, if added, must verify signatures. It is out of scope for v1.
 
-## Audit checklist
+## Open risks
 
-Latest Phase 3 audit: [SECURITY-AUDIT.md](SECURITY-AUDIT.md).
+There are no open Critical or High findings. `pnpm audit` is clean, and
+`govulncheck` runs in CI.
+
+- **P3-3 — SQLite path validation.** The parent directory of `SQLITE_PATH` is
+  created and tightened before validation, and the path is interpolated into
+  the DSN. A symlinked or shared parent or a `?` in the path can change an
+  unrelated directory or add connection parameters. Not remotely reachable.
+- **SQL-7 — Windows SQLite permissions.** `os.Chmod` does not set an ACL on
+  Windows; roaming profiles widen the exposure of the unencrypted database.
+- **F6 — default PostgreSQL DSN.** The development DSN is the default, so a
+  missing `DATABASE_URL` can silently point at a local database.
+- **F7 — login timing enumeration.** An unknown email returns before bcrypt, so
+  response timing can reveal whether an account exists.
+- **F8 — login limiter scope.** The limiter keys on the loopback client IP, so
+  all users share one budget; successful logins count; entries are not evicted.
+- **F13 — refresh-token reuse.** Rotation revokes only the presented token;
+  reuse of a revoked token in the same family is not detected.
+- **F14 — missing CSP and remote fonts.** `index.html` has no
+  `Content-Security-Policy` and the stylesheet loads remote fonts.
+- **F15 — trusted `X-Request-Id`.** The request ID header is accepted from the
+  client without validation.
+- **F19 — Host/Origin/content-type checks.** Requests do not enforce host,
+  origin, and content-type consistently outside the CORS layer.
+- **F20 — user PII in `localStorage`.** The cached user and tokens are readable
+  by any script in the WebView; accepted for v1 and documented under Token
+  storage.
+
+## Audit checklist
 
 - [ ] Auth flows: login, refresh rotation, logout, inactive user, superuser.
 - [ ] All 67 endpoints require auth except the documented four.

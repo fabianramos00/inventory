@@ -98,8 +98,8 @@ Current routes are `/#/login`, the protected `/#/` Dashboard, `/#/inventory`,
 `/#/users` page, all under `AppLayout` except login. Declare
 `/#/sales/create` before `/#/sales/:id` and `/#/orders/create` before
 `/#/orders/:id`. The remaining page files stay in `src/pages` without routes
-until later phases restore the full table from
-[DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Playwright specs must use hash URLs.
+until the full route table from [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) is
+restored. Playwright specs must use hash URLs.
 
 ### Health check and offline banner
 

@@ -24,13 +24,14 @@ WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`) only, so the 4.0 ABI is unavailable.
 The development database is PostgreSQL 17 from `docker-compose.yml`, exposed
 on port `5433`.
 
-## Phase status
+## Scope
 
-Phase 3 ships the walking skeleton, PostgreSQL and SQLite persistence behind
+This release includes the Wails shell, PostgreSQL and SQLite persistence behind
 ports/adapters, authentication, the seed command, and every business module:
 catalog, products, clients, providers, supplier catalogs, sales, purchase
-orders, and the dashboard. The full SQLite business schema exists, so the
-release supports both the PostgreSQL primary and the offline SQLite backend.
+orders, and the dashboard. The full SQLite business schema is available, so
+the release supports both the PostgreSQL primary and the offline SQLite
+backend.
 
 ## Versioning
 
@@ -159,7 +160,7 @@ scripts/verify.sh
 
 ## Local release verification
 
-Session 3 verification, 2026-10-29 (Linux amd64, WebKitGTK 4.1):
+Verified on Linux amd64 (WebKitGTK 4.1):
 
 - Wails build: `pnpm install --frozen-lockfile && pnpm build` followed by
   `wails build -tags webkit2_41` succeeded and produced
@@ -179,17 +180,6 @@ Blocked until credentials or other OS hosts are available:
 - Windows and macOS Wails builds and installer packaging.
 - Authenticode signing, Developer ID signing, and notarization.
 - Published SHA-256 checksums and the manual smoke test on Windows and macOS.
-
-### Checklist status (2026-10-29)
-
-Done: `docs/`, `API-CONTRACT.md`, and `DECISIONS.md` updated; Go and frontend
-suites pass; contract parity recorded at 67/67; database backup/restore verified;
-Linux Wails build succeeded.
-
-Not yet run: Linux smoke test.
-
-Pending: Wails manual smoke test (including Linux), Windows/macOS packaging,
-signing/notarization, checksums, release notes, and the staging migration.
 
 ## Release checklist
 

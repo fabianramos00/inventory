@@ -34,7 +34,7 @@ must match the existing `/api/v1` contract.
 - Legacy reference: `../inventory-api` (FastAPI + SQLAlchemy + Alembic).
 - Locale: UTC storage, `America/Bogota` for dashboard grouping. Money JSON
   numbers, COP display handled by the frontend.
-- Current phase: Phase 3 complete. All 67 endpoints, unit-of-work and stock mutations, money/timestamp handling, and security fixes are implemented. Release is pending external packaging and signing.
+- Project status: feature-complete. All 67 endpoints, unit-of-work and stock mutations, money/timestamp handling, and security fixes are implemented. Release is pending external packaging and signing.
 
 ## Your scope
 
@@ -172,8 +172,8 @@ added, parity status, checks run, remaining issues.
 - You cannot message another agent directly. If their scope must change,
   return a `HANDOFF` block to the manager:
   `Target`, `Reason`, `Files`, `Change`, `Acceptance`, `Blocked`.
-- In parallel mode, work from the frozen module contract
-  (`docs/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
-  fields; report contract gaps to the manager.
+- In parallel mode, work from the frozen module contract and do not
+  invent missing fields; report contract gaps to the manager.
 - If the frontend needs an API or payload change, hand it to
   `frontend`; do not edit `frontend/**`.
+- Do not commit unless the user explicitly says 'commit' for the current batch; 'continue'/'improve'/'fix'/'document' is not authorization.

@@ -31,7 +31,7 @@ documented business rules. You write tests, not product code.
   reference.
 - 67 legacy endpoints plus `GET /healthz`.
 - Locale: `es-CO`, COP, `America/Bogota`. UI Spanish.
-- Current phase: Phase 3 complete. Contract parity is recorded at 67/67,
+- Project status: feature-complete. Contract parity is recorded at 67/67,
   full-stack Playwright covers the critical flows, and the scope remains
   test-only.
 
@@ -158,9 +158,9 @@ pnpm test:e2e
 - You cannot message another agent directly. If their scope must change,
   return a `HANDOFF` block to the manager:
   `Target`, `Reason`, `Files`, `Change`, `Acceptance`, `Blocked`.
-- In parallel mode, work from the frozen module contract
-  (`docs/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
-  fields; report contract gaps to the manager.
+- In parallel mode, work from the frozen module contract and do not
+  invent missing fields; report contract gaps to the manager.
 - You may author tests from the frozen contract in parallel;
   integration verification starts only after backend and frontend exist.
   Report product defects to the owning developer.
+- Do not commit unless the user explicitly says 'commit' for the current batch; 'continue'/'improve'/'fix'/'document' is not authorization.

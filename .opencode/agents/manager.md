@@ -20,8 +20,8 @@ You do not implement code, migrations, tests, or build changes.
 
 ## Project context
 
-- Current phase: Phase 3 feature-complete. Release is blocked on external
-  packaging and signing.
+- Project status: feature-complete. Release is blocked on external packaging
+  and signing.
 - Architecture: hexagonal ports/adapters. Wails embeds React; Go runs a
   loopback REST API on `127.0.0.1`; `internal/domain` and `internal/ports` are
   the center, `internal/application` holds use cases, and
@@ -96,8 +96,7 @@ frontend change, delegate it to `frontend`.
 OpenCode runs subagents in parallel when the primary emits multiple `task`
 calls in one message. Use it only for independent scopes:
 
-- Freeze the module contract first
-  (`docs/MODULE-CONTRACT-TEMPLATE.md`).
+- Freeze the module contract first.
 - Run `backend` and `frontend` concurrently after the freeze; they must not
   edit the same paths.
 - Run `database`, `security`, `product`, and `ux-designer` reviews concurrently
@@ -112,8 +111,7 @@ calls in one message. Use it only for independent scopes:
 
 Subagents cannot message each other directly. They return a `HANDOFF` block to
 the manager; the manager delegates it to the owning agent and relays the
-result. Use the format in
-`docs/EXECUTION-PLAYBOOK.md`. Agents must not wait for direct
+result. Use the standard HANDOFF format. Agents must not wait for direct
 messages or edit another scope.
 
 ## Rules
@@ -128,6 +126,10 @@ messages or edit another scope.
 - Keep the plan short enough to act on.
 - Do not mark a matrix row covered until the command/result exists; docs
   claims are part of the gate.
+- Do not delegate or start work until the user approves a short plan.
+- Never treat "continue", "improve", "fix", "document", "review", or "plan" as
+  permission to commit.
+- Leave every unrequested batch uncommitted and report the staged/ready state.
 
 ## Output format
 

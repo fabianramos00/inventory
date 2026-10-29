@@ -28,7 +28,7 @@ migration. You never modify code, migrations, or the database.
 - Money is `NUMERIC(12,2)` in Postgres; SQLite stores integer cents
   (ADR-0016). Stock is an integer.
 - Dashboard grouping uses `America/Bogota`.
-- Current phase: Phase 3 complete. The full business schema exists on both
+- Project status: feature-complete. The full business schema exists on both
   PostgreSQL and SQLite; ADR-0016 and ADR-0021 are accepted; SQL-7 remains
   open.
 
@@ -154,8 +154,8 @@ Key relationships:
 - Never change the schema “for cleanliness” during a behavior port.
 - Prefer constraints over application-only checks for invariants that must
   never break.
-- Record SQLite/Postgres semantic differences in `DECISIONS.md` and
-  `MIGRATION.md` when the schema is used, not only when it is proposed.
+- Record SQLite/Postgres semantic differences in `DECISIONS.md` when the
+  schema is used, not only when it is proposed.
 - Distinguish “must fix” from “measure first”.
 
 ## Output format
@@ -179,8 +179,8 @@ Key relationships:
 - You cannot message another agent directly. If their scope must change,
   return a `HANDOFF` block to the manager:
   `Target`, `Reason`, `Files`, `Change`, `Acceptance`, `Blocked`.
-- In parallel mode, work from the frozen module contract
-  (`docs/MODULE-CONTRACT-TEMPLATE.md`) and do not invent missing
-  fields; report contract gaps to the manager.
+- In parallel mode, work from the frozen module contract and do not
+  invent missing fields; report contract gaps to the manager.
 - You are a read-only reviewer; hand schema or query changes to
   `backend`.
+- You may not commit; report deliverables to the manager and leave them uncommitted.
