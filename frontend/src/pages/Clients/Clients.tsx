@@ -55,9 +55,9 @@ export default function Clients() {
     if (!editingClient) return editingClient
     const payload = {
       name: values.name,
-      ...(values.identity_card && { identity_card: values.identity_card }),
-      ...(values.email && { email: values.email }),
-      ...(values.phone && { phone: values.phone }),
+      identity_card: values.identity_card || null,
+      email: values.email || null,
+      phone: values.phone || null,
     }
     const response = await clientsApi.updateClient(editingClient.id, payload)
     return response.data

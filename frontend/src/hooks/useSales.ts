@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { salesApi, type SalesParams } from '@/lib/api/sales'
+import { SALE_RELATED_KEYS } from '@/lib/saleCache'
 import type { Sale } from '@/types'
 import { usePagedList } from './usePagedList'
 
@@ -19,6 +20,13 @@ interface UseSalesParams {
   filters: SalesFilters
 }
 
+export function bogotaDayBounds(startDate?: string, endDate?: string) {
+  return {
+    start_date: startDate ? new Date(`${startDate}T00:00:00-05:00`).toISOString() : undefined,
+    end_date: endDate ? new Date(`${endDate}T23:59:59.999-05:00`).toISOString() : undefined,
+  }
+}
+
 function buildSalesParams({ skip, limit, user_id, no_client, client_id, payment_method, delivery_status, payment_status, start_date, end_date }: { skip: number; limit: number } & SalesFilters): SalesParams {
   const params: SalesParams = { skip, limit }
   if (user_id) params.user_id = user_id
@@ -27,8 +35,9 @@ function buildSalesParams({ skip, limit, user_id, no_client, client_id, payment_
   if (payment_method) params.payment_method = payment_method
   if (delivery_status) params.delivery_status = delivery_status
   if (payment_status) params.payment_status = payment_status
-  if (start_date) params.start_date = start_date
-  if (end_date) params.end_date = end_date
+  const bounds = bogotaDayBounds(start_date, end_date)
+  if (bounds.start_date) params.start_date = bounds.start_date
+  if (bounds.end_date) params.end_date = bounds.end_date
   return params
 }
 
@@ -39,7 +48,7 @@ export function useSales({ page, filters }: UseSalesParams) {
     filters,
     fetchPage: params => salesApi.getSales(buildSalesParams(params)).then(response => response.data),
     deleteItem: salesApi.deleteSale,
-    invalidateKeys: ['salesStats'],
+    invalidateKeys: [...SALE_RELATED_KEYS],
   })
 
   const { data: statsData, isLoading: statsLoading } = useQuery({

@@ -5,6 +5,9 @@ import App from './App'
 vi.mock('@/pages/Login/Login', () => ({ default: () => <div>login-page</div> }))
 vi.mock('@/pages/Inventory/Inventory', () => ({ default: () => <div>inventory-page</div> }))
 vi.mock('@/pages/ProductForm/ProductForm', () => ({ default: () => <div>product-form-page</div> }))
+vi.mock('@/pages/Sales/Sales', () => ({ default: () => <div>sales-page</div> }))
+vi.mock('@/pages/SaleForm/SaleForm', () => ({ default: () => <div>sale-form-page</div> }))
+vi.mock('@/pages/Clients/Clients', () => ({ default: () => <div>clients-page</div> }))
 
 function authenticate() {
   localStorage.setItem('token', 'access-token')
@@ -33,6 +36,10 @@ describe('App routes', () => {
     ['#/inventory', 'inventory-page', '#/inventory'],
     ['#/inventory/create', 'product-form-page', '#/inventory/create'],
     ['#/inventory/product/1', 'product-form-page', '#/inventory/product/1'],
+    ['#/sales', 'sales-page', '#/sales'],
+    ['#/sales/create', 'sale-form-page', '#/sales/create'],
+    ['#/sales/12', 'sale-form-page', '#/sales/12'],
+    ['#/clients', 'clients-page', '#/clients'],
   ])('renders %s for an authenticated user', async (hash, text, expectedHash) => {
     authenticate()
     renderAt(hash)
@@ -41,7 +48,15 @@ describe('App routes', () => {
     expect(window.location.hash).toBe(expectedHash)
   })
 
-  it.each(['#/inventory', '#/inventory/create', '#/inventory/product/1'])(
+  it.each([
+    '#/inventory',
+    '#/inventory/create',
+    '#/inventory/product/1',
+    '#/sales',
+    '#/sales/create',
+    '#/sales/12',
+    '#/clients',
+  ])(
     'redirects %s to login when unauthenticated',
     async (hash) => {
       renderAt(hash)
@@ -60,5 +75,27 @@ describe('App routes', () => {
     const dashboardLink = screen.getByRole('link', { name: 'Dashboard' })
     expect(inventoryLink.getAttribute('aria-current')).toBe('page')
     expect(dashboardLink.getAttribute('aria-current')).toBeNull()
+  })
+
+  it.each([
+    ['#/sales', 'sales-page'],
+    ['#/sales/create', 'sale-form-page'],
+    ['#/sales/12', 'sale-form-page'],
+  ])('keeps the Ventas sidebar link active for %s', async (hash, text) => {
+    authenticate()
+    renderAt(hash)
+
+    expect(await screen.findByText(text)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Ventas' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('marks the Clientes sidebar link as active', async () => {
+    authenticate()
+    renderAt('#/clients')
+
+    expect(await screen.findByText('clients-page')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Clientes' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBeNull()
   })
 })

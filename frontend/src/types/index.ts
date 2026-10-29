@@ -168,7 +168,6 @@ export interface FilterOption {
 
 // ─── Sale Creation Form ───────────────────────────────────────────────────────
 export interface CreateSaleInput {
-  payment_status: PaymentStatus
   payment_method: PaymentMethod
   amount_paid: number
   client_id: number | null

@@ -4,7 +4,7 @@ import { ChevronLeft, Search, X, Loader, ChevronDown, Package, Plus, Pencil, Che
 import { useQueryClient } from '@tanstack/react-query'
 import styles from '../formPage.module.css'
 import { salesApi } from '@/lib/api/sales'
-import { getApiErrorDetail } from '@/lib/apiError'
+import { getAPIErrorMessage } from '@/lib/apiError'
 import { clientsApi } from '@/lib/api/clients'
 import { inventoryApi } from '@/lib/api/inventory'
 import CreateFormModal, { type FieldConfig } from '@/components/CreateFormModal/CreateFormModal'
@@ -12,8 +12,10 @@ import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteMod
 import DiscardChangesModal from './DiscardChangesModal'
 import { paymentStatusLabel, paymentStatusBadge, deliveryStatusLabel, deliveryStatusBadge, paymentMethodLabel } from '@/lib/constants'
 import { formatDate, formatCurrency, safeNumber } from '@/lib/utils'
+import { invalidateSaleData } from '@/lib/saleCache'
 import { useSale, type SaleItemView } from '@/hooks/useSale'
-import type { Product, FilterOption, CreateSaleInput, PaymentStatus, PaymentMethod } from '@/types'
+import { buildCreateSalePayload } from './salePayload'
+import type { Product, FilterOption, PaymentStatus, PaymentMethod } from '@/types'
 
 interface SaleItemDraft {
   id?: number
@@ -67,7 +69,6 @@ export default function SaleForm() {
   const [showCreateClient, setShowCreateClient] = useState(false)
 
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending')
-  const paymentStatusManual = useRef(false)
   const [paymentMethod, setPaymentMethod] = useState<string>('')
   const [amountPaid, setAmountPaid] = useState('0')
 
@@ -89,7 +90,6 @@ export default function SaleForm() {
   const productResultsFocusedIndex = useRef<number>(-1)
 
   const [openFormDropdown, setOpenFormDropdown] = useState<string | null>(null)
-  const statusRef = useRef<HTMLDivElement>(null)
   const paymentMethodRef = useRef<HTMLDivElement>(null)
 
   const [apiError, setApiError] = useState<string | null>(null)
@@ -143,7 +143,7 @@ export default function SaleForm() {
       const target = e.target as Node
       if (!productSearchRef.current?.contains(target)) setProductSearchOpen(false)
       if (!clientRef.current?.contains(target)) setClientOpen(false)
-      if (!statusRef.current?.contains(target) && !paymentMethodRef.current?.contains(target)) {
+      if (!paymentMethodRef.current?.contains(target)) {
         setOpenFormDropdown(null)
       }
     }
@@ -213,9 +213,10 @@ export default function SaleForm() {
         client_id: clientId || null,
       })
       queryClient.setQueryData(['sale', sale.id], res.data)
+      invalidateSaleData(queryClient, sale.id)
       setIsEditingDetails(false)
-    } catch {
-      setApiError('Error al guardar los detalles de la venta. Intenta de nuevo.')
+    } catch (err) {
+      setApiError(getAPIErrorMessage(err, 'Error al guardar los detalles de la venta. Intenta de nuevo.'))
     } finally {
       setIsSaving(false)
     }
@@ -224,11 +225,7 @@ export default function SaleForm() {
   async function handleDeleteSale() {
     if (!sale) return
     await salesApi.deleteSale(sale.id)
-    queryClient.invalidateQueries({ queryKey: ['sales'] })
-    queryClient.invalidateQueries({ queryKey: ['salesStats'] })
-    queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-    queryClient.invalidateQueries({ queryKey: ['dashboardTrend'] })
-    queryClient.invalidateQueries({ queryKey: ['dashboardTopProducts'] })
+    invalidateSaleData(queryClient)
     navigate('/sales')
   }
 
@@ -285,12 +282,12 @@ export default function SaleForm() {
   }
 
   function stockErrorMessage(err: unknown, fallback: string) {
-    const detail = getApiErrorDetail(err) || (err instanceof Error ? err.message : '')
+    const detail = getAPIErrorMessage(err, fallback)
     if (detail.includes('Insufficient stock')) {
       const match = detail.match(/Available: (\d+), Requested: (\d+)/)
       if (match) return `Stock insuficiente. Disponible: ${match[1]}, solicitado: ${match[2]}`
     }
-    return detail || fallback
+    return detail
   }
 
   async function handleRemoveItem(productId: number) {
@@ -304,11 +301,10 @@ export default function SaleForm() {
     setDeletingItemId(item.id)
     try {
       await salesApi.deleteSaleItem(sale.id, item.id)
-      queryClient.invalidateQueries({ queryKey: ['sale', sale.id] })
-      queryClient.invalidateQueries({ queryKey: ['saleItems', sale.id] })
+      invalidateSaleData(queryClient, sale.id)
       setItems(prev => prev.filter(i => i.product_id !== productId))
-    } catch {
-      // keep item
+    } catch (err) {
+      setItemError({ productId, message: getAPIErrorMessage(err, 'Error al eliminar el artículo') })
     } finally {
       setDeletingItemId(null)
     }
@@ -326,8 +322,7 @@ export default function SaleForm() {
           delivered_quantity: parseFloat(item.delivered_quantity) || 0,
           unit_price: item.unit_price !== '' ? parseFloat(item.unit_price) || null : null,
         })
-        queryClient.invalidateQueries({ queryKey: ['sale', sale.id] })
-        queryClient.invalidateQueries({ queryKey: ['saleItems', sale.id] })
+        invalidateSaleData(queryClient, sale.id)
         setValidationError(null)
         setItemError(null)
       } catch (err) {
@@ -346,7 +341,7 @@ export default function SaleForm() {
         unit_price: item.unit_price !== '' ? parseFloat(item.unit_price) || null : null,
       })
       queryClient.setQueryData(['sale', sale.id], res.data)
-      await queryClient.invalidateQueries({ queryKey: ['saleItems', sale.id] })
+      invalidateSaleData(queryClient, sale.id)
       const freshItems = await queryClient.fetchQuery<SaleItemView[]>({
         queryKey: ['saleItems', sale.id],
         queryFn: () =>
@@ -378,10 +373,10 @@ export default function SaleForm() {
   }, 0)
 
   useEffect(() => {
-    if (!isCreateMode || paymentStatusManual.current) return
+    if (!isCreateMode) return
     const paid = parseFloat(amountPaid) || 0
     if (paid === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- derive payment status from the amount paid unless the user overrode it
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- derive payment status from the amount paid
       setPaymentStatus('pending')
     } else if (paid >= draftTotal && draftTotal > 0) {
       setPaymentStatus('paid')
@@ -428,27 +423,17 @@ export default function SaleForm() {
 
     setIsSubmitting(true)
     try {
-      const payload: CreateSaleInput = {
-        payment_status: paymentStatus,
-        payment_method: (paymentMethod as PaymentMethod) || null,
-        amount_paid: paid,
-        client_id: clientId || null,
-        items: items.map(item => ({
-          product_id: item.product_id,
-          quantity: Number(item.quantity),
-          delivered_quantity: Number(item.delivered_quantity),
-          unit_price: item.unit_price !== '' ? parseFloat(item.unit_price) || null : null,
-        })),
-      }
+      const payload = buildCreateSalePayload({
+        paymentMethod,
+        amountPaid,
+        clientId,
+        items,
+      })
       await salesApi.createSale(payload)
-      queryClient.invalidateQueries({ queryKey: ['sales'] })
-      queryClient.invalidateQueries({ queryKey: ['salesStats'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardTrend'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardTopProducts'] })
+      invalidateSaleData(queryClient)
       navigate('/sales')
     } catch (error) {
-      setApiError(error instanceof Error ? error.message : 'Error al crear la venta.')
+      setApiError(getAPIErrorMessage(error, 'Error al crear la venta.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -547,8 +532,8 @@ export default function SaleForm() {
         )}
       </div>
 
-      {apiError && <div className={styles.errorBox}>{apiError}</div>}
-      {validationError && <div className={styles.errorBox}>{validationError}</div>}
+      {apiError && <div className={styles.errorBox} role="alert">{apiError}</div>}
+      {validationError && <div className={styles.errorBox} role="alert">{validationError}</div>}
 
       <div className={styles.sectionsGrid}>
         <section className={styles.card}>
@@ -677,7 +662,7 @@ export default function SaleForm() {
                     className={`${styles.itemCard} ${isPending ? styles.itemCardPending : ''} ${itemError?.productId === item.product_id ? styles.itemCardError : ''}`}
                   >
                     {itemError?.productId === item.product_id && (
-                      <div className={styles.errorBanner}>{itemError.message}</div>
+                      <div className={styles.errorBanner} role="alert">{itemError.message}</div>
                     )}
                     <div className={styles.itemHeader}>
                       <div className={styles.itemIdentity}>
@@ -952,39 +937,13 @@ export default function SaleForm() {
               </div>
 
               {isCreateMode ? (
-                <div className={styles.fieldRowEditing}>
+                <div className={styles.fieldRow}>
                   <dt className={styles.fieldLabel}>Estado pago</dt>
-                  <dd className={styles.fieldValueFull}>
-                    <div className={styles.selectDropdown} ref={statusRef}>
-                      <button
-                        type="button"
-                        className={`${styles.selectTrigger} ${paymentStatus !== 'pending' ? styles.selectTriggerActive : ''}`}
-                        onClick={() => setOpenFormDropdown(openFormDropdown === 'payment_status' ? null : 'payment_status')}
-                        aria-expanded={openFormDropdown === 'payment_status'}
-                        aria-haspopup="listbox"
-                      >
-                        <span>{{ pending: 'Pendiente', paid: 'Pagado', partial: 'Parcial' }[paymentStatus]}</span>
-                        <ChevronDown size={13} />
-                      </button>
-                      {openFormDropdown === 'payment_status' && (
-                        <div className={styles.selectContent}>
-                          <div className={styles.selectOptions} role="listbox">
-                            {(['pending', 'paid', 'partial'] as const).map(status => (
-                              <button
-                                key={status}
-                                type="button"
-                                className={`${styles.selectOption} ${paymentStatus === status ? styles.selectOptionActive : ''}`}
-                                onClick={() => { setPaymentStatus(status); setOpenFormDropdown(null); paymentStatusManual.current = true }}
-                                role="option"
-                                aria-selected={paymentStatus === status}
-                              >
-                                {{ pending: 'Pendiente', paid: 'Pagado', partial: 'Parcial' }[status]}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                  <dd className={styles.fieldValue}>
+                    <span className={`badge ${paymentStatusBadge[paymentStatus]}`}>
+                      {paymentStatusLabel[paymentStatus]}
+                    </span>
+                    <span className={styles.summaryMuted}> Calculado por el servidor</span>
                   </dd>
                 </div>
               ) : (

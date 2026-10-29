@@ -92,10 +92,12 @@ only the router wrapper changes. Browser dev may keep `BrowserRouter` behind
 `import.meta.env.DEV`, but the shipped build must be hash-based.
 
 Current routes are `/#/login`, the protected `/#/` Home, `/#/inventory`,
-`/#/inventory/create`, `/#/inventory/product/:id`, and the superuser-only
-`/#/users` page, all under `AppLayout` except login. The remaining page files
-stay in `src/pages` without routes until later phases restore the full table
-from [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Playwright specs must use hash URLs.
+`/#/inventory/create`, `/#/inventory/product/:id`, `/#/sales`,
+`/#/sales/create`, `/#/sales/:id`, `/#/clients`, and the superuser-only
+`/#/users` page, all under `AppLayout` except login. Declare
+`/#/sales/create` before `/#/sales/:id`. The remaining page files stay in
+`src/pages` without routes until later phases restore the full table from
+[DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Playwright specs must use hash URLs.
 
 ### Browser assumptions to review
 
@@ -114,7 +116,7 @@ from [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Playwright specs must use hash URLs.
   - `['products', { page, search, ...filters, limit }]`
   - `['product', id]`
   - `['inventoryStats']`
-  - `['sales', { page, ...filters, limit }]`
+  - `['sales', { page, ...filters, limit }]`, `['salesStats']`
   - `['sale', id]`, `['saleItems', id]`
   - `['orders', ...]`, `['order', id]`, `['orderItems', id]`
   - `['clients', ...]`, `['providers', ...]`, `['users', ...]`
@@ -124,10 +126,29 @@ from [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Playwright specs must use hash URLs.
   invalidate the related list, stats, and dashboard keys. Product updates
   also invalidate `['product', Number(id)]` so the detail view refetches the
   saved product and its relations.
-- Product list responses use the cursor shape
+- Sale create/delete and sale-item add/update/delete change stock. Updating a
+  sale changes only payment and client details; it does not change stock.
+  These mutations invalidate `['sales']`, `['salesStats']`, `['products']`,
+  `['product']` (detail prefix), `['inventoryStats']`, `['dashboardSummary']`,
+  `['dashboardTrend']`, `['dashboardTopProducts']`, and
+  `['dashboardLowStock']`. Item mutations also invalidate `['sale', id]` and
+  `['saleItems', id]`. Clients changes invalidate `['clients']`.
+- The create-sale payload is `payment_method`, `amount_paid`, `client_id`,
+  and `items[{ product_id, quantity, delivered_quantity, unit_price }]`. It
+  does not send `payment_status`; the server derives it from `amount_paid`.
+  The create form shows that derived status as a read-only badge and does not
+  offer a manual override.
+- Sales date inputs emit `YYYY-MM-DD`; `useSales` converts `start_date` to
+  the Bogota start of day and `end_date` to the inclusive Bogota end of day
+  as RFC 3339 instants before calling the API.
+- API errors surface the backend `response.data.detail` through
+  `getAPIErrorMessage(error, fallback)`; plain `Error` messages and the
+  Spanish fallback are used when no detail exists. Error boxes use
+  `role="alert"`.
+- Product, sales, and client list responses use the cursor shape
   `{ items, has_next, skip, limit }`. The product write payload uses
   `low_stock_threshold`; the legacy `min_stock`/`min_stock_quantity` names are
-  not sent.
+  not sent. Sales and client pagination use `has_next`, never `total`/`pages`.
 - Keep `isLoading` for skeletons and `isFetching` for background refreshes.
 
 ## Auth

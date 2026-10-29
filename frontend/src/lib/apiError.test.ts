@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getApiErrorCode, getApiErrorDetail } from './apiError'
+import { getAPIErrorMessage, getApiErrorCode, getApiErrorDetail } from './apiError'
 
 function axiosError(data: unknown) {
   return Object.assign(new Error('Request failed'), {
@@ -26,5 +26,21 @@ describe('apiError helpers', () => {
     expect(getApiErrorDetail(undefined)).toBeUndefined()
     expect(getApiErrorCode(axiosError({ code: 42 }))).toBeUndefined()
     expect(getApiErrorDetail(axiosError({ detail: { message: 'x' } }))).toBeUndefined()
+  })
+})
+
+describe('getAPIErrorMessage', () => {
+  it('returns the backend detail for an Axios error', () => {
+    const error = axiosError({ detail: 'A client with this identity card already exists.' })
+    expect(getAPIErrorMessage(error, 'Error al guardar')).toBe('A client with this identity card already exists.')
+  })
+
+  it('falls back to the error message when there is no detail', () => {
+    expect(getAPIErrorMessage(new Error('boom'), 'Error al guardar')).toBe('boom')
+    expect(getAPIErrorMessage(axiosError({ detail: 42 }), 'Error al guardar')).toBe('Request failed')
+  })
+
+  it('uses the fallback for unknown values', () => {
+    expect(getAPIErrorMessage(undefined, 'Error al guardar')).toBe('Error al guardar')
   })
 })

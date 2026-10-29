@@ -5,6 +5,7 @@ import { z } from 'zod'
 import styles from './CreateFormModal.module.css'
 import Dropdown, { type DropdownOption } from '@/components/Dropdown/Dropdown'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
+import { getAPIErrorMessage } from '@/lib/apiError'
 
 export interface FieldConfig {
   key: string
@@ -70,7 +71,7 @@ export default function CreateFormModal<T>({
       )
       onCreated(result)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar')
+      setError(getAPIErrorMessage(err, 'Error al guardar'))
     } finally {
       setLoading(false)
     }
@@ -97,7 +98,7 @@ export default function CreateFormModal<T>({
             <X size={20} />
           </button>
         </div>
-        {error && <div className={styles.modalError}>{error}</div>}
+        {error && <div className={styles.modalError} role="alert">{error}</div>}
         <div className={styles.modalForm}>
           {fields.map((field, i) => {
             const fieldId = `${fieldIdPrefix}-${field.key}`

@@ -14,7 +14,7 @@ export const clientsApi = {
   createClient: (data: { name: string; identity_card?: string; email?: string; phone?: string }) =>
     api.post<Client>('/sales/clients', data),
 
-  updateClient: (id: number, data: { name?: string; identity_card?: string; email?: string; phone?: string }) =>
+  updateClient: (id: number, data: { name?: string; identity_card?: string | null; email?: string | null; phone?: string | null }) =>
     api.put<Client>(`/sales/clients/${id}`, data),
 
   deleteClient: (id: number) =>
