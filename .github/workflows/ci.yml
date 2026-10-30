@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -50,38 +51,18 @@ jobs:
           PGPASSWORD: inventory
         run: psql -h localhost -p 5433 -U inventory -d inventory -c 'CREATE DATABASE inventory_desktop_test'
 
-      - name: go test
-        run: go test ./... -count=1
-
-      - name: go test -race
-        run: go test -race ./... -count=1
-
-      - name: go vet
-        run: go vet ./...
-
-      - name: gofmt
-        run: test -z "$(gofmt -l internal cmd main.go app.go)"
-
-      - name: govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
-          "$(go env GOPATH)/bin/govulncheck" ./...
-
       - name: pnpm install
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
-      - name: pnpm lint
-        working-directory: frontend
-        run: pnpm lint
+      - name: make verify
+        run: make verify
 
-      - name: pnpm test
-        working-directory: frontend
-        run: pnpm test
+      - name: go test -race
+        run: go test -race ./... -count=1
 
-      - name: pnpm build
-        working-directory: frontend
-        run: pnpm build
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
       - name: pnpm audit
         working-directory: frontend

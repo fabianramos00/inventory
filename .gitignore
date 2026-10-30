@@ -5,21 +5,15 @@
 *.so
 *.dylib
 inventory-desktop
-/inventory
 /build/bin/
 wailsjs/
 
 # Go test and coverage
 *.test
 *.out
-coverage.out
 coverage.html
 
 # Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/test-results/
-frontend/playwright-report/
 frontend/coverage/
 frontend/.vite/
 frontend/package.json.md5
