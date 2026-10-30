@@ -215,6 +215,48 @@ func TestAuthFlow(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		request.Header.Set("Origin", "http://localhost:34115")
+		response, err = http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if got := response.Header.Get("Access-Control-Allow-Origin"); got != "http://localhost:34115" {
+			t.Fatalf("wails dev allow origin = %q", got)
+		}
+
+		request, err = http.NewRequest(http.MethodOptions, server.URL+"/api/v1/auth/login", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Origin", "wails://wails.localhost:34115")
+		response, err = http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if got := response.Header.Get("Access-Control-Allow-Origin"); got != "wails://wails.localhost:34115" {
+			t.Fatalf("wails dev webview allow origin = %q", got)
+		}
+
+		request, err = http.NewRequest(http.MethodOptions, server.URL+"/api/v1/auth/login", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Origin", "http://wails.localhost:34115")
+		response, err = http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if got := response.Header.Get("Access-Control-Allow-Origin"); got != "http://wails.localhost:34115" {
+			t.Fatalf("wails dev http allow origin = %q", got)
+		}
+
+		request, err = http.NewRequest(http.MethodOptions, server.URL+"/api/v1/auth/login", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
 		request.Header.Set("Origin", "http://evil.example")
 		response, err = http.DefaultClient.Do(request)
 		if err != nil {
@@ -249,6 +291,15 @@ func TestAuthFlow(t *testing.T) {
 
 		if got := originHeader("http://localhost:5173").Get("Access-Control-Allow-Origin"); got != "" {
 			t.Fatalf("dev origin allowed with dev mode off: %q", got)
+		}
+		if got := originHeader("http://localhost:34115").Get("Access-Control-Allow-Origin"); got != "" {
+			t.Fatalf("wails dev origin allowed with dev mode off: %q", got)
+		}
+		if got := originHeader("wails://wails.localhost:34115").Get("Access-Control-Allow-Origin"); got != "" {
+			t.Fatalf("wails dev webview origin allowed with dev mode off: %q", got)
+		}
+		if got := originHeader("http://wails.localhost:34115").Get("Access-Control-Allow-Origin"); got != "" {
+			t.Fatalf("wails dev http origin allowed with dev mode off: %q", got)
 		}
 		if got := originHeader("wails://wails").Get("Access-Control-Allow-Origin"); got != "wails://wails" {
 			t.Fatalf("wails origin not allowed with dev mode off: %q", got)

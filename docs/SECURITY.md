@@ -44,10 +44,11 @@ WebView (React) ── HTTP loopback ── Go API ── PostgreSQL
 - Bind to `127.0.0.1` only. Never `0.0.0.0`, never a LAN address.
 - Use an OS-assigned ephemeral port.
 - Do not print the API URL in release logs.
-- CORS always allows the Wails webview origin. The Vite `:5173` and Playwright
-  `:4173` origins are allowed only when dev mode is enabled
-  (`APP_ENV=development` or `ALLOW_DEV_ORIGINS=true`). Do not use `*` with
-  credentials.
+- CORS always allows the Wails webview origin. Dev mode
+  (`APP_ENV=development` or `ALLOW_DEV_ORIGINS=true`) also allows the Vite
+  `:5173` origin, the Wails dev webview origin
+  (`wails://wails.localhost:34115`, plus `http://wails.localhost:34115`), and
+  the Playwright `:4173` origin. Do not use `*` with credentials.
 - Close the HTTP server on app shutdown.
 - `GET /healthz` is unauthenticated and returns no business data. It reports
   the active database backend (`{"status":"ok","database":"postgres|sqlite"}`)

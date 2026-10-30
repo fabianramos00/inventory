@@ -35,10 +35,14 @@ var allowedOrigins = map[string]bool{
 }
 
 var devOrigins = map[string]bool{
-	"http://localhost:5173": true,
-	"http://127.0.0.1:5173": true,
-	"http://localhost:4173": true,
-	"http://127.0.0.1:4173": true,
+	"http://localhost:5173":         true,
+	"http://127.0.0.1:5173":         true,
+	"http://localhost:4173":         true,
+	"http://127.0.0.1:4173":         true,
+	"http://localhost:34115":        true,
+	"http://127.0.0.1:34115":        true,
+	"wails://wails.localhost:34115": true,
+	"http://wails.localhost:34115":  true,
 }
 
 func recoverMiddleware(logger *slog.Logger, next http.Handler) http.Handler {

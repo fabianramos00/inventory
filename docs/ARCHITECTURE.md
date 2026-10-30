@@ -72,9 +72,11 @@ active store. Wails window close is the trigger.
   `jti`. Verification requires the expected issuer and HS256, so tokens do not
   cross the PostgreSQL and SQLite datasets.
 - The server never binds `0.0.0.0`.
-- CORS always allows the Wails webview origin. The Vite dev origin and the
-  Playwright preview origin (`:5173`, `:4173`) are allowed only when dev mode
-  is enabled (`APP_ENV=development` or `ALLOW_DEV_ORIGINS=true`).
+- CORS always allows the Wails webview origin. In dev mode
+  (`APP_ENV=development` or `ALLOW_DEV_ORIGINS=true`) it also allows the Vite
+  origin (`:5173`), the Wails dev webview origin
+  (`wails://wails.localhost:34115`, plus `http://wails.localhost:34115`), and
+  the Playwright preview origin (`:4173`).
 - The API is the only way React reads or writes business data. Wails bindings
   are limited to the base URL and window lifecycle.
 
