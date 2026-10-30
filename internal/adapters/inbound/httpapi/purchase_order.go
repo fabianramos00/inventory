@@ -93,12 +93,12 @@ func (h *PurchaseOrderHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := query.Get("status")
-	if !validOrderStatusFilter(status) {
+	if status != "" && !domain.ValidOrderStatus(status) {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid status", "VALIDATION_ERROR")
 		return
 	}
 	paymentStatus := query.Get("payment_status")
-	if !validPurchasePaymentStatusFilter(paymentStatus) {
+	if paymentStatus != "" && !domain.ValidPurchasePaymentStatus(paymentStatus) {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid payment_status", "VALIDATION_ERROR")
 		return
 	}
@@ -130,12 +130,7 @@ func (h *PurchaseOrderHandler) List(w http.ResponseWriter, r *http.Request) {
 	for i, order := range result.Items {
 		items[i] = newPurchaseOrderResponse(order)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":    items,
-		"has_next": result.HasNext,
-		"skip":     result.Skip,
-		"limit":    result.Limit,
-	})
+	writePage(w, items, result.HasNext, result.Skip, result.Limit)
 }
 
 func (h *PurchaseOrderHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -252,12 +247,7 @@ func (h *PurchaseOrderHandler) ListItems(w http.ResponseWriter, r *http.Request)
 	for i, item := range result.Items {
 		items[i] = newOrderItemResponse(item)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":    items,
-		"has_next": result.HasNext,
-		"skip":     result.Skip,
-		"limit":    result.Limit,
-	})
+	writePage(w, items, result.HasNext, result.Skip, result.Limit)
 }
 
 func (h *PurchaseOrderHandler) AddItem(w http.ResponseWriter, r *http.Request) {
@@ -387,23 +377,5 @@ func newOrderItemResponse(item *domain.OrderItem) orderItemResponse {
 		BrandName:    item.BrandName,
 		MaterialName: item.MaterialName,
 		CategoryName: item.CategoryName,
-	}
-}
-
-func validOrderStatusFilter(value string) bool {
-	switch value {
-	case "", domain.OrderStatusPending, domain.OrderStatusSent, domain.OrderStatusReceived, domain.OrderStatusCancelled:
-		return true
-	default:
-		return false
-	}
-}
-
-func validPurchasePaymentStatusFilter(value string) bool {
-	switch value {
-	case "", domain.PurchasePaymentStatusPending, domain.PurchasePaymentStatusPaid:
-		return true
-	default:
-		return false
 	}
 }

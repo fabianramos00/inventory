@@ -57,3 +57,30 @@ type SaleStats struct {
 	TotalAmountSum   decimal.Decimal
 	AmountPaidSum    decimal.Decimal
 }
+
+func ValidPaymentStatus(value string) bool {
+	switch value {
+	case "", PaymentStatusPending, PaymentStatusPartial, PaymentStatusPaid:
+		return true
+	default:
+		return false
+	}
+}
+
+func ValidDeliveryStatus(value string) bool {
+	switch value {
+	case "", DeliveryStatusPending, DeliveryStatusPartial, DeliveryStatusDelivered:
+		return true
+	default:
+		return false
+	}
+}
+
+func ValidPaymentMethod(value string) bool {
+	switch value {
+	case PaymentMethodCash, PaymentMethodCredit, PaymentMethodDebit:
+		return true
+	default:
+		return false
+	}
+}

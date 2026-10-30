@@ -2,6 +2,12 @@ package domain
 
 import "github.com/shopspring/decimal"
 
+const (
+	StockStatusInStock    = "in_stock"
+	StockStatusLowStock   = "low_stock"
+	StockStatusOutOfStock = "out_of_stock"
+)
+
 type Category struct {
 	ID          int64
 	Name        string
@@ -57,4 +63,13 @@ type ProductStats struct {
 	TotalStock          int64
 	LowStockCount       int64
 	TotalInventoryValue decimal.Decimal
+}
+
+func ValidStockStatus(value string) bool {
+	switch value {
+	case "", StockStatusInStock, StockStatusLowStock, StockStatusOutOfStock:
+		return true
+	default:
+		return false
+	}
 }

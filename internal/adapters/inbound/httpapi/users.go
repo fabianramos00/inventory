@@ -58,12 +58,7 @@ func (h *UsersHandler) List(w http.ResponseWriter, r *http.Request) {
 	for i, user := range result.Items {
 		items[i] = newUserResponse(user)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":    items,
-		"has_next": result.HasNext,
-		"skip":     result.Skip,
-		"limit":    result.Limit,
-	})
+	writePage(w, items, result.HasNext, result.Skip, result.Limit)
 }
 
 func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {

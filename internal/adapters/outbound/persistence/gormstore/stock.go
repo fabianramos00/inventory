@@ -3,7 +3,7 @@ package gormstore
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"gorm.io/gorm"
@@ -68,7 +68,7 @@ func (s *stockStore) ApplyDelta(ctx context.Context, id int64, delta int64) erro
 		delta, id, delta,
 	)
 	if result.Error != nil {
-		return storeError("apply stock delta", result.Error)
+		return storeError(s.db, "apply stock delta", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return domain.ErrInsufficientStock
@@ -77,15 +77,7 @@ func (s *stockStore) ApplyDelta(ctx context.Context, id int64, delta int64) erro
 }
 
 func sortedUniqueIDs(ids []int64) []int64 {
-	unique := make(map[int64]struct{}, len(ids))
-	result := make([]int64, 0, len(ids))
-	for _, id := range ids {
-		if _, ok := unique[id]; ok {
-			continue
-		}
-		unique[id] = struct{}{}
-		result = append(result, id)
-	}
-	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
-	return result
+	result := slices.Clone(ids)
+	slices.Sort(result)
+	return slices.Compact(result)
 }

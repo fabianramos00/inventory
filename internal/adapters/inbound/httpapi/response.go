@@ -10,13 +10,8 @@ import (
 const maxBodyBytes = 10 << 20
 
 type APIError struct {
-	Status int    `json:"-"`
 	Code   string `json:"code,omitempty"`
 	Detail string `json:"detail"`
-}
-
-func (e *APIError) Error() string {
-	return e.Detail
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -26,11 +21,19 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeError(w http.ResponseWriter, status int, detail, code string) {
-	writeJSON(w, status, APIError{Status: status, Code: code, Detail: detail})
+	writeJSON(w, status, APIError{Code: code, Detail: detail})
+}
+
+func writePage(w http.ResponseWriter, items any, hasNext bool, skip, limit int) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":    items,
+		"has_next": hasNext,
+		"skip":     skip,
+		"limit":    limit,
+	})
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, value any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(value); err != nil {

@@ -91,26 +91,13 @@ func (s *clientStore) List(ctx context.Context, skip, limit int, search string) 
 	if search != "" && s.db.Dialector.Name() == "sqlite" {
 		// ponytail: SQLite search scans the whole table so Go can case-fold Unicode; add FTS5 when the client table makes it measurable.
 		if err := s.db.WithContext(ctx).Order("id DESC").Find(&records).Error; err != nil {
-			return nil, false, s.storeError("list clients", err)
+			return nil, false, storeError(s.db, "list clients", err)
 		}
 		needle := strings.ToLower(search)
-		matched := records[:0]
-		for _, record := range records {
-			if clientMatches(record, needle) {
-				matched = append(matched, record)
-			}
-		}
-		records = matched
-		if skip >= len(records) {
-			records = nil
-		} else {
-			records = records[skip:]
-		}
-		hasNext := len(records) > limit
-		if hasNext {
-			records = records[:limit]
-		}
-		return clientDomainList(records), hasNext, nil
+		items, hasNext := filterPage(records, func(record clientModel) bool {
+			return clientMatches(record, needle)
+		}, skip, limit, clientModel.toDomain)
+		return items, hasNext, nil
 	}
 
 	query := s.db.WithContext(ctx).Model(new(clientModel))
@@ -124,19 +111,16 @@ func (s *clientStore) List(ctx context.Context, skip, limit int, search string) 
 		)
 	}
 	if err := query.Order("id DESC").Offset(skip).Limit(limit + 1).Find(&records).Error; err != nil {
-		return nil, false, s.storeError("list clients", err)
+		return nil, false, storeError(s.db, "list clients", err)
 	}
-	hasNext := len(records) > limit
-	if hasNext {
-		records = records[:limit]
-	}
-	return clientDomainList(records), hasNext, nil
+	items, hasNext := filterPage(records, nil, 0, limit, clientModel.toDomain)
+	return items, hasNext, nil
 }
 
 func (s *clientStore) Create(ctx context.Context, client *domain.Client) (*domain.Client, error) {
 	record := clientModelFromDomain(client)
 	if err := s.db.WithContext(ctx).Create(&record).Error; err != nil {
-		return nil, s.storeError("create client", err)
+		return nil, storeError(s.db, "create client", err)
 	}
 	return record.toDomain(), nil
 }
@@ -150,7 +134,7 @@ func (s *clientStore) Update(ctx context.Context, id int64, client *domain.Clien
 		"phone":         client.Phone,
 	})
 	if result.Error != nil {
-		return s.storeError("update client", result.Error)
+		return storeError(s.db, "update client", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		if _, err := s.Get(ctx, id); err != nil {
@@ -170,16 +154,9 @@ func (s *clientStore) Delete(ctx context.Context, id int64) (*domain.Client, err
 		return nil, fmt.Errorf("load client for delete: %w", err)
 	}
 	if err := s.db.WithContext(ctx).Delete(&record).Error; err != nil {
-		return nil, s.storeError("delete client", err)
+		return nil, storeError(s.db, "delete client", err)
 	}
 	return record.toDomain(), nil
-}
-
-func (s *clientStore) storeError(op string, err error) error {
-	if translator, ok := s.db.Dialector.(gorm.ErrorTranslator); ok {
-		err = translator.Translate(err)
-	}
-	return storeError(op, err)
 }
 
 func clientMatches(record clientModel, needle string) bool {
@@ -195,12 +172,4 @@ func clientMatches(record clientModel, needle string) bool {
 		}
 	}
 	return false
-}
-
-func clientDomainList(records []clientModel) []*domain.Client {
-	clients := make([]*domain.Client, len(records))
-	for i := range records {
-		clients[i] = records[i].toDomain()
-	}
-	return clients
 }

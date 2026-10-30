@@ -28,7 +28,7 @@ func NewDashboardStore(db *gorm.DB) outbound.DashboardRepository {
 func (s *dashboardStore) Summary(ctx context.Context, todayStart time.Time) (*domain.DashboardSummary, error) {
 	var inventoryRaw any
 	if err := s.db.WithContext(ctx).Raw(
-		`SELECT ` + s.moneySQL("COALESCE(SUM(price * stock_quantity), 0)") + ` FROM products`,
+		`SELECT ` + moneySQL(s.sqlite, "COALESCE(SUM(price * stock_quantity), 0)") + ` FROM products`,
 	).Row().Scan(&inventoryRaw); err != nil {
 		return nil, fmt.Errorf("dashboard inventory value: %w", err)
 	}
@@ -40,8 +40,8 @@ func (s *dashboardStore) Summary(ctx context.Context, todayStart time.Time) (*do
 	)
 	if err := s.db.WithContext(ctx).Raw(
 		`SELECT
-			`+s.moneySQL("COALESCE(SUM(CASE WHEN created_at >= ? THEN total_amount ELSE 0 END), 0)")+`,
-			`+s.moneySQL("COALESCE(SUM(CASE WHEN payment_status <> 'PAID' THEN total_amount - amount_paid ELSE 0 END), 0)")+`,
+			`+moneySQL(s.sqlite, "COALESCE(SUM(CASE WHEN created_at >= ? THEN total_amount ELSE 0 END), 0)")+`,
+			`+moneySQL(s.sqlite, "COALESCE(SUM(CASE WHEN payment_status <> 'PAID' THEN total_amount - amount_paid ELSE 0 END), 0)")+`,
 			COALESCE(SUM(CASE WHEN delivery_status = 'DELIVERED' THEN 1 ELSE 0 END), 0)
 		FROM sales`,
 		Timestamp(todayStart),
@@ -56,15 +56,15 @@ func (s *dashboardStore) Summary(ctx context.Context, todayStart time.Time) (*do
 		return nil, fmt.Errorf("dashboard pending orders: %w", err)
 	}
 
-	inventory, err := s.moneyFromDB(inventoryRaw)
+	inventory, err := moneyFromDB(s.sqlite, inventoryRaw)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard inventory value: %w", err)
 	}
-	today, err := s.moneyFromDB(todayRaw)
+	today, err := moneyFromDB(s.sqlite, todayRaw)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard sales today: %w", err)
 	}
-	pending, err := s.moneyFromDB(pendingRaw)
+	pending, err := moneyFromDB(s.sqlite, pendingRaw)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard pending payment: %w", err)
 	}
@@ -79,7 +79,7 @@ func (s *dashboardStore) Summary(ctx context.Context, todayStart time.Time) (*do
 
 func (s *dashboardStore) SalesTrend(ctx context.Context, start, end time.Time) ([]domain.SalesTrendPoint, error) {
 	sales, err := s.trendSeries(ctx,
-		"SELECT "+s.dateSQL("s.created_at")+", "+s.moneySQL("COALESCE(SUM(s.total_amount), 0)")+
+		"SELECT "+s.dateSQL("s.created_at")+", "+moneySQL(s.sqlite, "COALESCE(SUM(s.total_amount), 0)")+
 			" FROM sales s WHERE s.created_at >= ? AND s.created_at < ? GROUP BY 1 ORDER BY 1",
 		start, end,
 	)
@@ -87,7 +87,7 @@ func (s *dashboardStore) SalesTrend(ctx context.Context, start, end time.Time) (
 		return nil, fmt.Errorf("dashboard sales trend: %w", err)
 	}
 	orders, err := s.trendSeries(ctx,
-		"SELECT "+s.dateSQL("po.order_date")+", "+s.moneySQL("COALESCE(SUM(po.total_amount), 0)")+
+		"SELECT "+s.dateSQL("po.order_date")+", "+moneySQL(s.sqlite, "COALESCE(SUM(po.total_amount), 0)")+
 			" FROM purchase_orders po WHERE po.order_date >= ? AND po.order_date < ? GROUP BY 1 ORDER BY 1",
 		start, end,
 	)
@@ -133,7 +133,7 @@ func (s *dashboardStore) trendSeries(ctx context.Context, query string, start, e
 		if err := rows.Scan(&date, &amountRaw); err != nil {
 			return nil, err
 		}
-		amount, err := s.moneyFromDB(amountRaw)
+		amount, err := moneyFromDB(s.sqlite, amountRaw)
 		if err != nil {
 			return nil, err
 		}
@@ -147,7 +147,7 @@ func (s *dashboardStore) TopProducts(ctx context.Context, since time.Time, limit
 		`SELECT
 			p.id, p.name, p.sku, b.name, c.name, m.name,
 			COALESCE(SUM(si.delivered_quantity), 0),
-			`+s.moneySQL("COALESCE(SUM(si.subtotal), 0)")+`
+			`+moneySQL(s.sqlite, "COALESCE(SUM(si.subtotal), 0)")+`
 		FROM sales s
 		JOIN sale_items si ON si.sale_id = s.id
 		JOIN products p ON p.id = si.product_id
@@ -184,7 +184,7 @@ func (s *dashboardStore) TopProducts(ctx context.Context, since time.Time, limit
 		); err != nil {
 			return nil, err
 		}
-		amount, err := s.moneyFromDB(amountRaw)
+		amount, err := moneyFromDB(s.sqlite, amountRaw)
 		if err != nil {
 			return nil, fmt.Errorf("dashboard top product amount: %w", err)
 		}
@@ -233,27 +233,4 @@ func (s *dashboardStore) dateSQL(column string) string {
 		return "date(" + column + ", '-5 hours')"
 	}
 	return "((" + column + " AT TIME ZONE 'America/Bogota')::date)::text"
-}
-
-func (s *dashboardStore) moneySQL(expression string) string {
-	if s.sqlite {
-		return expression
-	}
-	return expression + "::text"
-}
-
-func (s *dashboardStore) moneyFromDB(value any) (decimal.Decimal, error) {
-	switch raw := value.(type) {
-	case int64:
-		if s.sqlite {
-			return decimal.New(raw, -2), nil
-		}
-		return decimal.New(raw, 0), nil
-	case string:
-		return decimal.NewFromString(raw)
-	case []byte:
-		return decimal.NewFromString(string(raw))
-	default:
-		return decimal.Zero, fmt.Errorf("unsupported money value %T", value)
-	}
 }

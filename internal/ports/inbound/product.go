@@ -6,29 +6,22 @@ import (
 	"github.com/shopspring/decimal"
 
 	"inventory-desktop/internal/domain"
+	"inventory-desktop/internal/ports/outbound"
 )
 
 const (
-	StockStatusInStock    = "in_stock"
-	StockStatusLowStock   = "low_stock"
-	StockStatusOutOfStock = "out_of_stock"
+	StockStatusInStock    = domain.StockStatusInStock
+	StockStatusLowStock   = domain.StockStatusLowStock
+	StockStatusOutOfStock = domain.StockStatusOutOfStock
 )
+
+type ProductFilter = outbound.ProductFilter
 
 // Optional distinguishes an omitted field from an explicit null in partial
 // updates. Set is true when the key appeared in the request.
 type Optional[T any] struct {
 	Set   bool
 	Value *T
-}
-
-type ProductFilter struct {
-	Skip        int
-	Limit       int
-	Search      string
-	CategoryID  *int64
-	BrandID     *int64
-	MaterialID  *int64
-	StockStatus string
 }
 
 type ProductList struct {

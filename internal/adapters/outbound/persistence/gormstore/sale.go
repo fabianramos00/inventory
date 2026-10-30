@@ -76,18 +76,18 @@ func (s *saleStore) Stats(ctx context.Context) (*domain.SaleStats, error) {
 		`SELECT
 			COALESCE(SUM(CASE WHEN payment_status <> 'PAID' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN delivery_status <> 'DELIVERED' THEN 1 ELSE 0 END), 0),
-			`+s.moneySQL("COALESCE(SUM(total_amount), 0)")+`,
-			`+s.moneySQL("COALESCE(SUM(amount_paid), 0)")+`
+			`+moneySQL(s.sqlite, "COALESCE(SUM(total_amount), 0)")+`,
+			`+moneySQL(s.sqlite, "COALESCE(SUM(amount_paid), 0)")+`
 		FROM sales`,
 	).Row().Scan(&unpaid, &undelivered, &totalRaw, &amountPaidRaw)
 	if err != nil {
 		return nil, fmt.Errorf("sale stats: %w", err)
 	}
-	total, err := s.moneyFromDB(totalRaw)
+	total, err := moneyFromDB(s.sqlite, totalRaw)
 	if err != nil {
 		return nil, fmt.Errorf("sale stats total: %w", err)
 	}
-	paid, err := s.moneyFromDB(amountPaidRaw)
+	paid, err := moneyFromDB(s.sqlite, amountPaidRaw)
 	if err != nil {
 		return nil, fmt.Errorf("sale stats paid: %w", err)
 	}
@@ -108,8 +108,8 @@ func (s *saleStore) Create(ctx context.Context, sale *domain.Sale, items []*doma
 		 RETURNING id`,
 		Timestamp(sale.CreatedAt),
 		nil,
-		s.moneyToDB(sale.TotalAmount),
-		s.moneyToDB(sale.AmountPaid),
+		moneyToDB(s.sqlite, sale.TotalAmount),
+		moneyToDB(s.sqlite, sale.AmountPaid),
 		dbPaymentStatus(sale.PaymentStatus),
 		dbDeliveryStatus(sale.DeliveryStatus),
 		dbPaymentMethod(sale.PaymentMethod),
@@ -117,7 +117,7 @@ func (s *saleStore) Create(ctx context.Context, sale *domain.Sale, items []*doma
 		nullableID(sale.CreatedByID),
 	).Scan(&id).Error
 	if err != nil {
-		return nil, storeError("create sale", err)
+		return nil, storeError(s.db, "create sale", err)
 	}
 	sale.ID = id
 	for _, item := range items {
@@ -136,8 +136,8 @@ func (s *saleStore) Update(ctx context.Context, id int64, sale *domain.Sale) err
 			delivery_status = ?, payment_method = ?, client_id = ?
 		 WHERE id = ?`,
 		nullableTimestampValue(sale.UpdatedAt),
-		s.moneyToDB(sale.TotalAmount),
-		s.moneyToDB(sale.AmountPaid),
+		moneyToDB(s.sqlite, sale.TotalAmount),
+		moneyToDB(s.sqlite, sale.AmountPaid),
 		dbPaymentStatus(sale.PaymentStatus),
 		dbDeliveryStatus(sale.DeliveryStatus),
 		dbPaymentMethod(sale.PaymentMethod),
@@ -145,7 +145,7 @@ func (s *saleStore) Update(ctx context.Context, id int64, sale *domain.Sale) err
 		id,
 	)
 	if result.Error != nil {
-		return storeError("update sale", result.Error)
+		return storeError(s.db, "update sale", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return domain.ErrNotFound
@@ -156,7 +156,7 @@ func (s *saleStore) Update(ctx context.Context, id int64, sale *domain.Sale) err
 func (s *saleStore) Delete(ctx context.Context, id int64) error {
 	result := s.db.WithContext(ctx).Exec("DELETE FROM sales WHERE id = ?", id)
 	if result.Error != nil {
-		return storeError("delete sale", result.Error)
+		return storeError(s.db, "delete sale", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return domain.ErrNotFound
@@ -232,11 +232,11 @@ func (s *saleStore) CreateItem(ctx context.Context, item *domain.SaleItem) (*dom
 		item.ProductID,
 		item.Quantity,
 		item.DeliveredQuantity,
-		s.moneyToDB(item.UnitPrice),
-		s.moneyToDB(item.Subtotal),
+		moneyToDB(s.sqlite, item.UnitPrice),
+		moneyToDB(s.sqlite, item.Subtotal),
 	).Scan(&id).Error
 	if err != nil {
-		return nil, storeError("create sale item", err)
+		return nil, storeError(s.db, "create sale item", err)
 	}
 	item.ID = id
 	return item, nil
@@ -249,13 +249,13 @@ func (s *saleStore) UpdateItem(ctx context.Context, item *domain.SaleItem) error
 		 WHERE id = ? AND sale_id = ?`,
 		item.Quantity,
 		item.DeliveredQuantity,
-		s.moneyToDB(item.UnitPrice),
-		s.moneyToDB(item.Subtotal),
+		moneyToDB(s.sqlite, item.UnitPrice),
+		moneyToDB(s.sqlite, item.Subtotal),
 		item.ID,
 		item.SaleID,
 	)
 	if result.Error != nil {
-		return storeError("update sale item", result.Error)
+		return storeError(s.db, "update sale item", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return domain.ErrNotFound
@@ -266,7 +266,7 @@ func (s *saleStore) UpdateItem(ctx context.Context, item *domain.SaleItem) error
 func (s *saleStore) DeleteItem(ctx context.Context, saleID, itemID int64) error {
 	result := s.db.WithContext(ctx).Exec("DELETE FROM sale_items WHERE id = ? AND sale_id = ?", itemID, saleID)
 	if result.Error != nil {
-		return storeError("delete sale item", result.Error)
+		return storeError(s.db, "delete sale item", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return domain.ErrNotFound
@@ -276,14 +276,14 @@ func (s *saleStore) DeleteItem(ctx context.Context, saleID, itemID int64) error 
 
 func (s *saleStore) DeleteItems(ctx context.Context, saleID int64) error {
 	if err := s.db.WithContext(ctx).Exec("DELETE FROM sale_items WHERE sale_id = ?", saleID).Error; err != nil {
-		return storeError("delete sale items", err)
+		return storeError(s.db, "delete sale items", err)
 	}
 	return nil
 }
 
 func (s *saleStore) selectSQL() string {
 	return `SELECT
-		s.id, s.created_at, s.updated_at, ` + s.moneySQL("s.total_amount") + `, ` + s.moneySQL("s.amount_paid") + `,
+		s.id, s.created_at, s.updated_at, ` + moneySQL(s.sqlite, "s.total_amount") + `, ` + moneySQL(s.sqlite, "s.amount_paid") + `,
 		s.payment_status, s.delivery_status, s.payment_method, s.client_id, s.created_by_id
 	FROM sales s`
 }
@@ -291,7 +291,7 @@ func (s *saleStore) selectSQL() string {
 func (s *saleStore) itemsSQL() string {
 	return `SELECT
 		si.id, si.sale_id, si.product_id, si.quantity, si.delivered_quantity,
-		` + s.moneySQL("si.unit_price") + `, ` + s.moneySQL("si.subtotal") + `,
+		` + moneySQL(s.sqlite, "si.unit_price") + `, ` + moneySQL(s.sqlite, "si.subtotal") + `,
 		p.name, p.sku, b.name, m.name, c.name
 	FROM sale_items si
 	JOIN products p ON p.id = si.product_id
@@ -380,11 +380,11 @@ func (s *saleStore) scanSale(row rowScanner) (*domain.Sale, error) {
 	if err != nil {
 		return nil, err
 	}
-	total, err := s.moneyFromDB(totalRaw)
+	total, err := moneyFromDB(s.sqlite, totalRaw)
 	if err != nil {
 		return nil, fmt.Errorf("decode sale total: %w", err)
 	}
-	paid, err := s.moneyFromDB(paidRaw)
+	paid, err := moneyFromDB(s.sqlite, paidRaw)
 	if err != nil {
 		return nil, fmt.Errorf("decode sale amount paid: %w", err)
 	}
@@ -446,11 +446,11 @@ func (s *saleStore) scanItem(row rowScanner) (*domain.SaleItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	unitPrice, err := s.moneyFromDB(unitPriceRaw)
+	unitPrice, err := moneyFromDB(s.sqlite, unitPriceRaw)
 	if err != nil {
 		return nil, fmt.Errorf("decode sale item unit price: %w", err)
 	}
-	subtotal, err := s.moneyFromDB(subtotalRaw)
+	subtotal, err := moneyFromDB(s.sqlite, subtotalRaw)
 	if err != nil {
 		return nil, fmt.Errorf("decode sale item subtotal: %w", err)
 	}
@@ -526,41 +526,8 @@ func (s *saleStore) attachRelations(ctx context.Context, sales []*domain.Sale) e
 	return nil
 }
 
-func (s *saleStore) moneyToDB(value decimal.Decimal) any {
-	rounded := value.Round(2)
-	if s.sqlite {
-		return rounded.Shift(2).IntPart()
-	}
-	return rounded.StringFixed(2)
-}
-
-func (s *saleStore) moneyFromDB(value any) (decimal.Decimal, error) {
-	switch raw := value.(type) {
-	case int64:
-		if s.sqlite {
-			return decimal.New(raw, -2), nil
-		}
-		return decimal.New(raw, 0), nil
-	case string:
-		return decimal.NewFromString(raw)
-	case []byte:
-		return decimal.NewFromString(string(raw))
-	default:
-		return decimal.Zero, fmt.Errorf("unsupported money value %T", value)
-	}
-}
-
 func dbPaymentStatus(value string) string {
-	switch value {
-	case domain.PaymentStatusPending:
-		return "PENDING"
-	case domain.PaymentStatusPartial:
-		return "PARTIAL"
-	case domain.PaymentStatusPaid:
-		return "PAID"
-	default:
-		return value
-	}
+	return strings.ToUpper(value)
 }
 
 func apiPaymentStatus(value string) string {
@@ -568,16 +535,7 @@ func apiPaymentStatus(value string) string {
 }
 
 func dbDeliveryStatus(value string) string {
-	switch value {
-	case domain.DeliveryStatusPending:
-		return "PENDING"
-	case domain.DeliveryStatusPartial:
-		return "PARTIAL"
-	case domain.DeliveryStatusDelivered:
-		return "DELIVERED"
-	default:
-		return value
-	}
+	return strings.ToUpper(value)
 }
 
 func apiDeliveryStatus(value string) string {
@@ -588,16 +546,7 @@ func dbPaymentMethod(value *string) any {
 	if value == nil {
 		return nil
 	}
-	switch *value {
-	case domain.PaymentMethodCash:
-		return "CASH"
-	case domain.PaymentMethodCredit:
-		return "CREDIT"
-	case domain.PaymentMethodDebit:
-		return "DEBIT"
-	default:
-		return *value
-	}
+	return strings.ToUpper(*value)
 }
 
 func apiPaymentMethod(value sql.NullString) *string {

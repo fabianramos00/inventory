@@ -160,26 +160,13 @@ func (s *catalogStore[T, M]) List(ctx context.Context, skip, limit int, search s
 	if search != "" && s.db.Dialector.Name() == "sqlite" {
 		// ponytail: SQLite search scans the whole table so Go can case-fold Unicode; add FTS5 when catalog size makes it measurable.
 		if err := s.db.WithContext(ctx).Order("id DESC").Find(&records).Error; err != nil {
-			return nil, false, storeError("list catalog", err)
+			return nil, false, storeError(s.db, "list catalog", err)
 		}
 		needle := strings.ToLower(search)
-		matched := records[:0]
-		for _, record := range records {
-			if strings.Contains(strings.ToLower(s.nameOf(record)), needle) {
-				matched = append(matched, record)
-			}
-		}
-		records = matched
-		if skip >= len(records) {
-			records = nil
-		} else {
-			records = records[skip:]
-		}
-		hasNext := len(records) > limit
-		if hasNext {
-			records = records[:limit]
-		}
-		return s.toDomainList(records), hasNext, nil
+		items, hasNext := filterPage(records, func(record M) bool {
+			return strings.Contains(strings.ToLower(s.nameOf(record)), needle)
+		}, skip, limit, s.toDomain)
+		return items, hasNext, nil
 	}
 
 	query := s.db.WithContext(ctx).Model(new(M))
@@ -187,19 +174,16 @@ func (s *catalogStore[T, M]) List(ctx context.Context, skip, limit int, search s
 		query = query.Where("strpos(lower(name), lower(?)) > 0", search)
 	}
 	if err := query.Order("id DESC").Offset(skip).Limit(limit + 1).Find(&records).Error; err != nil {
-		return nil, false, storeError("list catalog", err)
+		return nil, false, storeError(s.db, "list catalog", err)
 	}
-	hasNext := len(records) > limit
-	if hasNext {
-		records = records[:limit]
-	}
-	return s.toDomainList(records), hasNext, nil
+	items, hasNext := filterPage(records, nil, 0, limit, s.toDomain)
+	return items, hasNext, nil
 }
 
 func (s *catalogStore[T, M]) Create(ctx context.Context, entity *T) (*T, error) {
 	record := s.toModel(entity)
 	if err := s.db.WithContext(ctx).Create(&record).Error; err != nil {
-		return nil, storeError("create catalog record", err)
+		return nil, storeError(s.db, "create catalog record", err)
 	}
 	return s.toDomain(record), nil
 }
@@ -207,7 +191,7 @@ func (s *catalogStore[T, M]) Create(ctx context.Context, entity *T) (*T, error) 
 func (s *catalogStore[T, M]) Update(ctx context.Context, id int64, entity *T) error {
 	result := s.db.WithContext(ctx).Model(new(M)).Where("id = ?", id).Updates(s.updates(entity))
 	if result.Error != nil {
-		return storeError("update catalog record", result.Error)
+		return storeError(s.db, "update catalog record", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		if _, err := s.Get(ctx, id); err != nil {
@@ -228,20 +212,12 @@ func (s *catalogStore[T, M]) Delete(ctx context.Context, id int64) (*T, error) {
 	}
 	result := s.db.WithContext(ctx).Delete(&record)
 	if result.Error != nil {
-		return nil, storeError("delete catalog record", result.Error)
+		return nil, storeError(s.db, "delete catalog record", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return nil, domain.ErrNotFound
 	}
 	return s.toDomain(record), nil
-}
-
-func (s *catalogStore[T, M]) toDomainList(records []M) []*T {
-	items := make([]*T, len(records))
-	for i := range records {
-		items[i] = s.toDomain(records[i])
-	}
-	return items
 }
 
 func cloneString(value *string) *string {

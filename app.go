@@ -13,7 +13,6 @@ import (
 var assets embed.FS
 
 type App struct {
-	mu           sync.RWMutex
 	apiBaseURL   string
 	shutdownOnce sync.Once
 	shutdownFn   func(context.Context)
@@ -24,8 +23,6 @@ func NewApp(apiBaseURL string, shutdown func(context.Context)) *App {
 }
 
 func (a *App) GetAPIBaseURL() string {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
 	return a.apiBaseURL
 }
 

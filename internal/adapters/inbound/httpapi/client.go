@@ -59,12 +59,7 @@ func (h *ClientHandler) List(w http.ResponseWriter, r *http.Request) {
 	for i, client := range result.Items {
 		items[i] = newClientResponse(client)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":    items,
-		"has_next": result.HasNext,
-		"skip":     result.Skip,
-		"limit":    result.Limit,
-	})
+	writePage(w, items, result.HasNext, result.Skip, result.Limit)
 }
 
 func (h *ClientHandler) Get(w http.ResponseWriter, r *http.Request) {

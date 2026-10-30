@@ -32,7 +32,6 @@ type Config struct {
 	AutoMigrate        bool
 	DevMode            bool
 	LogLevel           slog.Level
-	ConfigPath         string
 }
 
 func (c Config) AccessTokenTTL() time.Duration {
@@ -162,7 +161,6 @@ func Load() (*Config, error) {
 		AutoMigrate:        autoMigrate,
 		DevMode:            devMode,
 		LogLevel:           level,
-		ConfigPath:         path,
 	}, nil
 }
 

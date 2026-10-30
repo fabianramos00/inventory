@@ -37,18 +37,11 @@ func NewProductService(repository outbound.ProductRepository) *ProductService {
 var _ inbound.ProductUseCase = (*ProductService)(nil)
 
 func (s *ProductService) List(ctx context.Context, filter inbound.ProductFilter) (*inbound.ProductList, error) {
-	if !validStockStatus(filter.StockStatus) {
+	if !domain.ValidStockStatus(filter.StockStatus) {
 		return nil, fmt.Errorf("%w: invalid stock_status", domain.ErrValidation)
 	}
-	items, hasNext, err := s.repository.List(ctx, outbound.ProductFilter{
-		Skip:        filter.Skip,
-		Limit:       filter.Limit,
-		Search:      strings.TrimSpace(filter.Search),
-		CategoryID:  filter.CategoryID,
-		BrandID:     filter.BrandID,
-		MaterialID:  filter.MaterialID,
-		StockStatus: filter.StockStatus,
-	})
+	filter.Search = strings.TrimSpace(filter.Search)
+	items, hasNext, err := s.repository.List(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -350,15 +343,6 @@ func optionalID(value *int64, field string) (*int64, error) {
 	}
 	id := *value
 	return &id, nil
-}
-
-func validStockStatus(status string) bool {
-	switch status {
-	case "", inbound.StockStatusInStock, inbound.StockStatusLowStock, inbound.StockStatusOutOfStock:
-		return true
-	default:
-		return false
-	}
 }
 
 func requiredField(field string) error {

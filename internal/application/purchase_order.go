@@ -28,21 +28,13 @@ func NewPurchaseOrderService(repository outbound.PurchaseOrderRepository, unitOf
 var _ inbound.PurchaseOrderUseCase = (*PurchaseOrderService)(nil)
 
 func (s *PurchaseOrderService) List(ctx context.Context, filter inbound.PurchaseOrderFilter) (*inbound.PurchaseOrderList, error) {
-	if !validOrderStatusFilter(filter.Status) {
+	if filter.Status != "" && !domain.ValidOrderStatus(filter.Status) {
 		return nil, fmt.Errorf("%w: invalid status", domain.ErrValidation)
 	}
-	if !validPurchasePaymentStatusFilter(filter.PaymentStatus) {
+	if filter.PaymentStatus != "" && !domain.ValidPurchasePaymentStatus(filter.PaymentStatus) {
 		return nil, fmt.Errorf("%w: invalid payment_status", domain.ErrValidation)
 	}
-	items, hasNext, err := s.repository.List(ctx, outbound.PurchaseOrderFilter{
-		Skip:          filter.Skip,
-		Limit:         filter.Limit,
-		ProviderID:    filter.ProviderID,
-		Status:        filter.Status,
-		PaymentStatus: filter.PaymentStatus,
-		MinDate:       filter.MinDate,
-		MaxDate:       filter.MaxDate,
-	})
+	items, hasNext, err := s.repository.List(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -66,10 +58,10 @@ func (s *PurchaseOrderService) Create(ctx context.Context, input inbound.CreateP
 	if paymentStatus == "" {
 		paymentStatus = domain.PurchasePaymentStatusPending
 	}
-	if !validOrderStatus(status) {
+	if !domain.ValidOrderStatus(status) {
 		return nil, fmt.Errorf("%w: invalid status", domain.ErrValidation)
 	}
-	if !validPurchasePaymentStatus(paymentStatus) {
+	if !domain.ValidPurchasePaymentStatus(paymentStatus) {
 		return nil, fmt.Errorf("%w: invalid payment_status", domain.ErrValidation)
 	}
 	if len(input.Items) == 0 {
@@ -111,7 +103,7 @@ func (s *PurchaseOrderService) Create(ctx context.Context, input inbound.CreateP
 				Quantity:    item.Quantity,
 				UnitCost:    unitCost,
 				Subtotal:    subtotal,
-				SupplierSKU: cloneOptionalString(item.SupplierSKU),
+				SupplierSKU: clonePtr(item.SupplierSKU),
 			})
 		}
 
@@ -119,7 +111,7 @@ func (s *PurchaseOrderService) Create(ctx context.Context, input inbound.CreateP
 			ProviderID:    input.ProviderID,
 			Status:        status,
 			PaymentStatus: paymentStatus,
-			OrderDate:     purchaseNow(),
+			OrderDate:     nowUTC(),
 			TotalAmount:   total.Round(2),
 			CreatedByID:   input.CreatedByID,
 		}
@@ -144,7 +136,7 @@ func (s *PurchaseOrderService) Update(ctx context.Context, id int64, input inbou
 		if input.Status.Value == nil {
 			return nil, requiredField("status")
 		}
-		if !validOrderStatus(*input.Status.Value) {
+		if !domain.ValidOrderStatus(*input.Status.Value) {
 			return nil, fmt.Errorf("%w: invalid status", domain.ErrValidation)
 		}
 	}
@@ -152,7 +144,7 @@ func (s *PurchaseOrderService) Update(ctx context.Context, id int64, input inbou
 		if input.PaymentStatus.Value == nil {
 			return nil, requiredField("payment_status")
 		}
-		if !validPurchasePaymentStatus(*input.PaymentStatus.Value) {
+		if !domain.ValidPurchasePaymentStatus(*input.PaymentStatus.Value) {
 			return nil, fmt.Errorf("%w: invalid payment_status", domain.ErrValidation)
 		}
 	}
@@ -222,7 +214,7 @@ func (s *PurchaseOrderService) receive(ctx context.Context, repos outbound.TxRep
 		}
 	}
 
-	now := purchaseNow()
+	now := nowUTC()
 	leadTime := int64(now.Sub(order.OrderDate) / (24 * time.Hour))
 	for _, item := range items {
 		if err := repos.Stock.ApplyDelta(ctx, item.ProductID, int64(item.Quantity)); err != nil {
@@ -231,7 +223,7 @@ func (s *PurchaseOrderService) receive(ctx context.Context, repos outbound.TxRep
 		if err := repos.Catalogs.Upsert(ctx, &domain.SupplierCatalog{
 			ProductID:      item.ProductID,
 			ProviderID:     order.ProviderID,
-			SupplierSKU:    cloneOptionalString(item.SupplierSKU),
+			SupplierSKU:    clonePtr(item.SupplierSKU),
 			LastQuotedCost: item.UnitCost.Round(2),
 			LeadTime:       &leadTime,
 		}); err != nil {
@@ -300,7 +292,7 @@ func (s *PurchaseOrderService) AddItem(ctx context.Context, orderID int64, input
 			Quantity:    input.Quantity,
 			UnitCost:    unitCost,
 			Subtotal:    unitCost.Mul(decimal.NewFromInt(int64(input.Quantity))).Round(2),
-			SupplierSKU: cloneOptionalString(input.SupplierSKU),
+			SupplierSKU: clonePtr(input.SupplierSKU),
 		}
 		if _, err := repos.Orders.CreateItem(ctx, item); err != nil {
 			return err
@@ -350,7 +342,7 @@ func (s *PurchaseOrderService) UpdateItem(ctx context.Context, orderID, itemID i
 			item.UnitCost = input.UnitCost.Value.Round(2)
 		}
 		if input.SupplierSKU.Set {
-			item.SupplierSKU = cloneOptionalString(input.SupplierSKU.Value)
+			item.SupplierSKU = clonePtr(input.SupplierSKU.Value)
 		}
 		item.Subtotal = item.UnitCost.Mul(decimal.NewFromInt(int64(item.Quantity))).Round(2)
 		if err := repos.Orders.UpdateItem(ctx, item); err != nil {
@@ -432,34 +424,4 @@ func orderTotal(items []*domain.OrderItem) decimal.Decimal {
 		total = total.Add(item.Subtotal)
 	}
 	return total.Round(2)
-}
-
-func validOrderStatus(value string) bool {
-	switch value {
-	case domain.OrderStatusPending, domain.OrderStatusSent, domain.OrderStatusReceived, domain.OrderStatusCancelled:
-		return true
-	default:
-		return false
-	}
-}
-
-func validOrderStatusFilter(value string) bool {
-	return value == "" || validOrderStatus(value)
-}
-
-func validPurchasePaymentStatus(value string) bool {
-	switch value {
-	case domain.PurchasePaymentStatusPending, domain.PurchasePaymentStatusPaid:
-		return true
-	default:
-		return false
-	}
-}
-
-func validPurchasePaymentStatusFilter(value string) bool {
-	return value == "" || validPurchasePaymentStatus(value)
-}
-
-func purchaseNow() time.Time {
-	return time.Now().UTC().Truncate(time.Microsecond)
 }

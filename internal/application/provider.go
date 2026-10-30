@@ -61,7 +61,7 @@ func (s *ProviderService) Create(ctx context.Context, input inbound.CreateProvid
 		ContactInfo: contactInfo,
 		Email:       email,
 		Phone:       phone,
-		CreatedByID: cloneProviderID(input.CreatedByID),
+		CreatedByID: clonePtr(input.CreatedByID),
 	})
 }
 
@@ -102,7 +102,7 @@ func (s *ProviderService) Update(ctx context.Context, id int64, input inbound.Up
 		if err != nil {
 			return nil, err
 		}
-		if !sameProviderText(*field.target, cleaned) {
+		if !sameText(*field.target, cleaned) {
 			*field.target = cleaned
 			changed = true
 		}
@@ -143,19 +143,4 @@ func providerOptional(value *string, field string, max int) (*string, error) {
 		return nil, tooLong(field, max)
 	}
 	return &cleaned, nil
-}
-
-func sameProviderText(a, b *string) bool {
-	if a == nil || b == nil {
-		return a == nil && b == nil
-	}
-	return *a == *b
-}
-
-func cloneProviderID(value *int64) *int64 {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
 }

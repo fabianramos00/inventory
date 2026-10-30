@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"inventory-desktop/internal/domain"
@@ -86,8 +85,8 @@ func (s *productStore) Create(ctx context.Context, product *domain.Product) (*do
 		product.Name,
 		product.SizeValue,
 		product.MeasurementUnitID,
-		s.moneyToDB(product.Price),
-		s.moneyToDB(product.Cost),
+		moneyToDB(s.sqlite, product.Price),
+		moneyToDB(s.sqlite, product.Cost),
 		product.StockQuantity,
 		product.LowStockThreshold,
 		product.BrandID,
@@ -95,7 +94,7 @@ func (s *productStore) Create(ctx context.Context, product *domain.Product) (*do
 		product.MaterialID,
 	).Scan(&id).Error
 	if err != nil {
-		return nil, s.storeError("create product", err)
+		return nil, storeError(s.db, "create product", err)
 	}
 	product.ID = id
 	return product, nil
@@ -111,8 +110,8 @@ func (s *productStore) Update(ctx context.Context, id int64, product *domain.Pro
 		product.Name,
 		product.SizeValue,
 		product.MeasurementUnitID,
-		s.moneyToDB(product.Price),
-		s.moneyToDB(product.Cost),
+		moneyToDB(s.sqlite, product.Price),
+		moneyToDB(s.sqlite, product.Cost),
 		product.StockQuantity,
 		product.LowStockThreshold,
 		product.BrandID,
@@ -121,7 +120,7 @@ func (s *productStore) Update(ctx context.Context, id int64, product *domain.Pro
 		id,
 	)
 	if result.Error != nil {
-		return s.storeError("update product", result.Error)
+		return storeError(s.db, "update product", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return domain.ErrNotFound
@@ -136,7 +135,7 @@ func (s *productStore) Delete(ctx context.Context, id int64) (*domain.Product, e
 	}
 	result := s.db.WithContext(ctx).Exec("DELETE FROM products WHERE id = ?", id)
 	if result.Error != nil {
-		return nil, s.storeError("delete product", result.Error)
+		return nil, storeError(s.db, "delete product", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return nil, domain.ErrNotFound
@@ -166,7 +165,7 @@ func (s *productStore) Stats(ctx context.Context) (*domain.ProductStats, error) 
 	if err != nil {
 		return nil, fmt.Errorf("product stats: %w", err)
 	}
-	value, err := s.moneyFromDB(valueRaw)
+	value, err := moneyFromDB(s.sqlite, valueRaw)
 	if err != nil {
 		return nil, fmt.Errorf("product stats value: %w", err)
 	}
@@ -180,7 +179,7 @@ func (s *productStore) Stats(ctx context.Context) (*domain.ProductStats, error) 
 
 func (s *productStore) selectSQL() string {
 	return `SELECT
-		p.id, p.sku, p.name, p.size_value, p.measurement_unit_id, ` + s.priceSQL("p.price") + `, ` + s.priceSQL("p.cost") + `,
+		p.id, p.sku, p.name, p.size_value, p.measurement_unit_id, ` + moneySQL(s.sqlite, "p.price") + `, ` + moneySQL(s.sqlite, "p.cost") + `,
 		p.stock_quantity, p.low_stock_threshold, p.brand_id, p.category_id, p.material_id,
 		c.id, c.name, c.code, c.description,
 		m.id, m.name,
@@ -191,13 +190,6 @@ func (s *productStore) selectSQL() string {
 	LEFT JOIN materials m ON m.id = p.material_id
 	LEFT JOIN brands b ON b.id = p.brand_id
 	LEFT JOIN measurement_units u ON u.id = p.measurement_unit_id`
-}
-
-func (s *productStore) priceSQL(column string) string {
-	if s.sqlite {
-		return column
-	}
-	return column + "::text"
 }
 
 func (s *productStore) filterSQL(filter outbound.ProductFilter, includeSearch bool) (string, []any) {
@@ -301,11 +293,11 @@ func (s *productStore) scanDetail(row rowScanner) (*domain.ProductDetail, error)
 	if err != nil {
 		return nil, err
 	}
-	price, err := s.moneyFromDB(priceRaw)
+	price, err := moneyFromDB(s.sqlite, priceRaw)
 	if err != nil {
 		return nil, fmt.Errorf("decode product price: %w", err)
 	}
-	cost, err := s.moneyFromDB(costRaw)
+	cost, err := moneyFromDB(s.sqlite, costRaw)
 	if err != nil {
 		return nil, fmt.Errorf("decode product cost: %w", err)
 	}
@@ -347,37 +339,6 @@ func (s *productStore) scanDetail(row rowScanner) (*domain.ProductDetail, error)
 		}
 	}
 	return detail, nil
-}
-
-func (s *productStore) moneyToDB(value decimal.Decimal) any {
-	rounded := value.Round(2)
-	if s.sqlite {
-		return rounded.Shift(2).IntPart()
-	}
-	return rounded.StringFixed(2)
-}
-
-func (s *productStore) moneyFromDB(value any) (decimal.Decimal, error) {
-	switch raw := value.(type) {
-	case int64:
-		if s.sqlite {
-			return decimal.New(raw, -2), nil
-		}
-		return decimal.New(raw, 0), nil
-	case string:
-		return decimal.NewFromString(raw)
-	case []byte:
-		return decimal.NewFromString(string(raw))
-	default:
-		return decimal.Zero, fmt.Errorf("unsupported money value %T", value)
-	}
-}
-
-func (s *productStore) storeError(op string, err error) error {
-	if translator, ok := s.db.Dialector.(gorm.ErrorTranslator); ok {
-		err = translator.Translate(err)
-	}
-	return storeError(op, err)
 }
 
 func nullString(value sql.NullString) *string {

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"inventory-desktop/internal/domain"
@@ -99,11 +98,11 @@ func (s *supplierCatalogStore) Upsert(ctx context.Context, catalog *domain.Suppl
 			catalog.ProductID,
 			catalog.ProviderID,
 			nonEmptyString(catalog.SupplierSKU),
-			s.moneyToDB(catalog.LastQuotedCost),
+			moneyToDB(s.sqlite, catalog.LastQuotedCost),
 			catalog.LeadTime,
 		).Scan(&newID).Error
 		if err != nil {
-			return storeError("create supplier catalog", err)
+			return storeError(s.db, "create supplier catalog", err)
 		}
 		catalog.ID = newID
 		return nil
@@ -121,12 +120,12 @@ func (s *supplierCatalogStore) Upsert(ctx context.Context, catalog *domain.Suppl
 			supplier_sku = ?, last_quoted_cost = ?, lead_time = ?
 		 WHERE id = ?`,
 		sku,
-		s.moneyToDB(catalog.LastQuotedCost),
+		moneyToDB(s.sqlite, catalog.LastQuotedCost),
 		catalog.LeadTime,
 		id,
 	)
 	if result.Error != nil {
-		return storeError("update supplier catalog", result.Error)
+		return storeError(s.db, "update supplier catalog", result.Error)
 	}
 	catalog.ID = id
 	return nil
@@ -141,21 +140,14 @@ func nonEmptyString(value *string) *string {
 
 func (s *supplierCatalogStore) selectSQL() string {
 	return `SELECT
-		sc.id, sc.product_id, sc.provider_id, sc.supplier_sku, ` + s.moneySQL("sc.last_quoted_cost") + `, sc.lead_time,
+		sc.id, sc.product_id, sc.provider_id, sc.supplier_sku, ` + moneySQL(s.sqlite, "sc.last_quoted_cost") + `, sc.lead_time,
 		pv.id, pv.name, pv.contact_info, pv.email, pv.phone, pv.created_by_id,
 		p.id, p.sku, p.name, p.size_value, p.measurement_unit_id,
-		` + s.moneySQL("p.price") + `, ` + s.moneySQL("p.cost") + `,
+		` + moneySQL(s.sqlite, "p.price") + `, ` + moneySQL(s.sqlite, "p.cost") + `,
 		p.stock_quantity, p.low_stock_threshold, p.brand_id, p.category_id, p.material_id
 	FROM supplier_catalogs sc
 	LEFT JOIN providers pv ON pv.id = sc.provider_id
 	LEFT JOIN products p ON p.id = sc.product_id`
-}
-
-func (s *supplierCatalogStore) moneySQL(column string) string {
-	if s.sqlite {
-		return column
-	}
-	return column + "::text"
 }
 
 func (s *supplierCatalogStore) scanCatalog(row rowScanner) (*domain.SupplierCatalog, error) {
@@ -194,7 +186,7 @@ func (s *supplierCatalogStore) scanCatalog(row rowScanner) (*domain.SupplierCata
 		return nil, err
 	}
 
-	cost, err := s.moneyFromDB(costRaw)
+	cost, err := moneyFromDB(s.sqlite, costRaw)
 	if err != nil {
 		return nil, fmt.Errorf("decode last quoted cost: %w", err)
 	}
@@ -217,11 +209,11 @@ func (s *supplierCatalogStore) scanCatalog(row rowScanner) (*domain.SupplierCata
 		}
 	}
 	if productJoin.Valid {
-		price, err := s.moneyFromDB(priceRaw)
+		price, err := moneyFromDB(s.sqlite, priceRaw)
 		if err != nil {
 			return nil, fmt.Errorf("decode product price: %w", err)
 		}
-		cost, err := s.moneyFromDB(productCost)
+		cost, err := moneyFromDB(s.sqlite, productCost)
 		if err != nil {
 			return nil, fmt.Errorf("decode product cost: %w", err)
 		}
@@ -241,28 +233,4 @@ func (s *supplierCatalogStore) scanCatalog(row rowScanner) (*domain.SupplierCata
 		}
 	}
 	return catalog, nil
-}
-
-func (s *supplierCatalogStore) moneyToDB(value decimal.Decimal) any {
-	rounded := value.Round(2)
-	if s.sqlite {
-		return rounded.Shift(2).IntPart()
-	}
-	return rounded.StringFixed(2)
-}
-
-func (s *supplierCatalogStore) moneyFromDB(value any) (decimal.Decimal, error) {
-	switch raw := value.(type) {
-	case int64:
-		if s.sqlite {
-			return decimal.New(raw, -2), nil
-		}
-		return decimal.New(raw, 0), nil
-	case string:
-		return decimal.NewFromString(raw)
-	case []byte:
-		return decimal.NewFromString(string(raw))
-	default:
-		return decimal.Zero, fmt.Errorf("unsupported money value %T", value)
-	}
 }

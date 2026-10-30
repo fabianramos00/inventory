@@ -41,3 +41,21 @@ type OrderItem struct {
 	MaterialName *string
 	CategoryName *string
 }
+
+func ValidOrderStatus(value string) bool {
+	switch value {
+	case OrderStatusPending, OrderStatusSent, OrderStatusReceived, OrderStatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+func ValidPurchasePaymentStatus(value string) bool {
+	switch value {
+	case PurchasePaymentStatusPending, PurchasePaymentStatusPaid:
+		return true
+	default:
+		return false
+	}
+}

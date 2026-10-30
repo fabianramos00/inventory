@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"inventory-desktop/internal/domain"
@@ -93,12 +92,12 @@ func (s *purchaseOrderStore) Create(ctx context.Context, order *domain.PurchaseO
 		order.ProviderID,
 		dbOrderStatus(order.Status),
 		Timestamp(order.OrderDate),
-		s.moneyToDB(order.TotalAmount),
+		moneyToDB(s.sqlite, order.TotalAmount),
 		nullableID(order.CreatedByID),
 		dbPurchasePaymentStatus(order.PaymentStatus),
 	).Scan(&id).Error
 	if err != nil {
-		return nil, storeError("create purchase order", err)
+		return nil, storeError(s.db, "create purchase order", err)
 	}
 	order.ID = id
 	for _, item := range items {
@@ -118,11 +117,11 @@ func (s *purchaseOrderStore) Update(ctx context.Context, id int64, order *domain
 		order.ProviderID,
 		dbOrderStatus(order.Status),
 		dbPurchasePaymentStatus(order.PaymentStatus),
-		s.moneyToDB(order.TotalAmount),
+		moneyToDB(s.sqlite, order.TotalAmount),
 		id,
 	)
 	if result.Error != nil {
-		return storeError("update purchase order", result.Error)
+		return storeError(s.db, "update purchase order", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return domain.ErrNotFound
@@ -133,7 +132,7 @@ func (s *purchaseOrderStore) Update(ctx context.Context, id int64, order *domain
 func (s *purchaseOrderStore) Delete(ctx context.Context, id int64) error {
 	result := s.db.WithContext(ctx).Exec("DELETE FROM purchase_orders WHERE id = ?", id)
 	if result.Error != nil {
-		return storeError("delete purchase order", result.Error)
+		return storeError(s.db, "delete purchase order", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return domain.ErrNotFound
@@ -212,12 +211,12 @@ func (s *purchaseOrderStore) CreateItem(ctx context.Context, item *domain.OrderI
 		item.OrderID,
 		item.ProductID,
 		item.Quantity,
-		s.moneyToDB(item.UnitCost),
-		s.moneyToDB(item.Subtotal),
+		moneyToDB(s.sqlite, item.UnitCost),
+		moneyToDB(s.sqlite, item.Subtotal),
 		item.SupplierSKU,
 	).Scan(&id).Error
 	if err != nil {
-		return nil, storeError("create order item", err)
+		return nil, storeError(s.db, "create order item", err)
 	}
 	item.ID = id
 	return item, nil
@@ -229,14 +228,14 @@ func (s *purchaseOrderStore) UpdateItem(ctx context.Context, item *domain.OrderI
 			quantity = ?, unit_cost = ?, subtotal = ?, supplier_sku = ?
 		 WHERE id = ? AND order_id = ?`,
 		item.Quantity,
-		s.moneyToDB(item.UnitCost),
-		s.moneyToDB(item.Subtotal),
+		moneyToDB(s.sqlite, item.UnitCost),
+		moneyToDB(s.sqlite, item.Subtotal),
 		item.SupplierSKU,
 		item.ID,
 		item.OrderID,
 	)
 	if result.Error != nil {
-		return storeError("update order item", result.Error)
+		return storeError(s.db, "update order item", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return domain.ErrNotFound
@@ -247,7 +246,7 @@ func (s *purchaseOrderStore) UpdateItem(ctx context.Context, item *domain.OrderI
 func (s *purchaseOrderStore) DeleteItem(ctx context.Context, orderID, itemID int64) error {
 	result := s.db.WithContext(ctx).Exec("DELETE FROM order_items WHERE id = ? AND order_id = ?", itemID, orderID)
 	if result.Error != nil {
-		return storeError("delete order item", result.Error)
+		return storeError(s.db, "delete order item", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return domain.ErrNotFound
@@ -257,7 +256,7 @@ func (s *purchaseOrderStore) DeleteItem(ctx context.Context, orderID, itemID int
 
 func (s *purchaseOrderStore) DeleteItems(ctx context.Context, orderID int64) error {
 	if err := s.db.WithContext(ctx).Exec("DELETE FROM order_items WHERE order_id = ?", orderID).Error; err != nil {
-		return storeError("delete order items", err)
+		return storeError(s.db, "delete order items", err)
 	}
 	return nil
 }
@@ -265,7 +264,7 @@ func (s *purchaseOrderStore) DeleteItems(ctx context.Context, orderID int64) err
 func (s *purchaseOrderStore) selectSQL() string {
 	return `SELECT
 		po.id, po.provider_id, po.status, po.payment_status, po.order_date,
-		` + s.moneySQL("po.total_amount") + `, po.created_by_id,
+		` + moneySQL(s.sqlite, "po.total_amount") + `, po.created_by_id,
 		pv.id, pv.name, pv.contact_info, pv.email, pv.phone, pv.created_by_id
 	FROM purchase_orders po
 	LEFT JOIN providers pv ON pv.id = po.provider_id`
@@ -274,20 +273,13 @@ func (s *purchaseOrderStore) selectSQL() string {
 func (s *purchaseOrderStore) itemsSQL() string {
 	return `SELECT
 		oi.id, oi.order_id, oi.product_id, oi.quantity,
-		` + s.moneySQL("oi.unit_cost") + `, ` + s.moneySQL("oi.subtotal") + `,
+		` + moneySQL(s.sqlite, "oi.unit_cost") + `, ` + moneySQL(s.sqlite, "oi.subtotal") + `,
 		oi.supplier_sku, p.name, p.sku, b.name, m.name, c.name
 	FROM order_items oi
 	JOIN products p ON p.id = oi.product_id
 	LEFT JOIN brands b ON b.id = p.brand_id
 	LEFT JOIN materials m ON m.id = p.material_id
 	LEFT JOIN categories c ON c.id = p.category_id`
-}
-
-func (s *purchaseOrderStore) moneySQL(column string) string {
-	if s.sqlite {
-		return column
-	}
-	return column + "::text"
 }
 
 func (s *purchaseOrderStore) filterSQL(filter outbound.PurchaseOrderFilter) (string, []any) {
@@ -341,7 +333,7 @@ func (s *purchaseOrderStore) scanOrder(row rowScanner) (*domain.PurchaseOrder, e
 	); err != nil {
 		return nil, err
 	}
-	total, err := s.moneyFromDB(totalRaw)
+	total, err := moneyFromDB(s.sqlite, totalRaw)
 	if err != nil {
 		return nil, fmt.Errorf("decode order total: %w", err)
 	}
@@ -405,11 +397,11 @@ func (s *purchaseOrderStore) scanItem(row rowScanner) (*domain.OrderItem, error)
 	); err != nil {
 		return nil, err
 	}
-	unitCost, err := s.moneyFromDB(unitCostRaw)
+	unitCost, err := moneyFromDB(s.sqlite, unitCostRaw)
 	if err != nil {
 		return nil, fmt.Errorf("decode order item unit cost: %w", err)
 	}
-	subtotal, err := s.moneyFromDB(subtotalRaw)
+	subtotal, err := moneyFromDB(s.sqlite, subtotalRaw)
 	if err != nil {
 		return nil, fmt.Errorf("decode order item subtotal: %w", err)
 	}
@@ -429,43 +421,8 @@ func (s *purchaseOrderStore) scanItem(row rowScanner) (*domain.OrderItem, error)
 	}, nil
 }
 
-func (s *purchaseOrderStore) moneyToDB(value decimal.Decimal) any {
-	rounded := value.Round(2)
-	if s.sqlite {
-		return rounded.Shift(2).IntPart()
-	}
-	return rounded.StringFixed(2)
-}
-
-func (s *purchaseOrderStore) moneyFromDB(value any) (decimal.Decimal, error) {
-	switch raw := value.(type) {
-	case int64:
-		if s.sqlite {
-			return decimal.New(raw, -2), nil
-		}
-		return decimal.New(raw, 0), nil
-	case string:
-		return decimal.NewFromString(raw)
-	case []byte:
-		return decimal.NewFromString(string(raw))
-	default:
-		return decimal.Zero, fmt.Errorf("unsupported money value %T", value)
-	}
-}
-
 func dbOrderStatus(value string) string {
-	switch value {
-	case domain.OrderStatusPending:
-		return "PENDING"
-	case domain.OrderStatusSent:
-		return "SENT"
-	case domain.OrderStatusReceived:
-		return "RECEIVED"
-	case domain.OrderStatusCancelled:
-		return "CANCELLED"
-	default:
-		return value
-	}
+	return strings.ToUpper(value)
 }
 
 func apiOrderStatus(value string) string {
@@ -473,14 +430,7 @@ func apiOrderStatus(value string) string {
 }
 
 func dbPurchasePaymentStatus(value string) string {
-	switch value {
-	case domain.PurchasePaymentStatusPending:
-		return "PENDING"
-	case domain.PurchasePaymentStatusPaid:
-		return "PAID"
-	default:
-		return value
-	}
+	return strings.ToUpper(value)
 }
 
 func apiPurchasePaymentStatus(value string) string {

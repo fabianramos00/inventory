@@ -43,7 +43,7 @@ func (r *UserStore) List(ctx context.Context, skip, limit int, search string) ([
 	}
 	var records []userModel
 	if err := query.Order("id").Offset(skip).Limit(limit + 1).Find(&records).Error; err != nil {
-		return nil, false, storeError("list users", err)
+		return nil, false, storeError(r.db, "list users", err)
 	}
 	hasNext := len(records) > limit
 	if hasNext {
@@ -67,7 +67,7 @@ func (r *UserStore) Create(ctx context.Context, user *domain.User) error {
 		IsSuperuser:    &isSuperuser,
 	}
 	if err := r.db.WithContext(ctx).Create(&record).Error; err != nil {
-		return storeError("create user", err)
+		return storeError(r.db, "create user", err)
 	}
 	user.ID = record.ID
 	return nil
@@ -82,7 +82,7 @@ func (r *UserStore) Update(ctx context.Context, user *domain.User) error {
 		"is_superuser":    user.IsSuperuser,
 	})
 	if result.Error != nil {
-		return storeError("update user", result.Error)
+		return storeError(r.db, "update user", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return domain.ErrNotFound
@@ -97,11 +97,11 @@ func (r *UserStore) Delete(ctx context.Context, id int64) (*domain.User, error) 
 		return nil, domain.ErrNotFound
 	}
 	if err != nil {
-		return nil, storeError("load user for delete", err)
+		return nil, storeError(r.db, "load user for delete", err)
 	}
 	result := r.db.WithContext(ctx).Delete(&record)
 	if result.Error != nil {
-		return nil, storeError("delete user", result.Error)
+		return nil, storeError(r.db, "delete user", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return nil, domain.ErrNotFound
@@ -109,7 +109,10 @@ func (r *UserStore) Delete(ctx context.Context, id int64) (*domain.User, error) 
 	return record.toDomain(), nil
 }
 
-func storeError(op string, err error) error {
+func storeError(db *gorm.DB, op string, err error) error {
+	if translator, ok := db.Dialector.(gorm.ErrorTranslator); ok {
+		err = translator.Translate(err)
+	}
 	switch {
 	case errors.Is(err, gorm.ErrDuplicatedKey):
 		return domain.ErrConflict

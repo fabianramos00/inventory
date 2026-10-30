@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/shopspring/decimal"
@@ -117,23 +116,23 @@ func (h *ProductHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := r.URL.Query()
-	categoryID, err := parseProductFilterID(query.Get("category_id"), "category_id")
+	categoryID, err := parseFilterID(query.Get("category_id"), "category_id")
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid query parameters", "VALIDATION_ERROR")
 		return
 	}
-	brandID, err := parseProductFilterID(query.Get("brand_id"), "brand_id")
+	brandID, err := parseFilterID(query.Get("brand_id"), "brand_id")
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid query parameters", "VALIDATION_ERROR")
 		return
 	}
-	materialID, err := parseProductFilterID(query.Get("material_id"), "material_id")
+	materialID, err := parseFilterID(query.Get("material_id"), "material_id")
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid query parameters", "VALIDATION_ERROR")
 		return
 	}
 	stockStatus := query.Get("stock_status")
-	if !validStockStatus(stockStatus) {
+	if !domain.ValidStockStatus(stockStatus) {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid stock_status", "VALIDATION_ERROR")
 		return
 	}
@@ -155,12 +154,7 @@ func (h *ProductHandler) List(w http.ResponseWriter, r *http.Request) {
 	for i, item := range result.Items {
 		items[i] = newProductDetailResponse(item)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":    items,
-		"has_next": result.HasNext,
-		"skip":     result.Skip,
-		"limit":    result.Limit,
-	})
+	writePage(w, items, result.HasNext, result.Skip, result.Limit)
 }
 
 func (h *ProductHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -315,24 +309,4 @@ func newProductDetailResponse(detail *domain.ProductDetail) productDetailRespons
 		}
 	}
 	return response
-}
-
-func parseProductFilterID(raw, field string) (*int64, error) {
-	if raw == "" {
-		return nil, nil
-	}
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id <= 0 {
-		return nil, errors.New("invalid " + field)
-	}
-	return &id, nil
-}
-
-func validStockStatus(status string) bool {
-	switch status {
-	case "", inbound.StockStatusInStock, inbound.StockStatusLowStock, inbound.StockStatusOutOfStock:
-		return true
-	default:
-		return false
-	}
 }

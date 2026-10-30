@@ -75,26 +75,13 @@ func (s *providerStore) List(ctx context.Context, skip, limit int, search string
 	if search != "" && s.db.Dialector.Name() == "sqlite" {
 		// ponytail: SQLite search scans the whole table so Go can case-fold Unicode; add FTS5 when the provider table makes it measurable.
 		if err := s.db.WithContext(ctx).Order("id DESC").Find(&records).Error; err != nil {
-			return nil, false, s.storeError("list providers", err)
+			return nil, false, storeError(s.db, "list providers", err)
 		}
 		needle := strings.ToLower(search)
-		matched := records[:0]
-		for _, record := range records {
-			if providerMatches(record, needle) {
-				matched = append(matched, record)
-			}
-		}
-		records = matched
-		if skip >= len(records) {
-			records = nil
-		} else {
-			records = records[skip:]
-		}
-		hasNext := len(records) > limit
-		if hasNext {
-			records = records[:limit]
-		}
-		return providerDomainList(records), hasNext, nil
+		items, hasNext := filterPage(records, func(record providerModel) bool {
+			return providerMatches(record, needle)
+		}, skip, limit, providerModel.toDomain)
+		return items, hasNext, nil
 	}
 
 	query := s.db.WithContext(ctx).Model(new(providerModel))
@@ -107,19 +94,16 @@ func (s *providerStore) List(ctx context.Context, skip, limit int, search string
 		)
 	}
 	if err := query.Order("id DESC").Offset(skip).Limit(limit + 1).Find(&records).Error; err != nil {
-		return nil, false, s.storeError("list providers", err)
+		return nil, false, storeError(s.db, "list providers", err)
 	}
-	hasNext := len(records) > limit
-	if hasNext {
-		records = records[:limit]
-	}
-	return providerDomainList(records), hasNext, nil
+	items, hasNext := filterPage(records, nil, 0, limit, providerModel.toDomain)
+	return items, hasNext, nil
 }
 
 func (s *providerStore) Create(ctx context.Context, provider *domain.Provider) (*domain.Provider, error) {
 	record := providerModelFromDomain(provider)
 	if err := s.db.WithContext(ctx).Create(&record).Error; err != nil {
-		return nil, s.storeError("create provider", err)
+		return nil, storeError(s.db, "create provider", err)
 	}
 	return record.toDomain(), nil
 }
@@ -132,7 +116,7 @@ func (s *providerStore) Update(ctx context.Context, id int64, provider *domain.P
 		"phone":        provider.Phone,
 	})
 	if result.Error != nil {
-		return s.storeError("update provider", result.Error)
+		return storeError(s.db, "update provider", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		if _, err := s.Get(ctx, id); err != nil {
@@ -152,16 +136,9 @@ func (s *providerStore) Delete(ctx context.Context, id int64) (*domain.Provider,
 		return nil, fmt.Errorf("load provider for delete: %w", err)
 	}
 	if err := s.db.WithContext(ctx).Delete(&record).Error; err != nil {
-		return nil, s.storeError("delete provider", err)
+		return nil, storeError(s.db, "delete provider", err)
 	}
 	return record.toDomain(), nil
-}
-
-func (s *providerStore) storeError(op string, err error) error {
-	if translator, ok := s.db.Dialector.(gorm.ErrorTranslator); ok {
-		err = translator.Translate(err)
-	}
-	return storeError(op, err)
 }
 
 func providerMatches(record providerModel, needle string) bool {
@@ -177,14 +154,6 @@ func providerMatches(record providerModel, needle string) bool {
 		}
 	}
 	return false
-}
-
-func providerDomainList(records []providerModel) []*domain.Provider {
-	providers := make([]*domain.Provider, len(records))
-	for i := range records {
-		providers[i] = records[i].toDomain()
-	}
-	return providers
 }
 
 func cloneInt64(value *int64) *int64 {

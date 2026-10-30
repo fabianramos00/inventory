@@ -132,17 +132,17 @@ func (h *SaleHandler) List(w http.ResponseWriter, r *http.Request) {
 		noClient = parsed
 	}
 	paymentStatus := query.Get("payment_status")
-	if !validPaymentStatus(paymentStatus) {
+	if !domain.ValidPaymentStatus(paymentStatus) {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid payment_status", "VALIDATION_ERROR")
 		return
 	}
 	deliveryStatus := query.Get("delivery_status")
-	if !validDeliveryStatus(deliveryStatus) {
+	if !domain.ValidDeliveryStatus(deliveryStatus) {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid delivery_status", "VALIDATION_ERROR")
 		return
 	}
 	paymentMethod := query.Get("payment_method")
-	if !validPaymentMethod(paymentMethod) {
+	if paymentMethod != "" && !domain.ValidPaymentMethod(paymentMethod) {
 		writeError(w, http.StatusUnprocessableEntity, "Invalid payment_method", "VALIDATION_ERROR")
 		return
 	}
@@ -167,12 +167,7 @@ func (h *SaleHandler) List(w http.ResponseWriter, r *http.Request) {
 	for i, sale := range result.Items {
 		items[i] = newSaleResponse(sale)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":    items,
-		"has_next": result.HasNext,
-		"skip":     result.Skip,
-		"limit":    result.Limit,
-	})
+	writePage(w, items, result.HasNext, result.Skip, result.Limit)
 }
 
 func (h *SaleHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -311,12 +306,7 @@ func (h *SaleHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 	for i, item := range result.Items {
 		items[i] = newSaleItemResponse(item)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":    items,
-		"has_next": result.HasNext,
-		"skip":     result.Skip,
-		"limit":    result.Limit,
-	})
+	writePage(w, items, result.HasNext, result.Skip, result.Limit)
 }
 
 func (h *SaleHandler) AddItem(w http.ResponseWriter, r *http.Request) {
@@ -493,31 +483,4 @@ func parseFilterDate(raw string) (*time.Time, error) {
 func pathValueID(r *http.Request, name string) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue(name), 10, 64)
 	return id, err == nil && id > 0
-}
-
-func validPaymentStatus(value string) bool {
-	switch value {
-	case "", domain.PaymentStatusPending, domain.PaymentStatusPartial, domain.PaymentStatusPaid:
-		return true
-	default:
-		return false
-	}
-}
-
-func validDeliveryStatus(value string) bool {
-	switch value {
-	case "", domain.DeliveryStatusPending, domain.DeliveryStatusPartial, domain.DeliveryStatusDelivered:
-		return true
-	default:
-		return false
-	}
-}
-
-func validPaymentMethod(value string) bool {
-	switch value {
-	case "", domain.PaymentMethodCash, domain.PaymentMethodCredit, domain.PaymentMethodDebit:
-		return true
-	default:
-		return false
-	}
 }

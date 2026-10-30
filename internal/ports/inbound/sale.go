@@ -2,25 +2,14 @@ package inbound
 
 import (
 	"context"
-	"time"
 
 	"github.com/shopspring/decimal"
 
 	"inventory-desktop/internal/domain"
+	"inventory-desktop/internal/ports/outbound"
 )
 
-type SaleFilter struct {
-	Skip           int
-	Limit          int
-	UserID         *int64
-	ClientID       *int64
-	NoClient       bool
-	StartDate      *time.Time
-	EndDate        *time.Time
-	PaymentStatus  string
-	DeliveryStatus string
-	PaymentMethod  string
-}
+type SaleFilter = outbound.SaleFilter
 
 type SaleList struct {
 	Items   []*domain.Sale

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
+	"slices"
 
 	"github.com/shopspring/decimal"
 
@@ -25,27 +25,16 @@ func NewSaleService(repository outbound.SaleRepository, unitOfWork outbound.Unit
 var _ inbound.SaleUseCase = (*SaleService)(nil)
 
 func (s *SaleService) List(ctx context.Context, filter inbound.SaleFilter) (*inbound.SaleList, error) {
-	if !validPaymentStatus(filter.PaymentStatus) {
+	if !domain.ValidPaymentStatus(filter.PaymentStatus) {
 		return nil, fmt.Errorf("%w: invalid payment_status", domain.ErrValidation)
 	}
-	if !validDeliveryStatus(filter.DeliveryStatus) {
+	if !domain.ValidDeliveryStatus(filter.DeliveryStatus) {
 		return nil, fmt.Errorf("%w: invalid delivery_status", domain.ErrValidation)
 	}
-	if !validPaymentMethodFilter(filter.PaymentMethod) {
+	if filter.PaymentMethod != "" && !domain.ValidPaymentMethod(filter.PaymentMethod) {
 		return nil, fmt.Errorf("%w: invalid payment_method", domain.ErrValidation)
 	}
-	items, hasNext, err := s.repository.List(ctx, outbound.SaleFilter{
-		Skip:           filter.Skip,
-		Limit:          filter.Limit,
-		UserID:         filter.UserID,
-		ClientID:       filter.ClientID,
-		NoClient:       filter.NoClient,
-		StartDate:      filter.StartDate,
-		EndDate:        filter.EndDate,
-		PaymentStatus:  filter.PaymentStatus,
-		DeliveryStatus: filter.DeliveryStatus,
-		PaymentMethod:  filter.PaymentMethod,
-	})
+	items, hasNext, err := s.repository.List(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +116,7 @@ func (s *SaleService) Create(ctx context.Context, input inbound.CreateSaleInput)
 			}
 		}
 
-		now := saleNow()
+		now := nowUTC()
 		paid := input.AmountPaid.Round(2)
 		sale := &domain.Sale{
 			CreatedAt:      now,
@@ -154,7 +143,7 @@ func (s *SaleService) Create(ctx context.Context, input inbound.CreateSaleInput)
 }
 
 func (s *SaleService) Update(ctx context.Context, id int64, input inbound.UpdateSaleInput) (*domain.Sale, error) {
-	if input.PaymentMethod.Set && input.PaymentMethod.Value != nil && !validPaymentMethod(*input.PaymentMethod.Value) {
+	if input.PaymentMethod.Set && input.PaymentMethod.Value != nil && !domain.ValidPaymentMethod(*input.PaymentMethod.Value) {
 		return nil, fmt.Errorf("%w: invalid payment_method", domain.ErrValidation)
 	}
 	if input.AmountPaid.Set {
@@ -179,7 +168,7 @@ func (s *SaleService) Update(ctx context.Context, id int64, input inbound.Update
 			return referenceError(err, "Sale", id)
 		}
 		if input.PaymentMethod.Set {
-			sale.PaymentMethod = cloneOptionalString(input.PaymentMethod.Value)
+			sale.PaymentMethod = clonePtr(input.PaymentMethod.Value)
 		}
 		if input.AmountPaid.Set {
 			sale.AmountPaid = input.AmountPaid.Value.Round(2)
@@ -196,7 +185,7 @@ func (s *SaleService) Update(ctx context.Context, id int64, input inbound.Update
 		}
 		sale.PaymentStatus = derivePaymentStatus(sale.TotalAmount, sale.AmountPaid)
 		sale.DebtAmount = debtAmount(sale.TotalAmount, sale.AmountPaid)
-		now := saleNow()
+		now := nowUTC()
 		sale.UpdatedAt = &now
 		if err := repos.Sales.Update(ctx, id, sale); err != nil {
 			return err
@@ -443,7 +432,7 @@ func (s *SaleService) recalculate(ctx context.Context, repos outbound.TxRepos, s
 		sale.DeliveryStatus = deriveDeliveryStatus(items)
 	}
 	sale.DebtAmount = debtAmount(sale.TotalAmount, sale.AmountPaid)
-	now := saleNow()
+	now := nowUTC()
 	sale.UpdatedAt = &now
 	if err := repos.Sales.Update(ctx, saleID, sale); err != nil {
 		return nil, err
@@ -455,7 +444,7 @@ func validateCreateSale(input inbound.CreateSaleInput) error {
 	if len(input.Items) == 0 {
 		return fmt.Errorf("%w: sale must have at least one item", domain.ErrValidation)
 	}
-	if input.PaymentMethod != nil && !validPaymentMethod(*input.PaymentMethod) {
+	if input.PaymentMethod != nil && !domain.ValidPaymentMethod(*input.PaymentMethod) {
 		return fmt.Errorf("%w: invalid payment_method", domain.ErrValidation)
 	}
 	if input.AmountPaid.IsNegative() {
@@ -502,21 +491,9 @@ func saleProductIDs(items []inbound.CreateSaleItemInput) []int64 {
 }
 
 func sortedIDs(ids []int64) []int64 {
-	seen := make(map[int64]struct{}, len(ids))
-	result := make([]int64, 0, len(ids))
-	for _, id := range ids {
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		result = append(result, id)
-	}
-	for i := 1; i < len(result); i++ {
-		for j := i; j > 0 && result[j-1] > result[j]; j-- {
-			result[j-1], result[j] = result[j], result[j-1]
-		}
-	}
-	return result
+	result := slices.Clone(ids)
+	slices.Sort(result)
+	return slices.Compact(result)
 }
 
 func referenceError(err error, entity string, id int64) error {
@@ -590,49 +567,4 @@ func debtAmount(total, paid decimal.Decimal) decimal.Decimal {
 		return decimal.Zero
 	}
 	return debt
-}
-
-func validPaymentStatus(value string) bool {
-	switch value {
-	case "", domain.PaymentStatusPending, domain.PaymentStatusPartial, domain.PaymentStatusPaid:
-		return true
-	default:
-		return false
-	}
-}
-
-func validDeliveryStatus(value string) bool {
-	switch value {
-	case "", domain.DeliveryStatusPending, domain.DeliveryStatusPartial, domain.DeliveryStatusDelivered:
-		return true
-	default:
-		return false
-	}
-}
-
-func validPaymentMethod(value string) bool {
-	switch value {
-	case domain.PaymentMethodCash, domain.PaymentMethodCredit, domain.PaymentMethodDebit:
-		return true
-	default:
-		return false
-	}
-}
-
-func validPaymentMethodFilter(value string) bool {
-	return value == "" || validPaymentMethod(value)
-}
-
-func cloneOptionalString(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
-}
-
-// PostgreSQL timestamptz keeps microseconds; truncating keeps the write
-// response and a later read identical on both backends.
-func saleNow() time.Time {
-	return time.Now().UTC().Truncate(time.Microsecond)
 }

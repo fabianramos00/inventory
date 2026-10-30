@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"strings"
-	"time"
 
 	"inventory-desktop/internal/domain"
 	"inventory-desktop/internal/ports/inbound"
@@ -42,7 +41,7 @@ func (s *ClientService) Create(ctx context.Context, input inbound.CreateClientIn
 		IdentityCard: cleanClientText(input.IdentityCard),
 		Email:        cleanClientText(input.Email),
 		Phone:        cleanClientText(input.Phone),
-		CreatedAt:    clientNow(),
+		CreatedAt:    nowUTC(),
 	})
 }
 
@@ -78,7 +77,7 @@ func (s *ClientService) Update(ctx context.Context, id int64, input inbound.Upda
 			continue
 		}
 		cleaned := cleanClientText(field.input.Value)
-		if !sameClientText(*field.target, cleaned) {
+		if !sameText(*field.target, cleaned) {
 			*field.target = cleaned
 			changed = true
 		}
@@ -87,7 +86,7 @@ func (s *ClientService) Update(ctx context.Context, id int64, input inbound.Upda
 		return client, nil
 	}
 
-	now := clientNow()
+	now := nowUTC()
 	client.UpdatedAt = &now
 	if err := s.repository.Update(ctx, id, client); err != nil {
 		return nil, err
@@ -97,12 +96,6 @@ func (s *ClientService) Update(ctx context.Context, id int64, input inbound.Upda
 
 func (s *ClientService) Delete(ctx context.Context, id int64) (*domain.Client, error) {
 	return s.repository.Delete(ctx, id)
-}
-
-// PostgreSQL timestamptz keeps microseconds; truncating keeps the create
-// response and a later read identical on both backends.
-func clientNow() time.Time {
-	return time.Now().UTC().Truncate(time.Microsecond)
 }
 
 func clientName(value string) (string, error) {
@@ -122,11 +115,4 @@ func cleanClientText(value *string) *string {
 		return nil
 	}
 	return &cleaned
-}
-
-func sameClientText(a, b *string) bool {
-	if a == nil || b == nil {
-		return a == nil && b == nil
-	}
-	return *a == *b
 }
