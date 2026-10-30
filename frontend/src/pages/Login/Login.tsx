@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -43,8 +44,14 @@ export default function Login() {
       const res = await authApi.login({ email: data.email, password: data.password })
       login(res.data.access_token, res.data.user, res.data.refresh_token)
       navigate('/', { replace: true })
-    } catch {
-      setApiError('Correo o contraseña incorrectos.')
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        setApiError('Correo o contraseña incorrectos.')
+      } else if (axios.isAxiosError(error) && !error.response) {
+        setApiError('No se pudo conectar con el servidor. Intenta de nuevo.')
+      } else {
+        setApiError('Ocurrió un error inesperado. Intenta de nuevo.')
+      }
     } finally {
       setLoading(false)
     }
