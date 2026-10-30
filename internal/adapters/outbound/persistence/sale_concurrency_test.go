@@ -17,6 +17,12 @@ import (
 	"inventory-desktop/tests/testdb"
 )
 
+const truncateSaleConcurrencyTables = `TRUNCATE
+	refresh_tokens, users, categories, materials, brands, measurement_units,
+	products, price_history, clients, providers, supplier_catalogs,
+	purchase_orders, order_items, sales, sale_items
+	RESTART IDENTITY CASCADE`
+
 func TestPostgresSalesCannotOversell(t *testing.T) {
 	dsn := os.Getenv("INVENTORY_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -35,17 +41,18 @@ func TestPostgresSalesCannotOversell(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
+	defer func() {
+		if _, err := conn.ExecContext(ctx, truncateSaleConcurrencyTables); err != nil {
+			t.Errorf("cleanup truncate: %v", err)
+		}
+	}()
 	if err := conn.PingContext(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.MigratePostgres(ctx, conn); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.ExecContext(ctx, `TRUNCATE
-		refresh_tokens, users, categories, materials, brands, measurement_units,
-		products, price_history, clients, providers, supplier_catalogs,
-		purchase_orders, order_items, sales, sale_items
-		RESTART IDENTITY CASCADE`); err != nil {
+	if _, err := conn.ExecContext(ctx, truncateSaleConcurrencyTables); err != nil {
 		t.Fatal(err)
 	}
 
