@@ -202,7 +202,7 @@ export default function Users() {
                     </button>
                   </td>
                   <td>
-                    <div className="flex items-center gap-2">
+                    <div className={styles.actionsCell}>
                       <button
                         className="action-btn"
                         onClick={() => openEditModal(user)}

@@ -28,7 +28,7 @@ export default function FilterSelect({
   const listId = useId()
   const { isOpen, setIsOpen, triggerRef, listRef, close, handleKeyDown, handleTriggerKeyDown } = useListbox()
 
-  useClickOutside([wrapperRef], () => close(), isOpen)
+  useClickOutside(wrapperRef, () => close(), isOpen)
 
   const selectedLabel = options.find(option => option.value === value)?.label || label
 

@@ -1,13 +1,15 @@
-import { useId, useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, Search, X, Loader, ChevronDown, Package, Pencil, Check, Trash2, Plus } from 'lucide-react'
+import { ChevronLeft, Search, X, Loader, Package, Pencil, Check, Trash2, Plus } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import styles from '../formPage.module.css'
 import { ordersApi } from '@/lib/api/orders'
 import { inventoryApi } from '@/lib/api/inventory'
 import { providersApi } from '@/lib/api/providers'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteModal'
-import CreateFormModal, { type FieldConfig } from '@/components/CreateFormModal/CreateFormModal'
+import CreateFormModal from '@/components/CreateFormModal/CreateFormModal'
+import SearchSelect from '@/components/SearchSelect/SearchSelect'
+import Dropdown from '@/components/Dropdown/Dropdown'
 import { orderStatusLabel, orderStatusBadge, orderPaymentStatusLabel, orderPaymentStatusBadge } from '@/lib/constants'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { getAPIErrorMessage } from '@/lib/apiError'
@@ -17,6 +19,9 @@ import {
   invalidateOrderListData,
 } from '@/lib/orderCache'
 import { useOrder } from '@/hooks/useOrder'
+import { useDebouncedFetch } from '@/hooks/useDebouncedFetch'
+import { useClickOutside } from '@/hooks/useClickOutside'
+import { PROVIDER_FIELDS, buildProviderCreatePayload } from '@/lib/formFields'
 import {
   buildAddOrderItemPayload,
   buildCreateOrderPayload,
@@ -38,12 +43,11 @@ interface OrderItemDraft {
   supplier_sku: string
 }
 
-const PROVIDER_FIELDS: FieldConfig[] = [
-  { key: 'name', label: 'Nombre', placeholder: 'Nombre del proveedor', required: true },
-  { key: 'contact_info', label: 'Información de contacto (opcional)', placeholder: 'Persona de contacto u otra info' },
-  { key: 'email', label: 'Correo electrónico (opcional)', placeholder: 'correo@ejemplo.com', type: 'email' },
-  { key: 'phone', label: 'Teléfono (opcional)', placeholder: 'Número de teléfono', type: 'tel' },
-]
+const ORDER_STATUS_OPTIONS = (['pending', 'sent', 'received', 'cancelled'] as const)
+  .map(value => ({ value, label: orderStatusLabel[value] }))
+
+const ORDER_PAYMENT_STATUS_OPTIONS = (['pending', 'paid'] as const)
+  .map(value => ({ value, label: orderPaymentStatusLabel[value] }))
 
 export default function OrderForm() {
   const navigate = useNavigate()
@@ -73,95 +77,26 @@ export default function OrderForm() {
   const [showCreateProvider, setShowCreateProvider] = useState(false)
 
   const [providerId, setProviderId] = useState<number | ''>('')
-  const [providerOptions, setProviderOptions] = useState<FilterOption[]>([])
-  const [providerSearch, setProviderSearch] = useState('')
-  const [providerOpen, setProviderOpen] = useState(false)
-  const [providerLoading, setProviderLoading] = useState(false)
-  const providerRef = useRef<HTMLDivElement>(null)
-  const providerTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [selectedProvider, setSelectedProvider] = useState<FilterOption | null>(null)
 
   const [status, setStatus] = useState<OrderStatus>('pending')
   const [paymentStatus, setPaymentStatus] = useState<OrderPaymentStatus>('pending')
-  const [openFormDropdown, setOpenFormDropdown] = useState<string | null>(null)
-  const statusRef = useRef<HTMLDivElement>(null)
-  const paymentStatusRef = useRef<HTMLDivElement>(null)
-  const statusTriggerRef = useRef<HTMLButtonElement>(null)
-  const paymentStatusTriggerRef = useRef<HTMLButtonElement>(null)
-  const providerTriggerRef = useRef<HTMLButtonElement>(null)
-  const providerListId = useId()
-  const statusListId = useId()
-  const paymentStatusListId = useId()
 
   const [productSearch, setProductSearch] = useState('')
-  const [productResults, setProductResults] = useState<Product[]>([])
   const [productSearchOpen, setProductSearchOpen] = useState(false)
-  const [productLoading, setProductLoading] = useState(false)
   const productSearchRef = useRef<HTMLDivElement>(null)
-  const productSearchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const [apiError, setApiError] = useState<string | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (providerTimeout.current) clearTimeout(providerTimeout.current)
-    if (!providerOpen) return
-    providerTimeout.current = setTimeout(async () => {
-      setProviderLoading(true)
-      try {
-        const res = await providersApi.getProviders({ search: providerSearch || undefined, skip: 0, limit: 10 })
-        setProviderOptions((res.data.items || []).map(provider => ({ id: provider.id, name: provider.name })))
-      } catch {
-        setProviderOptions([])
-      } finally {
-        setProviderLoading(false)
-      }
-    }, 300)
-    return () => { if (providerTimeout.current) clearTimeout(providerTimeout.current) }
-  }, [providerSearch, providerOpen])
+  const { data: productResults, loading: productLoading } = useDebouncedFetch(
+    () => inventoryApi.getProducts({ search: productSearch, skip: 0, limit: 8 }).then(res => res.data.items || []),
+    [productSearch],
+    300,
+    itemsEditable && productSearch.trim() !== '',
+  )
 
-  useEffect(() => {
-    if (productSearchTimeout.current) clearTimeout(productSearchTimeout.current)
-    if (!itemsEditable || !productSearch.trim()) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale results when the search becomes empty/disabled
-      setProductResults([])
-      setProductSearchOpen(false)
-      return
-    }
-    productSearchTimeout.current = setTimeout(async () => {
-      setProductLoading(true)
-      setProductSearchOpen(true)
-      try {
-        const res = await inventoryApi.getProducts({ search: productSearch, skip: 0, limit: 8 })
-        setProductResults(res.data.items || [])
-      } catch {
-        setProductResults([])
-      } finally {
-        setProductLoading(false)
-      }
-    }, 300)
-    return () => { if (productSearchTimeout.current) clearTimeout(productSearchTimeout.current) }
-  }, [productSearch, itemsEditable])
-
-  useEffect(() => {
-    if (openFormDropdown === 'status') {
-      statusRef.current?.querySelector<HTMLElement>('[role="option"]')?.focus()
-    } else if (openFormDropdown === 'payment_status') {
-      paymentStatusRef.current?.querySelector<HTMLElement>('[role="option"]')?.focus()
-    }
-  }, [openFormDropdown])
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node
-      if (!productSearchRef.current?.contains(target)) setProductSearchOpen(false)
-      if (!providerRef.current?.contains(target)) setProviderOpen(false)
-      if (!statusRef.current?.contains(target) && !paymentStatusRef.current?.contains(target)) {
-        setOpenFormDropdown(null)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  useClickOutside(productSearchRef, () => setProductSearchOpen(false), productSearchOpen)
 
   function handleStartEditItems() {
     setItems(orderItems.map(item => ({
@@ -189,7 +124,7 @@ export default function OrderForm() {
   function handleStartEditDetails() {
     if (!order) return
     setProviderId(order.provider_id)
-    setProviderOptions([{ id: order.provider.id, name: order.provider.name }])
+    setSelectedProvider({ id: order.provider.id, name: order.provider.name })
     setStatus(order.status)
     setPaymentStatus(order.payment_status)
     setIsEditingDetails(true)
@@ -197,76 +132,6 @@ export default function OrderForm() {
 
   function handleCancelEditDetails() {
     setIsEditingDetails(false)
-    setOpenFormDropdown(null)
-    setProviderOpen(false)
-  }
-
-  function closeFormMenu(menu: 'status' | 'payment_status') {
-    setOpenFormDropdown(null)
-    const trigger = menu === 'status' ? statusTriggerRef : paymentStatusTriggerRef
-    trigger.current?.focus()
-  }
-
-  function handleFormMenuTriggerKeyDown(
-    event: React.KeyboardEvent<HTMLButtonElement>,
-    menu: 'status' | 'payment_status',
-  ) {
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault()
-      setOpenFormDropdown(menu)
-    } else if (event.key === 'Escape' && openFormDropdown === menu) {
-      event.preventDefault()
-      closeFormMenu(menu)
-    }
-  }
-
-  function closeProviderMenu() {
-    setProviderOpen(false)
-    providerTriggerRef.current?.focus()
-  }
-
-  function handleProviderTriggerKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault()
-      setProviderOpen(true)
-    } else if (event.key === 'Escape' && providerOpen) {
-      event.preventDefault()
-      closeProviderMenu()
-    }
-  }
-
-  function handleProviderSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Escape') return
-    event.preventDefault()
-    if (event.key === 'Escape') {
-      closeProviderMenu()
-      return
-    }
-    const options = providerRef.current?.querySelectorAll<HTMLElement>('[role="option"]')
-    if (!options?.length) return
-    options[event.key === 'ArrowDown' ? 0 : options.length - 1]?.focus()
-  }
-
-  function handleOptionKeyDown(
-    event: React.KeyboardEvent<HTMLButtonElement>,
-    container: HTMLElement | null,
-    onEscape: () => void,
-  ) {
-    const options = Array.from(container?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])
-    const index = options.indexOf(event.currentTarget)
-    if (index === -1) return
-
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      onEscape()
-    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault()
-      const next = Math.min(Math.max(index + (event.key === 'ArrowDown' ? 1 : -1), 0), options.length - 1)
-      options[next]?.focus()
-    } else if (event.key === 'Home' || event.key === 'End') {
-      event.preventDefault()
-      options[event.key === 'Home' ? 0 : options.length - 1]?.focus()
-    }
   }
 
   async function handleSaveDetails() {
@@ -296,18 +161,13 @@ export default function OrderForm() {
     navigate('/orders')
   }
 
-  async function submitCreateProvider(v: Record<string, string>) {
-    const res = await providersApi.createProvider({
-      name: v.name,
-      ...(v.contact_info && { contact_info: v.contact_info }),
-      ...(v.email && { email: v.email }),
-      ...(v.phone && { phone: v.phone }),
-    })
+  async function submitCreateProvider(values: Record<string, string>) {
+    const res = await providersApi.createProvider(buildProviderCreatePayload(values))
     return { id: res.data.id, name: res.data.name }
   }
 
   function handleProviderCreated(provider: { id: number; name: string }) {
-    setProviderOptions(prev => [provider, ...prev.filter(p => p.id !== provider.id)])
+    setSelectedProvider(provider)
     setProviderId(provider.id)
     setShowCreateProvider(false)
   }
@@ -409,7 +269,6 @@ export default function OrderForm() {
   }, 0)
 
   const displayTotal = isCreateMode ? draftTotal : isEditingItems ? draftTotal : order?.total_amount ?? 0
-  const selectedProviderName = providerOptions.find(provider => provider.id === providerId)?.name || 'Sin proveedor'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -534,7 +393,10 @@ export default function OrderForm() {
                   className={styles.productSearchInput}
                   placeholder={isCreateMode ? 'Buscar producto por nombre o SKU...' : 'Agregar producto por nombre o SKU...'}
                   value={productSearch}
-                  onChange={e => setProductSearch(e.target.value)}
+                  onChange={e => {
+                    setProductSearch(e.target.value)
+                    setProductSearchOpen(e.target.value.trim() !== '')
+                  }}
                   autoComplete="off"
                 />
                 {productLoading && <Loader size={13} className={styles.searchSpinner} />}
@@ -755,57 +617,27 @@ export default function OrderForm() {
                 {detailsEditable ? (
                   <dd className={styles.fieldValueFull}>
                     <div className={styles.selectWithAction}>
-                      <div className={styles.selectDropdown} ref={providerRef}>
-                        <button
-                          ref={providerTriggerRef}
-                          type="button"
-                          className={`${styles.selectTrigger} ${providerId ? styles.selectTriggerActive : ''}`}
-                          onClick={() => { setProviderOpen(open => !open); setProviderSearch('') }}
-                          onKeyDown={handleProviderTriggerKeyDown}
-                          aria-haspopup="listbox"
-                          aria-expanded={providerOpen}
-                          aria-controls={providerListId}
-                          aria-label={`Proveedor: ${selectedProviderName}`}
-                        >
-                          <span>{selectedProviderName}</span>
-                          <ChevronDown size={13} />
-                        </button>
-                        {providerOpen && (
-                          <div className={styles.selectContent}>
-                            <input
-                              type="text"
-                              className={styles.selectSearch}
-                              placeholder="Buscar proveedor..."
-                              value={providerSearch}
-                              onChange={e => setProviderSearch(e.target.value)}
-                              onKeyDown={handleProviderSearchKeyDown}
-                              autoFocus
-                            />
-                            <div className={styles.selectOptions} id={providerListId} role="listbox">
-                              {providerLoading ? (
-                                <div className={`${styles.selectOption} ${styles.optionLoading}`}><Loader size={13} className={styles.spinner} /></div>
-                              ) : providerOptions.map(provider => (
-                                <button
-                                  key={provider.id}
-                                  type="button"
-                                  role="option"
-                                  aria-selected={providerId === provider.id}
-                                  tabIndex={-1}
-                                  className={`${styles.selectOption} ${providerId === provider.id ? styles.selectOptionActive : ''}`}
-                                  onClick={() => { setProviderId(provider.id); setProviderOpen(false) }}
-                                  onKeyDown={e => handleOptionKeyDown(e, providerRef.current, closeProviderMenu)}
-                                >
-                                  {provider.name}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      <SearchSelect
+                        label="Proveedor"
+                        placeholder="Sin proveedor"
+                        emptyLabel="Sin proveedor"
+                        className={styles.formSelect}
+                        value={providerId}
+                        onChange={(value, option) => {
+                          setProviderId(value)
+                          setSelectedProvider(option ?? null)
+                        }}
+                        fetchOptions={search =>
+                          providersApi.getProviders({ search: search || undefined, skip: 0, limit: 10 })
+                            .then(res => res.data.items || [])
+                        }
+                        selectedOption={selectedProvider ?? undefined}
+                        ariaLabel={`Proveedor: ${selectedProvider?.name ?? 'Sin proveedor'}`}
+                      />
                       <button
                         type="button"
                         className={styles.addClientBtn}
-                        onClick={() => { setProviderOpen(false); setShowCreateProvider(true) }}
+                        onClick={() => setShowCreateProvider(true)}
                         title="Crear nuevo proveedor"
                       >
                         <Plus size={14} />
@@ -821,42 +653,12 @@ export default function OrderForm() {
                 <dt className={styles.fieldLabel}>Estado</dt>
                 {detailsEditable ? (
                   <dd className={styles.fieldValueFull}>
-                    <div className={styles.selectDropdown} ref={statusRef}>
-                      <button
-                        ref={statusTriggerRef}
-                        type="button"
-                        className={`${styles.selectTrigger} ${styles.selectTriggerActive}`}
-                        onClick={() => setOpenFormDropdown(openFormDropdown === 'status' ? null : 'status')}
-                        onKeyDown={e => handleFormMenuTriggerKeyDown(e, 'status')}
-                        aria-haspopup="listbox"
-                        aria-expanded={openFormDropdown === 'status'}
-                        aria-controls={statusListId}
-                        aria-label={`Estado: ${orderStatusLabel[status]}`}
-                      >
-                        <span>{orderStatusLabel[status]}</span>
-                        <ChevronDown size={13} />
-                      </button>
-                      {openFormDropdown === 'status' && (
-                        <div className={styles.selectContent}>
-                          <div className={styles.selectOptions} id={statusListId} role="listbox">
-                            {(['pending', 'sent', 'received', 'cancelled'] as const).map(value => (
-                              <button
-                                key={value}
-                                type="button"
-                                role="option"
-                                aria-selected={status === value}
-                                tabIndex={-1}
-                                className={`${styles.selectOption} ${status === value ? styles.selectOptionActive : ''}`}
-                                onClick={() => { setStatus(value); setOpenFormDropdown(null) }}
-                                onKeyDown={e => handleOptionKeyDown(e, statusRef.current, () => closeFormMenu('status'))}
-                              >
-                                {orderStatusLabel[value]}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <Dropdown
+                      value={status}
+                      options={ORDER_STATUS_OPTIONS}
+                      onChange={value => setStatus(value as OrderStatus)}
+                      ariaLabel={`Estado: ${orderStatusLabel[status]}`}
+                    />
                   </dd>
                 ) : (
                   <dd className={styles.fieldValue}>
@@ -871,42 +673,12 @@ export default function OrderForm() {
                 <dt className={styles.fieldLabel}>Estado pago</dt>
                 {detailsEditable ? (
                   <dd className={styles.fieldValueFull}>
-                    <div className={styles.selectDropdown} ref={paymentStatusRef}>
-                      <button
-                        ref={paymentStatusTriggerRef}
-                        type="button"
-                        className={`${styles.selectTrigger} ${styles.selectTriggerActive}`}
-                        onClick={() => setOpenFormDropdown(openFormDropdown === 'payment_status' ? null : 'payment_status')}
-                        onKeyDown={e => handleFormMenuTriggerKeyDown(e, 'payment_status')}
-                        aria-haspopup="listbox"
-                        aria-expanded={openFormDropdown === 'payment_status'}
-                        aria-controls={paymentStatusListId}
-                        aria-label={`Estado pago: ${orderPaymentStatusLabel[paymentStatus]}`}
-                      >
-                        <span>{orderPaymentStatusLabel[paymentStatus]}</span>
-                        <ChevronDown size={13} />
-                      </button>
-                      {openFormDropdown === 'payment_status' && (
-                        <div className={styles.selectContent}>
-                          <div className={styles.selectOptions} id={paymentStatusListId} role="listbox">
-                            {(['pending', 'paid'] as const).map(value => (
-                              <button
-                                key={value}
-                                type="button"
-                                role="option"
-                                aria-selected={paymentStatus === value}
-                                tabIndex={-1}
-                                className={`${styles.selectOption} ${paymentStatus === value ? styles.selectOptionActive : ''}`}
-                                onClick={() => { setPaymentStatus(value); setOpenFormDropdown(null) }}
-                                onKeyDown={e => handleOptionKeyDown(e, paymentStatusRef.current, () => closeFormMenu('payment_status'))}
-                              >
-                                {orderPaymentStatusLabel[value]}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <Dropdown
+                      value={paymentStatus}
+                      options={ORDER_PAYMENT_STATUS_OPTIONS}
+                      onChange={value => setPaymentStatus(value as OrderPaymentStatus)}
+                      ariaLabel={`Estado pago: ${orderPaymentStatusLabel[paymentStatus]}`}
+                    />
                   </dd>
                 ) : (
                   <dd className={styles.fieldValue}>

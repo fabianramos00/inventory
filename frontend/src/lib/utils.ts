@@ -20,3 +20,8 @@ export function safeNumber(value: string, fallback: number = 0): number {
   const n = parseFloat(value)
   return Number.isFinite(n) ? n : fallback
 }
+
+export function getProductStatus(stock: number, threshold: number) {
+  if (stock === 0) return 'out_of_stock'
+  return stock <= threshold ? 'low_stock' : 'in_stock'
+}

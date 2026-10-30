@@ -5,7 +5,6 @@ import {
   invalidateOrderDetails,
   invalidateOrderItems,
   invalidateOrderListData,
-  SUPPLIER_CATALOG_KEYS,
 } from './orderCache'
 
 function setup() {
@@ -41,12 +40,12 @@ describe('order cache invalidation', () => {
     expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ['inventoryStats'] })
   })
 
-  it('refreshes stock and supplier catalogs when the order becomes received', () => {
+  it('refreshes stock when the order becomes received', () => {
     const { queryClient, invalidateSpy } = setup()
 
     invalidateOrderDetails(queryClient, 4, true)
 
-    expectKeys(invalidateSpy, ['orders', 'product', 'products', 'inventoryStats', ...DASHBOARD_KEYS, ...SUPPLIER_CATALOG_KEYS])
+    expectKeys(invalidateSpy, ['orders', 'product', 'products', 'inventoryStats', ...DASHBOARD_KEYS])
   })
 
   it('invalidates order and item caches after an item mutation without touching stock', () => {

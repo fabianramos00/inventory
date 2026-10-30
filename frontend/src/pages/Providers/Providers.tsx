@@ -5,21 +5,15 @@ import PageHeader from '@/components/PageHeader/PageHeader'
 import CommandBar from '@/components/CommandBar/CommandBar'
 import { providersApi } from '@/lib/api/providers'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
-import CreateFormModal, { type FieldConfig } from '@/components/CreateFormModal/CreateFormModal'
+import CreateFormModal from '@/components/CreateFormModal/CreateFormModal'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteModal'
 import ErrorState from '@/components/ErrorState/ErrorState'
 import CardGridSkeleton from '@/components/CardGridSkeleton/CardGridSkeleton'
 import Pagination from '@/components/Pagination'
-import { useProviders } from '@/hooks/useProviders'
+import { usePagedList } from '@/hooks/usePagedList'
 import { useDeleteConfirm } from '@/hooks/useDeleteConfirm'
+import { PROVIDER_FIELDS, buildProviderCreatePayload } from '@/lib/formFields'
 import type { Provider } from '@/types'
-
-const PROVIDER_FIELDS: FieldConfig[] = [
-  { key: 'name', label: 'Nombre del Proveedor', placeholder: 'Ej. Distribuidora Metálica', required: true },
-  { key: 'contact_info', label: 'Persona de Contacto', placeholder: 'Ej. Juan Pérez', type: 'text' },
-  { key: 'email', label: 'Correo Electrónico', placeholder: 'Ej. correo@proveedor.pe', type: 'email' },
-  { key: 'phone', label: 'Teléfono', placeholder: 'Ej. +51 999 123 456', type: 'tel' },
-]
 
 export default function Providers() {
   const [search, setSearch] = useState('')
@@ -31,7 +25,15 @@ export default function Providers() {
 
   const debouncedSearch = useDebouncedValue(search, 300, () => setPage(1))
 
-  const { providers, hasNext, isLoading, isFetching, isError, refetch, deleteMutation, invalidate } = useProviders({ page, search: debouncedSearch })
+  const { items: providers, hasNext, isLoading, isFetching, isError, refetch, deleteMutation, invalidate } =
+    usePagedList<Provider, { search: string }>({
+      key: 'providers',
+      page,
+      filters: { search: debouncedSearch },
+      fetchPage: ({ skip, limit, search }) =>
+        providersApi.getProviders({ skip, limit, ...(search.trim() && { search }) }).then(response => response.data),
+      deleteItem: providersApi.deleteProvider,
+    })
 
   const {
     target: providerToDelete,
@@ -69,13 +71,7 @@ export default function Providers() {
   }
 
   async function submitCreateProvider(values: Record<string, string>) {
-    const payload = {
-      name: values.name,
-      ...(values.contact_info && { contact_info: values.contact_info }),
-      ...(values.email && { email: values.email }),
-      ...(values.phone && { phone: values.phone }),
-    }
-    const response = await providersApi.createProvider(payload)
+    const response = await providersApi.createProvider(buildProviderCreatePayload(values))
     return response.data
   }
 

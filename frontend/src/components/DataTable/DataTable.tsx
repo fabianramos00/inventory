@@ -16,9 +16,6 @@ interface DataTableProps {
   emptyAction?: ReactNode
   minWidth?: string
   currentPage?: number
-  totalPages?: number
-  totalItems?: number
-  pageSize?: number
   hasNext?: boolean
   onPageChange?: (page: number) => void
   isPaginationLoading?: boolean
@@ -39,9 +36,6 @@ export default function DataTable({
   emptyAction,
   minWidth,
   currentPage,
-  totalPages,
-  totalItems,
-  pageSize,
   hasNext,
   onPageChange,
   isPaginationLoading,
@@ -54,7 +48,7 @@ export default function DataTable({
       return (
         <div className={styles.skeletonContainer}>
           <table
-            className={`data-table w-full ${stickyFirstColumn ? 'sticky-first' : ''}`}
+            className={`data-table ${stickyFirstColumn ? 'sticky-first' : ''}`}
             style={minWidth ? { minWidth } : undefined}
           >
             <thead>
@@ -104,13 +98,13 @@ export default function DataTable({
   const hasPagination =
     currentPage !== undefined &&
     onPageChange !== undefined &&
-    (totalPages !== undefined || hasNext !== undefined)
+    hasNext !== undefined
 
   return (
     <>
-      <div className="overflow-x-auto w-full">
+      <div className={styles.tableScroll}>
         <table
-          className={`data-table w-full ${stickyFirstColumn ? 'sticky-first' : ''}`}
+          className={`data-table ${stickyFirstColumn ? 'sticky-first' : ''}`}
           style={minWidth ? { minWidth } : undefined}
         >
           {children}
@@ -119,9 +113,6 @@ export default function DataTable({
       {hasPagination && (
         <Pagination
           currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={totalItems}
-          pageSize={pageSize}
           hasNext={hasNext}
           onPageChange={onPageChange}
           isLoading={isPaginationLoading}

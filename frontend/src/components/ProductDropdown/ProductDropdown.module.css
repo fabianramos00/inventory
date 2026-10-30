@@ -127,13 +127,8 @@
 }
 
 .spinner {
-  animation: spin 1s linear infinite;
+  composes: spinner from global;
   color: var(--ink-3);
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .dropdownEmpty {

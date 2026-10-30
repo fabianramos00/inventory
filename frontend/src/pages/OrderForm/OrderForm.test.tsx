@@ -192,7 +192,6 @@ describe('OrderForm wiring', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['orders'] })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['products'] })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['inventoryStats'] })
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['supplierCatalogs'] })
   })
 
   it('clears supplier_sku on item updates and invalidates only order caches', async () => {

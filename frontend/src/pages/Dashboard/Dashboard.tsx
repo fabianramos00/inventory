@@ -22,11 +22,11 @@ function normalizeOrderStatus(status: string) {
   return status === 'delivered' ? 'received' : status
 }
 
+const weekdayFormatter = new Intl.DateTimeFormat('es-CO', { weekday: 'short', timeZone: 'UTC' })
+
 function getSpanishDayName(dateStr: string): string {
-  const date = new Date(dateStr + 'T00:00:00Z')
-  const dayIndex = date.getUTCDay()
-  const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
-  return days[dayIndex]
+  const label = weekdayFormatter.format(new Date(`${dateStr}T00:00:00Z`))
+  return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 interface VentasTooltipProps {

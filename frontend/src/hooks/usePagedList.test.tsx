@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useClients } from './useClients'
+import { usePagedList } from './usePagedList'
+import { clientsApi } from '@/lib/api/clients'
 
 const mocks = vi.hoisted(() => ({
   getClients: vi.fn(),
@@ -26,7 +27,7 @@ function createQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } })
 }
 
-describe('usePagedList (through useClients)', () => {
+describe('usePagedList', () => {
   beforeEach(() => {
     mocks.getClients.mockReset()
     mocks.deleteClient.mockReset()
@@ -38,7 +39,14 @@ describe('usePagedList (through useClients)', () => {
     })
     const queryClient = createQueryClient()
     const { result } = renderHook(
-      () => useClients({ page: 2, search: '  ana  ' }),
+      () => usePagedList({
+        key: 'clients',
+        page: 2,
+        filters: { search: '  ana  ' },
+        fetchPage: ({ skip, limit, search }) =>
+          clientsApi.getClients({ skip, limit, ...(search.trim() && { search }) }).then(response => response.data),
+        deleteItem: clientsApi.deleteClient,
+      }),
       { wrapper: wrapperFor(queryClient) },
     )
 
@@ -49,9 +57,8 @@ describe('usePagedList (through useClients)', () => {
       'clients',
       { page: 2, search: '  ana  ', limit: 10 },
     ])
-    expect(result.current.clients).toEqual([{ id: 1, name: 'Ana' }])
+    expect(result.current.items).toEqual([{ id: 1, name: 'Ana' }])
     expect(result.current.hasNext).toBe(true)
-    expect(result.current.totalPages).toBe(1)
     expect(typeof result.current.invalidate).toBe('function')
     expect(result.current.deleteMutation).toBeDefined()
   })
@@ -60,7 +67,14 @@ describe('usePagedList (through useClients)', () => {
     mocks.getClients.mockResolvedValue({ data: { items: [], has_next: false } })
     const queryClient = createQueryClient()
     const { result } = renderHook(
-      () => useClients({ page: 1, search: '   ' }),
+      () => usePagedList({
+        key: 'clients',
+        page: 1,
+        filters: { search: '   ' },
+        fetchPage: ({ skip, limit, search }) =>
+          clientsApi.getClients({ skip, limit, ...(search.trim() && { search }) }).then(response => response.data),
+        deleteItem: clientsApi.deleteClient,
+      }),
       { wrapper: wrapperFor(queryClient) },
     )
 
@@ -76,7 +90,14 @@ describe('usePagedList (through useClients)', () => {
     const queryClient = createQueryClient()
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
     const { result } = renderHook(
-      () => useClients({ page: 1, search: '' }),
+      () => usePagedList({
+        key: 'clients',
+        page: 1,
+        filters: { search: '' },
+        fetchPage: ({ skip, limit, search }) =>
+          clientsApi.getClients({ skip, limit, ...(search.trim() && { search }) }).then(response => response.data),
+        deleteItem: clientsApi.deleteClient,
+      }),
       { wrapper: wrapperFor(queryClient) },
     )
 

@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { inventoryApi } from '@/lib/api/inventory'
 import { productStatusMap, productStatusLabel } from '@/lib/constants'
+import { getProductStatus } from '@/lib/utils'
 import { useProduct } from '@/hooks/useProduct'
 import ProductDropdown from '@/components/ProductDropdown/ProductDropdown'
 import CreateFormModal, { type FieldConfig } from '@/components/CreateFormModal/CreateFormModal'
@@ -59,11 +60,6 @@ const productSchema = z.object({
 })
 
 type ProductFormInputs = z.infer<typeof productSchema>
-
-function getProductStatus(stock: number, threshold: number) {
-  if (stock === 0) return 'out_of_stock'
-  return stock <= threshold ? 'low_stock' : 'in_stock'
-}
 
 function withOption(options: FilterOption[], option: FilterOption) {
   return options.some(o => o.id === option.id) ? options : [...options, option]

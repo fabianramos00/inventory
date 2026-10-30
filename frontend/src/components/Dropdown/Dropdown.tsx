@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { useClickOutside } from '@/hooks/useClickOutside'
+import { useListbox } from '@/hooks/useListbox'
 import styles from './Dropdown.module.css'
 
 export interface DropdownOption {
@@ -24,35 +26,37 @@ export default function Dropdown({
   ariaLabel,
   autoFocus,
 }: DropdownProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const listId = useId()
+  const { isOpen, setIsOpen, triggerRef, listRef, close, handleKeyDown, handleTriggerKeyDown } = useListbox()
+
+  useClickOutside(wrapperRef, () => close(), isOpen)
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    if (!isOpen) return
+    listRef.current?.querySelector<HTMLElement>('[role="option"]')?.focus()
+  }, [isOpen, listRef])
 
   const selectedOption = options.find(opt => opt.value === value)
   const displayLabel = selectedOption?.label || placeholder
 
   function handleSelectOption(optionValue: string) {
     onChange(optionValue)
-    setIsOpen(false)
+    close(true)
   }
 
   return (
-    <div className={styles.selectDropdown} ref={dropdownRef}>
+    <div className={styles.selectDropdown} ref={wrapperRef}>
       <button
+        ref={triggerRef}
         type="button"
         className={`${styles.selectTrigger} ${value ? styles.selectTriggerActive : ''}`}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => (isOpen ? close() : setIsOpen(true))}
+        onKeyDown={handleTriggerKeyDown}
         aria-label={ariaLabel}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-controls={listId}
         data-autofocus={autoFocus ? '' : undefined}
       >
         <span>{displayLabel}</span>
@@ -61,7 +65,7 @@ export default function Dropdown({
 
       {isOpen && (
         <div className={styles.selectContent}>
-          <div className={styles.selectOptions}>
+          <div className={styles.selectOptions} id={listId} role="listbox" ref={listRef}>
             {options.length === 0 ? (
               <div className={styles.emptyOption}>No hay opciones disponibles</div>
             ) : (
@@ -69,8 +73,12 @@ export default function Dropdown({
                 <button
                   key={option.value}
                   type="button"
+                  role="option"
+                  aria-selected={value === option.value}
+                  tabIndex={-1}
                   className={`${styles.selectOption} ${value === option.value ? styles.selectOptionActive : ''}`}
                   onClick={() => handleSelectOption(option.value)}
+                  onKeyDown={handleKeyDown}
                 >
                   {option.label}
                 </button>

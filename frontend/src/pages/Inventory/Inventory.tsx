@@ -9,7 +9,7 @@ import FilterSelect from '@/components/FilterSelect/FilterSelect'
 import SearchSelect from '@/components/SearchSelect/SearchSelect'
 import { inventoryApi } from '@/lib/api/inventory'
 import { PAGE_LIMIT } from '@/lib/constants'
-import { formatCurrency, formatNumber } from '@/lib/utils'
+import { formatCurrency, formatNumber, getProductStatus } from '@/lib/utils'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteModal'
 import AttributeTab from '@/components/AttributeTab/AttributeTab'
 import DataTable from '@/components/DataTable/DataTable'
@@ -154,11 +154,6 @@ export default function Inventory() {
     setSelectedBrand('')
     setSelectedAvailability('')
     setPage(1)
-  }
-
-  const getProductStatus = (stock: number, threshold: number) => {
-    if (stock === 0) return 'out_of_stock'
-    return stock <= threshold ? 'low_stock' : 'in_stock'
   }
 
   const activeLabelMap: Record<string, string> = {

@@ -38,7 +38,7 @@ export default function DateFilterInput({ value, onChange, label }: DateFilterIn
     if (restoreFocus) calendarButtonRef.current?.focus()
   }
 
-  useClickOutside([wrapperRef], () => close(), isOpen)
+  useClickOutside(wrapperRef, () => close(), isOpen)
 
   function handleSelect(day: Date | undefined) {
     if (!day) return

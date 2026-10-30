@@ -8,8 +8,6 @@ export const DASHBOARD_KEYS = [
   'dashboardLowStock',
 ] as const
 
-export const SUPPLIER_CATALOG_KEYS = ['supplierCatalogs'] as const
-
 function invalidate(queryClient: QueryClient, keys: readonly string[]) {
   keys.forEach(key => {
     void queryClient.invalidateQueries({ queryKey: [key] })
@@ -29,7 +27,7 @@ export function invalidateOrderDetails(
   void queryClient.invalidateQueries({ queryKey: ['order', orderId] })
 
   if (becameReceived) {
-    invalidate(queryClient, ['product', 'products', 'inventoryStats', ...SUPPLIER_CATALOG_KEYS])
+    invalidate(queryClient, ['product', 'products', 'inventoryStats'])
   }
 }
 

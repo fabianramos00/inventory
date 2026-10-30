@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, X, Trash2 } from 'lucide-react'
+import { useDialogFocus } from '@/hooks/useDialogFocus'
 import styles from './DiscardChangesModal.module.css'
 
 interface DiscardChangesModalProps {
@@ -11,74 +12,14 @@ interface DiscardChangesModalProps {
   onDiscard: () => void
 }
 
-export default function DiscardChangesModal({
-  open,
-  itemCount,
-  totalAmount,
-  onStay,
-  onDiscard,
-}: DiscardChangesModalProps) {
+export default function DiscardChangesModal(props: DiscardChangesModalProps) {
+  if (!props.open) return null
+  return <DiscardChangesDialog {...props} />
+}
+
+function DiscardChangesDialog({ itemCount, totalAmount, onStay, onDiscard }: DiscardChangesModalProps) {
   const [isClosing, setIsClosing] = useState(false)
-  const safeBtnRef = useRef<HTMLButtonElement>(null)
-  const discardBtnRef = useRef<HTMLButtonElement>(null)
-  const closeBtnRef = useRef<HTMLButtonElement>(null)
-  const triggerRef = useRef<Element | null>(null)
-
-  const focusableRefs = useCallback(() => {
-    return [
-      safeBtnRef.current,
-      discardBtnRef.current,
-      closeBtnRef.current,
-    ].filter(Boolean) as HTMLElement[]
-  }, [])
-
-  useEffect(() => {
-    if (!open) return
-
-    triggerRef.current = document.activeElement
-
-    const raf = requestAnimationFrame(() => {
-      safeBtnRef.current?.focus()
-    })
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        handleSafeClose()
-        return
-      }
-      if (e.key === 'Tab') {
-        const focusable = focusableRefs()
-        if (focusable.length === 0) return
-
-        const currentIndex = focusable.indexOf(document.activeElement as HTMLElement)
-        if (e.shiftKey) {
-          if (currentIndex <= 0) {
-            e.preventDefault()
-            focusable[focusable.length - 1]?.focus()
-          }
-        } else {
-          if (currentIndex >= focusable.length - 1) {
-            e.preventDefault()
-            focusable[0]?.focus()
-          }
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      cancelAnimationFrame(raf)
-    }
-  }, [open, focusableRefs])
-
-  useEffect(() => {
-    if (open || isClosing) return
-    if (triggerRef.current instanceof HTMLElement) {
-      triggerRef.current.focus()
-    }
-  }, [open, isClosing])
+  const dialogRef = useDialogFocus(handleSafeClose)
 
   function handleSafeClose() {
     setIsClosing(true)
@@ -86,12 +27,6 @@ export default function DiscardChangesModal({
       onStay()
     }, 150)
   }
-
-  function handleDiscard() {
-    onDiscard()
-  }
-
-  if (!open) return null
 
   const bodyText =
     itemCount === 1
@@ -105,6 +40,7 @@ export default function DiscardChangesModal({
       onClick={isClosing ? undefined : handleSafeClose}
     >
       <div
+        ref={dialogRef}
         className={`${styles.modal} ${isClosing ? styles.modalClosing : ''}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -120,7 +56,6 @@ export default function DiscardChangesModal({
             </h2>
           </div>
           <button
-            ref={closeBtnRef}
             className={styles.closeButton}
             onClick={handleSafeClose}
             type="button"
@@ -138,17 +73,16 @@ export default function DiscardChangesModal({
 
         <div className={styles.actions}>
           <button
-            ref={safeBtnRef}
             className={styles.safeBtn}
             onClick={handleSafeClose}
             type="button"
+            data-autofocus
           >
             Continuar editando
           </button>
           <button
-            ref={discardBtnRef}
             className={styles.discardBtn}
-            onClick={handleDiscard}
+            onClick={onDiscard}
             type="button"
           >
             <Trash2 size={14} aria-hidden="true" />

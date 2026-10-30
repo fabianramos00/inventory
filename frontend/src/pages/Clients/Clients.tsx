@@ -6,21 +6,15 @@ import CommandBar from '@/components/CommandBar/CommandBar'
 import { clientsApi } from '@/lib/api/clients'
 import { formatDate } from '@/lib/utils'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
-import CreateFormModal, { type FieldConfig } from '@/components/CreateFormModal/CreateFormModal'
+import CreateFormModal from '@/components/CreateFormModal/CreateFormModal'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteModal'
 import ErrorState from '@/components/ErrorState/ErrorState'
 import CardGridSkeleton from '@/components/CardGridSkeleton/CardGridSkeleton'
 import Pagination from '@/components/Pagination'
-import { useClients } from '@/hooks/useClients'
+import { usePagedList } from '@/hooks/usePagedList'
 import { useDeleteConfirm } from '@/hooks/useDeleteConfirm'
+import { CLIENT_FIELDS, buildClientCreatePayload } from '@/lib/formFields'
 import type { Client } from '@/types'
-
-const CLIENT_FIELDS: FieldConfig[] = [
-  { key: 'name', label: 'Nombre del Cliente', placeholder: 'Ej. Fabian Rodríguez', required: true },
-  { key: 'identity_card', label: 'Cédula', placeholder: 'Ej. 1052416157', type: 'text' },
-  { key: 'email', label: 'Correo Electrónico', placeholder: 'Ej. fabian@gmail.com', type: 'email' },
-  { key: 'phone', label: 'Teléfono', placeholder: 'Ej. 3133120107', type: 'tel' },
-]
 
 export default function Clients() {
   const [search, setSearch] = useState('')
@@ -32,7 +26,15 @@ export default function Clients() {
 
   const debouncedSearch = useDebouncedValue(search, 300, () => setPage(1))
 
-  const { clients, hasNext, isLoading, isFetching, isError, refetch, deleteMutation, invalidate } = useClients({ page, search: debouncedSearch })
+  const { items: clients, hasNext, isLoading, isFetching, isError, refetch, deleteMutation, invalidate } =
+    usePagedList<Client, { search: string }>({
+      key: 'clients',
+      page,
+      filters: { search: debouncedSearch },
+      fetchPage: ({ skip, limit, search }) =>
+        clientsApi.getClients({ skip, limit, ...(search.trim() && { search }) }).then(response => response.data),
+      deleteItem: clientsApi.deleteClient,
+    })
 
   const {
     target: clientToDelete,
@@ -70,13 +72,7 @@ export default function Clients() {
   }
 
   async function submitCreateClient(values: Record<string, string>) {
-    const payload = {
-      name: values.name,
-      ...(values.identity_card && { identity_card: values.identity_card }),
-      ...(values.email && { email: values.email }),
-      ...(values.phone && { phone: values.phone }),
-    }
-    const response = await clientsApi.createClient(payload)
+    const response = await clientsApi.createClient(buildClientCreatePayload(values))
     return response.data
   }
 

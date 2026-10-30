@@ -19,18 +19,13 @@
 }
 
 .spinner {
-  animation: spin 1s linear infinite;
+  composes: spinner from global;
   color: var(--ink-3);
 }
 
 .spinnerDark {
-  animation: spin 1s linear infinite;
+  composes: spinner from global;
   color: var(--surface);
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 /* ── Header ─────────────────────────────────────────────────────────── */
@@ -812,9 +807,15 @@
   gap: 8px;
 }
 
-.selectWithAction .selectDropdown {
+.formSelect {
   flex: 1;
   min-width: 0;
+  width: 100%;
+}
+
+.formSelect > button {
+  width: 100%;
+  justify-content: space-between;
 }
 
 .addClientBtn {
@@ -836,111 +837,6 @@
   background: var(--surface-hover);
   border-color: var(--border-strong);
   color: var(--ink-1);
-}
-
-.selectDropdown {
-  position: relative;
-}
-
-.selectTrigger {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: var(--control-h);
-  gap: 8px;
-  padding: 0 12px;
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-control);
-  background: var(--control-bg);
-  color: var(--ink-1);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
-}
-
-.selectTrigger:hover {
-  border-color: var(--ink-2);
-}
-
-.selectTrigger:focus-visible {
-  border-color: var(--ink-2);
-  box-shadow: 0 0 0 3px var(--accent-ring);
-}
-
-.selectTriggerActive {
-  color: var(--ink-1);
-}
-
-.selectContent {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 20;
-  border: 1px solid var(--glass-popover-border);
-  border-radius: var(--radius-control);
-  background: var(--glass-popover-bg);
-  box-shadow: var(--glass-popover-shadow);
-}
-
-.selectSearch {
-  width: 100%;
-  padding: 10px 12px;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  border-radius: var(--radius-control) var(--radius-control) 0 0;
-  background: var(--control-bg);
-  color: var(--ink-1);
-  font-family: var(--font-sans);
-  font-size: 14px;
-}
-
-.selectSearch::placeholder {
-  color: var(--ink-meta);
-}
-
-.selectSearch:focus-visible {
-  border-bottom-color: var(--ink-2);
-}
-
-.selectOptions {
-  max-height: 192px;
-  overflow-y: auto;
-}
-
-.selectOption {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
-  color: var(--ink-2);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
-}
-
-.selectOption:hover {
-  background: var(--surface-hover);
-  color: var(--ink-1);
-}
-
-.selectOption:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.selectOptionActive {
-  background: var(--surface-hover);
-  color: var(--ink-1);
-  font-weight: 500;
 }
 
 .emptyFieldValue {

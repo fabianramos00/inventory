@@ -27,7 +27,7 @@ export default function CalendarDropdown({
     handleTriggerKeyDown: handleTriggerListKeyDown,
   } = useListbox()
 
-  useClickOutside([wrapperRef], () => close(), isOpen)
+  useClickOutside(wrapperRef, () => close(), isOpen)
 
   useEffect(() => {
     if (!isOpen) return

@@ -38,9 +38,9 @@ function clientPage(skip: number) {
   }
 }
 
-function sleep(ms: number) {
-  return act(async () => {
-    await new Promise(resolve => setTimeout(resolve, ms))
+async function settle(ms = 0) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms)
   })
 }
 
@@ -78,28 +78,35 @@ describe('Clients search and pagination', () => {
   })
 
   it('resets to page 1 and only requests the debounced search', async () => {
-    renderClients()
+    vi.useFakeTimers()
+    try {
+      renderClients()
+      await settle()
 
-    await waitFor(() => expect(mocks.getClients).toHaveBeenCalledWith({ skip: 0, limit: 10 }))
-    await screen.findByText('Cliente 1')
-    await sleep(350)
+      expect(mocks.getClients).toHaveBeenCalledWith({ skip: 0, limit: 10 })
+      expect(screen.getByText('Cliente 1')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ir a página siguiente' }))
-    await waitFor(() => expect(mocks.getClients).toHaveBeenCalledWith({ skip: 10, limit: 10 }))
-    await screen.findByText('Página 2')
+      fireEvent.click(screen.getByRole('button', { name: 'Ir a página siguiente' }))
+      await settle()
 
-    mocks.getClients.mockClear()
-    fireEvent.change(
-      screen.getByPlaceholderText('Buscar cliente por nombre, cédula o contacto...'),
-      { target: { value: 'ana' } },
-    )
+      expect(mocks.getClients).toHaveBeenCalledWith({ skip: 10, limit: 10 })
+      expect(screen.getByText('Página 2')).toBeTruthy()
 
-    await sleep(50)
-    expect(mocks.getClients).not.toHaveBeenCalled()
+      mocks.getClients.mockClear()
+      fireEvent.change(
+        screen.getByPlaceholderText('Buscar cliente por nombre, cédula o contacto...'),
+        { target: { value: 'ana' } },
+      )
 
-    await sleep(300)
-    await waitFor(() => expect(mocks.getClients).toHaveBeenCalledWith({ skip: 0, limit: 10, search: 'ana' }))
-    expect(mocks.getClients).toHaveBeenCalledTimes(1)
+      await settle(50)
+      expect(mocks.getClients).not.toHaveBeenCalled()
+
+      await settle(250)
+      expect(mocks.getClients).toHaveBeenCalledWith({ skip: 0, limit: 10, search: 'ana' })
+      expect(mocks.getClients).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows a retryable error instead of the empty state when the query fails', async () => {

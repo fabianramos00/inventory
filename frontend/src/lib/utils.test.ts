@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatCurrency, formatDate, formatNumber } from './utils'
+import { formatCurrency, formatDate, formatNumber, getProductStatus } from './utils'
 
 describe('formatCurrency', () => {
   it('formats COP with Colombian separators and two decimals', () => {
@@ -22,5 +22,13 @@ describe('formatNumber', () => {
 describe('formatDate', () => {
   it('formats dates as DD/MM/YYYY', () => {
     expect(formatDate('2026-10-24T12:00:00Z')).toBe('24/10/2026')
+  })
+})
+
+describe('getProductStatus', () => {
+  it('classifies stock against the threshold', () => {
+    expect(getProductStatus(0, 5)).toBe('out_of_stock')
+    expect(getProductStatus(5, 5)).toBe('low_stock')
+    expect(getProductStatus(6, 5)).toBe('in_stock')
   })
 })

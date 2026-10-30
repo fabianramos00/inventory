@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PAGE_LIMIT } from '@/lib/constants'
-import type { PaginatedResponse, CursorPaginatedResponse } from '@/types'
+import type { CursorPaginatedResponse } from '@/types'
 
 interface UsePagedListOptions<T, F extends object> {
   key: string
   page: number
   filters: F
-  fetchPage: (params: { skip: number; limit: number } & F) => Promise<PaginatedResponse<T> | CursorPaginatedResponse<T>>
+  fetchPage: (params: { skip: number; limit: number } & F) => Promise<CursorPaginatedResponse<T>>
   deleteItem: (id: number) => Promise<unknown>
   invalidateKeys?: string[]
 }
@@ -40,8 +40,7 @@ export function usePagedList<T, F extends object>({
 
   return {
     items: query.data?.items ?? [],
-    hasNext: query.data && 'has_next' in query.data ? query.data.has_next : false,
-    totalPages: query.data && 'pages' in query.data ? query.data.pages : 1,
+    hasNext: query.data?.has_next ?? false,
     isLoading: query.isLoading,
     isFetching: query.isFetching,
     error: query.error,

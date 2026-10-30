@@ -152,7 +152,7 @@ export default function Login() {
             <button type="submit" disabled={loading} className={styles.submitBtn}>
               {loading ? (
                 <>
-                  <Loader2 size={18} className="animate-spin" />
+                  <Loader2 size={18} className={styles.spinner} />
                   Iniciando sesión...
                 </>
               ) : (

@@ -9,10 +9,14 @@ import styles from './SearchSelect.module.css'
 interface SearchSelectProps {
   label: string
   value: number | ''
-  onChange: (value: number | '') => void
+  onChange: (value: number | '', option?: FilterOption) => void
   fetchOptions: (search: string) => Promise<FilterOption[]>
   emptyLabel: string
   specialOption?: { value: number; label: string }
+  selectedOption?: FilterOption
+  placeholder?: string
+  className?: string
+  ariaLabel?: string
 }
 
 export default function SearchSelect({
@@ -22,6 +26,10 @@ export default function SearchSelect({
   fetchOptions,
   emptyLabel,
   specialOption,
+  selectedOption: selectedOptionProp,
+  placeholder,
+  className,
+  ariaLabel,
 }: SearchSelectProps) {
   const [search, setSearch] = useState('')
   const [cachedSelected, setCachedSelected] = useState<FilterOption | null>(null)
@@ -49,17 +57,24 @@ export default function SearchSelect({
     close(restoreFocus)
   }
 
-  useClickOutside([wrapperRef], () => closeSearch(), isOpen)
+  useClickOutside(wrapperRef, () => closeSearch(), isOpen)
 
-  const selectedOption = options.find(option => option.id === value)
-    ?? (cachedSelected?.id === value ? cachedSelected : undefined)
+  const selectedOption = cachedSelected?.id === value
+    ? cachedSelected
+    : selectedOptionProp?.id === value
+      ? selectedOptionProp
+      : options.find(option => option.id === value)
   const selectedLabel = specialOption && value === specialOption.value
     ? specialOption.label
-    : selectedOption?.name ?? label
+    : selectedOption?.name ?? (value === '' ? placeholder ?? label : label)
 
   function select(next: number | '') {
-    setCachedSelected(options.find(item => item.id === next) ?? null)
-    onChange(next)
+    const chosen = options.find(item => item.id === next)
+      ?? (specialOption && next === specialOption.value
+        ? { id: specialOption.value, name: specialOption.label }
+        : null)
+    setCachedSelected(chosen)
+    onChange(next, chosen ?? undefined)
     closeSearch(true)
   }
 
@@ -81,7 +96,7 @@ export default function SearchSelect({
   }
 
   return (
-    <div className={styles.wrapper} ref={wrapperRef}>
+    <div className={`${styles.wrapper} ${className ?? ''}`} ref={wrapperRef}>
       <button
         ref={triggerRef}
         type="button"
@@ -91,6 +106,7 @@ export default function SearchSelect({
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-controls={listId}
+        aria-label={ariaLabel}
       >
         <span>{selectedLabel}</span>
         <ChevronDown

@@ -68,14 +68,6 @@
   white-space: nowrap;
 }
 
-.paginationRange {
-  color: var(--ink-meta);
-  font-size: 12px;
-  font-family: var(--font-sans);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
 @media (max-width: 640px) {
   .pagination {
     position: sticky;
@@ -103,8 +95,7 @@
     gap: 2px;
   }
 
-  .paginationInfo,
-  .paginationRange {
+  .paginationInfo {
     font-size: 12px;
   }
 }

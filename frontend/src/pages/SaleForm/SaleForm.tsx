@@ -1,19 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, Search, X, Loader, ChevronDown, Package, Plus, Pencil, Check, Trash2 } from 'lucide-react'
+import { ChevronLeft, Search, X, Loader, Package, Plus, Pencil, Check, Trash2 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import styles from '../formPage.module.css'
 import { salesApi } from '@/lib/api/sales'
 import { getAPIErrorMessage } from '@/lib/apiError'
 import { clientsApi } from '@/lib/api/clients'
 import { inventoryApi } from '@/lib/api/inventory'
-import CreateFormModal, { type FieldConfig } from '@/components/CreateFormModal/CreateFormModal'
+import CreateFormModal from '@/components/CreateFormModal/CreateFormModal'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteModal'
+import SearchSelect from '@/components/SearchSelect/SearchSelect'
+import Dropdown from '@/components/Dropdown/Dropdown'
 import DiscardChangesModal from './DiscardChangesModal'
 import { paymentStatusLabel, paymentStatusBadge, deliveryStatusLabel, deliveryStatusBadge, paymentMethodLabel } from '@/lib/constants'
 import { formatDate, formatCurrency, safeNumber } from '@/lib/utils'
 import { invalidateSaleData } from '@/lib/saleCache'
 import { useSale, type SaleItemView } from '@/hooks/useSale'
+import { useDebouncedFetch } from '@/hooks/useDebouncedFetch'
+import { useClickOutside } from '@/hooks/useClickOutside'
+import { CLIENT_FIELDS, buildClientCreatePayload } from '@/lib/formFields'
 import { buildCreateSalePayload } from './salePayload'
 import type { Product, FilterOption, PaymentStatus, PaymentMethod } from '@/types'
 
@@ -32,11 +37,11 @@ interface SaleItemDraft {
   unit_price: string
 }
 
-const CLIENT_FIELDS: FieldConfig[] = [
-  { key: 'name', label: 'Nombre', placeholder: 'Nombre del cliente', required: true },
-  { key: 'identity_card', label: 'Cédula de identidad (opcional)', placeholder: 'Número de cédula' },
-  { key: 'email', label: 'Correo electrónico (opcional)', placeholder: 'correo@ejemplo.com', type: 'email' },
-  { key: 'phone', label: 'Teléfono (opcional)', placeholder: 'Número de teléfono', type: 'tel' },
+const PAYMENT_METHOD_OPTIONS = [
+  { value: '', label: 'Sin especificar' },
+  { value: 'cash', label: 'Efectivo' },
+  { value: 'debit', label: 'Débito' },
+  { value: 'credit', label: 'Crédito' },
 ]
 
 export default function SaleForm() {
@@ -73,83 +78,24 @@ export default function SaleForm() {
   const [amountPaid, setAmountPaid] = useState('0')
 
   const [clientId, setClientId] = useState<number | ''>('')
-  const [clientOptions, setClientOptions] = useState<FilterOption[]>([])
-  const [clientSearch, setClientSearch] = useState('')
-  const [clientOpen, setClientOpen] = useState(false)
-  const [clientLoading, setClientLoading] = useState(false)
-  const clientRef = useRef<HTMLDivElement>(null)
-  const clientTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const clientFocusedIndex = useRef<number>(-1)
+  const [selectedClient, setSelectedClient] = useState<FilterOption | null>(null)
 
   const [productSearch, setProductSearch] = useState('')
-  const [productResults, setProductResults] = useState<Product[]>([])
   const [productSearchOpen, setProductSearchOpen] = useState(false)
-  const [productLoading, setProductLoading] = useState(false)
   const productSearchRef = useRef<HTMLDivElement>(null)
-  const productSearchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const productResultsFocusedIndex = useRef<number>(-1)
-
-  const [openFormDropdown, setOpenFormDropdown] = useState<string | null>(null)
-  const paymentMethodRef = useRef<HTMLDivElement>(null)
 
   const [apiError, setApiError] = useState<string | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (clientTimeout.current) clearTimeout(clientTimeout.current)
-    if (!clientOpen) return
-    clientFocusedIndex.current = -1
-    clientTimeout.current = setTimeout(async () => {
-      setClientLoading(true)
-      try {
-        const res = await clientsApi.getClients({ search: clientSearch || undefined, skip: 0, limit: 10 })
-        setClientOptions(res.data.items || [])
-      } catch {
-        setClientOptions([])
-      } finally {
-        setClientLoading(false)
-      }
-    }, 300)
-    return () => { if (clientTimeout.current) clearTimeout(clientTimeout.current) }
-  }, [clientSearch, clientOpen])
+  const { data: productResults, loading: productLoading } = useDebouncedFetch(
+    () => inventoryApi.getProducts({ search: productSearch, skip: 0, limit: 8 }).then(res => res.data.items || []),
+    [productSearch],
+    300,
+    itemsEditable && productSearch.trim() !== '',
+  )
 
-  useEffect(() => {
-    if (productSearchTimeout.current) clearTimeout(productSearchTimeout.current)
-    if (!itemsEditable || !productSearch.trim()) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale results when the search becomes empty/disabled
-      setProductResults([])
-      setProductSearchOpen(false)
-      productResultsFocusedIndex.current = -1
-      return
-    }
-    productSearchTimeout.current = setTimeout(async () => {
-      setProductLoading(true)
-      setProductSearchOpen(true)
-      productResultsFocusedIndex.current = -1
-      try {
-        const res = await inventoryApi.getProducts({ search: productSearch, skip: 0, limit: 8 })
-        setProductResults(res.data.items || [])
-      } catch {
-        setProductResults([])
-      } finally {
-        setProductLoading(false)
-      }
-    }, 300)
-    return () => { if (productSearchTimeout.current) clearTimeout(productSearchTimeout.current) }
-  }, [productSearch, itemsEditable])
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node
-      if (!productSearchRef.current?.contains(target)) setProductSearchOpen(false)
-      if (!clientRef.current?.contains(target)) setClientOpen(false)
-      if (!paymentMethodRef.current?.contains(target)) {
-        setOpenFormDropdown(null)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  useClickOutside(productSearchRef, () => setProductSearchOpen(false), productSearchOpen)
 
   useEffect(() => {
     if (!isCreateMode) return
@@ -185,6 +131,7 @@ export default function SaleForm() {
     setItems([])
     setProductSearch('')
     setProductSearchOpen(false)
+    productResultsFocusedIndex.current = -1
     setItemError(null)
   }
 
@@ -193,14 +140,12 @@ export default function SaleForm() {
     setPaymentMethod(sale.payment_method ?? '')
     setAmountPaid(String(sale.amount_paid))
     setClientId(sale.client?.id ?? '')
-    setClientOptions(sale.client ? [{ id: sale.client.id, name: sale.client.name }] : [])
+    setSelectedClient(sale.client ? { id: sale.client.id, name: sale.client.name } : null)
     setIsEditingDetails(true)
   }
 
   function handleCancelEditDetails() {
     setIsEditingDetails(false)
-    setOpenFormDropdown(null)
-    setClientOpen(false)
   }
 
   async function handleSaveDetails() {
@@ -229,18 +174,13 @@ export default function SaleForm() {
     navigate('/sales')
   }
 
-  async function submitCreateClient(v: Record<string, string>) {
-    const res = await clientsApi.createClient({
-      name: v.name,
-      ...(v.identity_card && { identity_card: v.identity_card }),
-      ...(v.email && { email: v.email }),
-      ...(v.phone && { phone: v.phone }),
-    })
+  async function submitCreateClient(values: Record<string, string>) {
+    const res = await clientsApi.createClient(buildClientCreatePayload(values))
     return res.data
   }
 
   function handleClientCreated(client: { id: number; name: string }) {
-    setClientOptions(prev => [client, ...prev.filter(c => c.id !== client.id)])
+    setSelectedClient(client)
     setClientId(client.id)
     setShowCreateClient(false)
   }
@@ -248,6 +188,7 @@ export default function SaleForm() {
   function handleAddItem(product: Product) {
     setProductSearch('')
     setProductSearchOpen(false)
+    productResultsFocusedIndex.current = -1
     if ((product.stock_quantity ?? 0) === 0) return
     if (items.some(i => i.product_id === product.id)) return
     const defaultPrice = product.sale_price ?? product.price ?? 0
@@ -393,7 +334,6 @@ export default function SaleForm() {
     return null
   })()
   const hasLiveErrors = isCreateMode && (!!amountPaidError || items.some(item => Number(item.delivered_quantity) > Number(item.quantity)))
-  const selectedClientName = clientOptions.find(c => c.id === clientId)?.name || 'Sin cliente'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -567,7 +507,11 @@ export default function SaleForm() {
                   className={styles.productSearchInput}
                   placeholder={isCreateMode ? 'Buscar producto por nombre o SKU...' : 'Agregar producto por nombre o SKU...'}
                   value={productSearch}
-                  onChange={e => setProductSearch(e.target.value)}
+                  onChange={e => {
+                    setProductSearch(e.target.value)
+                    setProductSearchOpen(e.target.value.trim() !== '')
+                    productResultsFocusedIndex.current = -1
+                  }}
                   autoComplete="off"
                   aria-expanded={productSearchOpen}
                   aria-controls={isCreateMode ? 'product-search-listbox' : 'product-results-list'}
@@ -854,76 +798,29 @@ export default function SaleForm() {
                 <dt className={styles.fieldLabel}>Cliente</dt>
                 {detailsEditable ? (
                   <dd className={styles.fieldValueFull}>
-                    <div className={isCreateMode ? styles.selectWithAction : undefined}>
-                      <div className={styles.selectDropdown} ref={clientRef}>
-                        <button
-                          type="button"
-                          className={`${styles.selectTrigger} ${clientId ? styles.selectTriggerActive : ''}`}
-                          onClick={() => { setClientOpen(o => !o); setClientSearch('') }}
-                          aria-expanded={clientOpen}
-                          aria-haspopup="listbox"
-                        >
-                          <span>{selectedClientName}</span>
-                          <ChevronDown size={13} />
-                        </button>
-                        {clientOpen && (
-                          <div className={styles.selectContent}>
-                            <input
-                              type="text"
-                              className={styles.selectSearch}
-                              placeholder="Buscar cliente..."
-                              value={clientSearch}
-                              onChange={e => setClientSearch(e.target.value)}
-                              autoFocus
-                            />
-                            <div
-                              className={styles.selectOptions}
-                              role="listbox"
-                              onKeyDown={e => handleDropdownKeyDown(
-                                e,
-                                clientOptions.length + 1,
-                                clientFocusedIndex,
-                                (idx) => {
-                                  if (idx === 0) { setClientId(''); setClientOpen(false) }
-                                  else { setClientId(clientOptions[idx - 1]?.id ?? ''); setClientOpen(false) }
-                                },
-                                () => setClientOpen(false)
-                              )}
-                            >
-                              <button
-                                type="button"
-                                className={`${styles.selectOption} ${!clientId ? styles.selectOptionActive : ''}`}
-                                onClick={() => { setClientId(''); setClientOpen(false) }}
-                                role="option"
-                                aria-selected={!clientId}
-                              >
-                                Sin cliente
-                              </button>
-                              {clientLoading ? (
-                                <div className={`${styles.selectOption} ${styles.optionLoading}`}>
-                                  <Loader size={13} className={styles.spinner} />
-                                </div>
-                              ) : clientOptions.map(client => (
-                                <button
-                                  key={client.id}
-                                  type="button"
-                                  className={`${styles.selectOption} ${clientId === client.id ? styles.selectOptionActive : ''}`}
-                                  onClick={() => { setClientId(client.id); setClientOpen(false) }}
-                                  role="option"
-                                  aria-selected={clientId === client.id}
-                                >
-                                  {client.name}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                    <div className={styles.selectWithAction}>
+                      <SearchSelect
+                        label="Cliente"
+                        placeholder="Sin cliente"
+                        emptyLabel="Sin cliente"
+                        className={styles.formSelect}
+                        value={clientId}
+                        onChange={(value, option) => {
+                          setClientId(value)
+                          setSelectedClient(option ?? null)
+                        }}
+                        fetchOptions={search =>
+                          clientsApi.getClients({ search: search || undefined, skip: 0, limit: 10 })
+                            .then(res => res.data.items || [])
+                        }
+                        selectedOption={selectedClient ?? undefined}
+                        ariaLabel={`Cliente: ${selectedClient?.name ?? 'Sin cliente'}`}
+                      />
                       {isCreateMode && (
                         <button
                           type="button"
                           className={styles.addClientBtn}
-                          onClick={() => { setClientOpen(false); setShowCreateClient(true) }}
+                          onClick={() => setShowCreateClient(true)}
                           title="Crear nuevo cliente"
                         >
                           <Plus size={14} />
@@ -971,36 +868,12 @@ export default function SaleForm() {
                 <dt className={styles.fieldLabel}>Método pago</dt>
                 {detailsEditable ? (
                   <dd className={styles.fieldValueFull}>
-                    <div className={styles.selectDropdown} ref={paymentMethodRef}>
-                      <button
-                        type="button"
-                        className={`${styles.selectTrigger} ${paymentMethod ? styles.selectTriggerActive : ''}`}
-                        onClick={() => setOpenFormDropdown(openFormDropdown === 'payment_method' ? null : 'payment_method')}
-                        aria-expanded={openFormDropdown === 'payment_method'}
-                        aria-haspopup="listbox"
-                      >
-                        <span>{{ '': 'Sin especificar', cash: 'Efectivo', debit: 'Débito', credit: 'Crédito' }[paymentMethod] ?? 'Sin especificar'}</span>
-                        <ChevronDown size={13} />
-                      </button>
-                      {openFormDropdown === 'payment_method' && (
-                        <div className={styles.selectContent}>
-                          <div className={styles.selectOptions} role="listbox">
-                            {([['', 'Sin especificar'], ['cash', 'Efectivo'], ['debit', 'Débito'], ['credit', 'Crédito']] as const).map(([value, label]) => (
-                              <button
-                                key={value}
-                                type="button"
-                                className={`${styles.selectOption} ${paymentMethod === value ? styles.selectOptionActive : ''}`}
-                                onClick={() => { setPaymentMethod(value); setOpenFormDropdown(null) }}
-                                role="option"
-                                aria-selected={paymentMethod === value}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <Dropdown
+                      value={paymentMethod}
+                      options={PAYMENT_METHOD_OPTIONS}
+                      onChange={setPaymentMethod}
+                      placeholder="Sin especificar"
+                    />
                   </dd>
                 ) : (
                   <dd className={styles.fieldValue}>

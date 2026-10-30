@@ -42,6 +42,12 @@
   color: var(--ink-1);
 }
 
+.actionsCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .emailCell {
   font-size: 14px;
   color: var(--ink-2);
@@ -107,7 +113,7 @@
 }
 
 .toggleSpinner {
-  animation: spin 1s linear infinite;
+  composes: spinner from global;
   color: var(--ink-3);
 }
 
