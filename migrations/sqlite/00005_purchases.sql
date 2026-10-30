@@ -36,10 +36,8 @@ CREATE TABLE purchase_orders (
         CHECK (status IN ('PENDING', 'SENT', 'RECEIVED', 'CANCELLED')),
     CONSTRAINT ck_purchase_orders_payment_status
         CHECK (payment_status IN ('PENDING', 'PAID')),
-    CONSTRAINT ck_purchase_orders_order_date_format CHECK (
-        order_date GLOB
-        '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'
-    ),
+    CONSTRAINT ck_purchase_orders_order_date_format
+        CHECK (length(order_date) = 30),
     CONSTRAINT ck_purchase_orders_total_amount_nonnegative
         CHECK (total_amount >= 0),
     CONSTRAINT ck_purchase_orders_total_amount_range

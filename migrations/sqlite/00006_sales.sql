@@ -12,14 +12,9 @@ CREATE TABLE sales (
     created_by_id   INTEGER,
     delivery_status TEXT NOT NULL DEFAULT 'PENDING',
     client_id       INTEGER,
-    CONSTRAINT ck_sales_created_at_format CHECK (
-        created_at GLOB
-        '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'
-    ),
-    CONSTRAINT ck_sales_updated_at_format CHECK (
-        updated_at IS NULL OR updated_at GLOB
-        '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'
-    ),
+    CONSTRAINT ck_sales_created_at_format CHECK (length(created_at) = 30),
+    CONSTRAINT ck_sales_updated_at_format
+        CHECK (updated_at IS NULL OR length(updated_at) = 30),
     CONSTRAINT ck_sales_total_amount_nonnegative CHECK (total_amount >= 0),
     CONSTRAINT ck_sales_total_amount_range
         CHECK (total_amount <= 999999999999),

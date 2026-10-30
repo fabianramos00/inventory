@@ -10,14 +10,9 @@ CREATE TABLE clients (
     email         TEXT,
     phone         TEXT,
     CONSTRAINT clients_identity_card_key UNIQUE (identity_card),
-    CONSTRAINT ck_clients_created_at_format CHECK (
-        created_at GLOB
-        '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'
-    ),
-    CONSTRAINT ck_clients_updated_at_format CHECK (
-        updated_at IS NULL OR updated_at GLOB
-        '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'
-    )
+    CONSTRAINT ck_clients_created_at_format CHECK (length(created_at) = 30),
+    CONSTRAINT ck_clients_updated_at_format
+        CHECK (updated_at IS NULL OR length(updated_at) = 30)
 ) STRICT;
 
 CREATE TABLE providers (
