@@ -149,29 +149,7 @@ configured explicitly.
 
 ## ADR-0011 — Hexagonal ports/adapters for the auth slice
 
-**Status:** Accepted
-
-**Context:** The first auth slice coupled services directly to pgx
-repositories. The remaining modules will target PostgreSQL and may need a
-local fallback. The user asked for the architecture to be settled before
-porting them.
-
-**Decision:** Put entities and domain errors in `internal/domain`. Define
-use-case interfaces in `internal/ports/inbound` and repository/security
-interfaces in `internal/ports/outbound`. Keep use cases in
-`internal/application`; they implement the inbound port and depend only on
-domain plus outbound ports. Implement persistence in
-`internal/adapters/outbound/persistence/{postgres,sqlite}` and JWT, bcrypt, and
-refresh-token crypto in `internal/adapters/outbound/security`. The inbound HTTP
-adapter lives in `internal/adapters/inbound/httpapi`, depends on the inbound
-port, and owns its HTTP DTOs.
-
-**Consequences:** Application services compile without pgx, SQLite,
-`database/sql`, concrete security implementations, or any concrete adapter.
-Backends and security implementations can be swapped by bootstrap wiring and
-tested independently. Domain entities carry no HTTP tags. New modules must
-follow the same port/adapter direction; adapter-specific types do not leak into
-services.
+**Status:** Superseded by [ADR-0014](#adr-0014--gorm-limited-to-outbound-persistence-adapters).
 
 ## ADR-0012 — Automatic PostgreSQL to SQLite fallback
 

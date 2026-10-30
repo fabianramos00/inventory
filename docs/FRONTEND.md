@@ -27,24 +27,11 @@ ones.
 
 ## Structure
 
-```text
-frontend/
-  src/
-    components/       # shared UI
-    context/          # AuthContext
-    hooks/            # data and UI hooks
-    lib/              # axios, api modules, utils, constants
-    pages/            # route pages
-    types/            # shared TypeScript types
-    App.tsx
-    main.tsx
-    index.css
-  e2e/
-  vite.config.ts
-```
-
-Pages keep their folder and CSS Module convention:
-`src/pages/Inventory/Inventory.tsx` and `Inventory.module.css`.
+The current layout is [`frontend/src/`](../frontend/src). Pages keep their
+folder and CSS Module convention: `src/pages/Inventory/Inventory.tsx` and
+`Inventory.module.css`. Tokens and shared utilities live in
+[`src/index.css`](../frontend/src/index.css); styling is CSS Modules and
+custom properties, with no Tailwind.
 
 ## Desktop adaptations
 
@@ -91,15 +78,10 @@ Use `HashRouter` in the desktop build. The legacy route table stays the same;
 only the router wrapper changes. Browser dev may keep `BrowserRouter` behind
 `import.meta.env.DEV`, but the shipped build must be hash-based.
 
-Current routes are `/#/login`, the protected `/#/` Dashboard, `/#/inventory`,
-`/#/inventory/create`, `/#/inventory/product/:id`, `/#/sales`,
-`/#/sales/create`, `/#/sales/:id`, `/#/orders`, `/#/orders/create`,
-`/#/orders/:id`, `/#/clients`, `/#/providers`, and the superuser-only
-`/#/users` page, all under `AppLayout` except login. Declare
-`/#/sales/create` before `/#/sales/:id` and `/#/orders/create` before
-`/#/orders/:id`. The remaining page files stay in `src/pages` without routes
-until the full route table from [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) is
-restored. Playwright specs must use hash URLs.
+The full route table lives in [`src/App.tsx`](../frontend/src/App.tsx). All
+listed routes are implemented; protected pages sit under `AppLayout`, and
+`/#/users` is additionally gated by the superuser route. Playwright specs must
+use hash URLs.
 
 ### Health check and offline banner
 
@@ -129,7 +111,8 @@ restored. Playwright specs must use hash URLs.
 
 ## Data fetching
 
-- Use the existing hooks; do not call `useQuery` directly in pages.
+- Use the existing hooks; do not call `useQuery` directly in pages. List
+  pages, including Clients and Providers, call `usePagedList` directly.
 - Query keys keep the legacy shape:
   - `['products', { page, search, ...filters, limit }]`
   - `['product', id]`
@@ -187,9 +170,8 @@ restored. Playwright specs must use hash URLs.
   responses use the cursor shape `{ items, has_next, skip, limit }`. Provider
   search matches name, email, and phone; `contact_info` is not searched. The
   product write payload uses `low_stock_threshold`; the legacy
-  `min_stock`/`min_stock_quantity` names are not sent. Sales, purchase-order,
-  order-item, client, and provider pagination use `has_next`, never
-  `total`/`pages`.
+  `min_stock`/`min_stock_quantity` names are not sent. Pagination is
+  cursor-only: lists use `has_next`, and there is no total count or page range.
 - Keep `isLoading` for skeletons and `isFetching` for background refreshes.
 
 ### Dashboard
@@ -271,20 +253,8 @@ formatter tests.
 
 ## Testing
 
-```bash
-cd frontend
-pnpm lint
-pnpm test
-pnpm build
-pnpm test:e2e
-```
-
-- Unit/component tests: Vitest + Testing Library.
-- Hooks: test loading, success, error, pagination, invalidation.
-- E2E (Playwright): auth and user management are covered today. Pending
-  Playwright: inventory CRUD, sale creation with stock validation, order
-  receiving, and keyboard dialogs.
-- Every bug fix leaves a regression test.
+Commands and coverage live in [TESTING.md](TESTING.md). Every bug fix leaves a
+regression test.
 
 ## Boundaries
 

@@ -19,60 +19,9 @@ including the Colombian locale.
 
 ## Tokens
 
-Keep the token names used by the legacy app. Do not add parallel systems.
-
-```css
-:root {
-  --bg-page:#F6F7F9; --bg-page-2:#F1F4F8;
-  --surface:#FFFFFF; --surface-muted:#F2F4F7; --surface-sunken:#E9EEF5;
-  --surface-hover:#F1F5F9; --surface-press:#E9EEF5;
-  --border:#E7E9EC; --border-strong:#D1D5DB; --rule:#F0F1F3;
-  --ink-1:#111315; --ink-2:#5F6368; --ink-meta:#5A6067; --ink-3:#9AA0A6;
-  --accent:#FACC15; --accent-strong:#8A5A00;
-  --accent-soft:rgba(250,204,21,0.12); --accent-ring:rgba(250,204,21,0.35);
-  --success-ink:#047857; --success-bg:#ECFDF5;
-  --warning-ink:#B45309; --warning-bg:#FFFBEB;
-  --destructive-ink:#B91C1C; --destructive-bg:#FEF2F2;
-  --info-ink:#1D4ED8; --info-bg:#EFF6FF;
-  --neutral-ink:#475569; --neutral-bg:#F1F5F9;
-  --dark-ground:#101D30; --dark-surface:#17263D; --dark-surface-2:#1E304B;
-  --dark-anchor-to:#0E1A2B;
-  --dark-border:rgba(196,214,240,0.14);
-  --dark-border-strong:rgba(196,214,240,0.26);
-  --dark-ink-1:#F5F8FC; --dark-ink-2:#B9C7DA; --dark-ink-3:#90A2B8;
-  --dark-success:#6EE7B7; --dark-warning:#FCD34D;
-  --dark-destructive:#FCA5A5; --dark-info:#93C5FD;
-  --receipt-bg:#0D1828; --scrim:rgba(5,11,20,0.66);
-  --glass-panel-bg:rgba(250,252,255,0.88);
-  --glass-panel-bg-strong:rgba(250,252,255,0.92);
-  --glass-panel-border:rgba(255,255,255,0.62);
-  --glass-panel-border-soft:rgba(23,38,61,0.10);
-  --glass-panel-highlight:inset 0 1px 0 rgba(255,255,255,0.94);
-  --glass-panel-shadow:0 18px 48px -32px rgba(3,8,18,0.72);
-  --glass-panel-filter:blur(18px) saturate(150%);
-  --glass-chrome-from:rgba(15,27,45,0.80);
-  --glass-chrome-to:rgba(8,15,25,0.92);
-  --glass-chrome-border:rgba(196,214,240,0.16);
-  --glass-chrome-filter:blur(20px) saturate(125%);
-  --glass-overlay-bg:rgba(250,252,255,0.96);
-  --glass-overlay-shadow:0 32px 80px -32px rgba(3,8,18,0.82);
-  --glass-sheet-filter:blur(16px) saturate(130%);
-  --glass-popover-bg:rgba(252,253,255,0.98);
-  --glass-popover-shadow:0 18px 44px -24px rgba(3,8,18,0.62);
-  --glass-dark-bg:rgba(11,22,38,0.92);
-  --glass-dark-border:rgba(196,214,240,0.20);
-  --glass-dark-filter:blur(16px) saturate(130%);
-  --table-head-bg:#FBFCFE; --table-pinned-bg:#F9FBFE;
-  --table-rule:rgba(23,38,61,0.10); --table-row-hover:rgba(17,19,21,0.045);
-  --radius-card:12px; --radius-control:8px; --radius-chip:4px;
-  --radius-modal:16px; --radius-receipt:12px;
-  --shadow-float:0 8px 24px -12px rgba(15,23,42,0.22);
-  --shadow-modal:0 24px 56px -24px rgba(15,23,42,0.32);
-  --motion-fast:90ms; --motion-base:120ms; --motion-slow:160ms;
-  --ease-standard:cubic-bezier(.2,.8,.2,1);
-  --ease-out:cubic-bezier(.16,1,.3,1);
-}
-```
+Token definitions live in [`frontend/src/index.css`](../frontend/src/index.css).
+Keep the token names used by the legacy app and do not add parallel systems.
+Styling is CSS Modules plus those tokens; Tailwind is not used.
 
 Legacy aliases (`--bg`, `--radius`, semantic colors) stay until every page is
 migrated. Do not add a second token for a value that already exists.
@@ -206,22 +155,8 @@ Dialogs:
 
 ## Pages
 
-| Route | Page |
-|---|---|
-| `/#/login` | Login |
-| `/#/` | Dashboard |
-| `/#/inventory` | Inventory list + catalog tabs |
-| `/#/inventory/create` | Product create |
-| `/#/inventory/product/:id` | Product view/edit |
-| `/#/sales` | Sales list |
-| `/#/sales/create` | Sale create |
-| `/#/sales/:id` | Sale view/edit |
-| `/#/orders` | Purchase orders |
-| `/#/orders/create` | Order create |
-| `/#/orders/:id` | Order view/edit |
-| `/#/providers` | Providers |
-| `/#/clients` | Clients |
-| `/#/users` | Users (superuser) |
+The route table lives in [`frontend/src/App.tsx`](../frontend/src/App.tsx) and
+is documented in [FRONTEND.md](FRONTEND.md#routing).
 
 Preserve the existing breadcrumbs, page titles, KPI placement, filters, table
 columns, empty copy, and button names. UI copy stays Spanish.

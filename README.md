@@ -4,16 +4,6 @@ Desktop inventory management for a Colombian hardware store (ferretería).
 The application is a Wails v2 shell with an embedded React frontend and a Go
 REST API backed by PostgreSQL.
 
-## Status
-
-**Project status: feature-complete.** Implemented: Wails shell, embedded React app shell,
-loopback Go API, PostgreSQL and SQLite persistence behind ports/adapters, JWT
-auth, seed command, superuser-only Users CRUD, inventory catalog and products,
-clients, providers, supplier catalogs, sales, purchase orders, and the
-dashboard. SQLite holds the full business schema, so the same modules work
-offline. When the app falls back to SQLite, the UI shows a persistent offline
-banner on login and every screen.
-
 ## Why desktop
 
 The legacy web app is split into a React client (`../inventory-app`) and a
@@ -41,38 +31,6 @@ store counter, with no dependency on a remote web server.
 - `DB_MODE=auto` falls back to a local SQLite database when PostgreSQL is
   unreachable. `DB_MODE=postgres` and `DB_MODE=sqlite` force a backend.
 
-## Target stack
-
-| Layer | Technology |
-|---|---|
-| Shell | Wails v2 / Go 1.26 |
-| API | `net/http`, GORM, `goose` |
-| Database | PostgreSQL 17 primary; GORM outbound adapters; SQLite offline fallback |
-| UI | React 19, TypeScript 6, Vite 8 |
-| Data | TanStack Query v5, axios |
-| Forms | react-hook-form, zod |
-| Tests | Go `testing`, Vitest, Playwright |
-
-## Repository map
-
-```text
-AGENTS.md                  rules for every agent
-opencode.json              opencode config and legacy references
-.opencode/agents/          specialized agents
-docs/                      architecture, domain, API, role docs
-internal/domain/           entities and domain errors
-internal/ports/inbound/    use-case interfaces
-internal/ports/outbound/   repository and security interfaces
-internal/application/      use cases
-internal/adapters/inbound/httpapi/ inbound HTTP adapter
-internal/adapters/outbound/persistence/gormstore/ GORM outbound adapter
-internal/adapters/outbound/security/ JWT, bcrypt, refresh tokens
-```
-
-Current implementation: `main.go`, `app.go`, `main_bindings.go`,
-`wails.json`, `internal/`, `migrations/`, `cmd/`, `frontend/`, and the
-development `docker-compose.yml`.
-
 ## Prerequisites
 
 - Go 1.26+
@@ -86,48 +44,18 @@ WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`); the Makefile passes
 `-tags webkit2_41`. On Windows it is WebView2; on macOS it is the system
 WebKit.
 
-## Commands
+## Quickstart
 
 ```bash
-# Development database (PostgreSQL 17 on 127.0.0.1:5433)
 make db-up
-make db-down
-
-# Seed the first superuser
 SEED_EMAIL=admin@example.com SEED_PASSWORD='change-me-now' make seed
-
-# Run the desktop app (Linux passes -tags webkit2_41)
 make dev
-
-# Force the offline/local backend
-DB_MODE=sqlite make dev
-
-# Checks
-make test
-make lint
-go test -race ./...
-INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
-  go test -v ./internal/adapters/inbound/httpapi
-cd frontend && pnpm test:e2e
-
-# Production build
-make build
 ```
 
-`make dev` and `make build` use `-tags webkit2_41` on Linux. The browser
-fallback API base is `http://127.0.0.1:8787/api/v1`; run
-`go run ./cmd/server` for headless dev or Playwright.
-
-## Using the agents
-
-`manager` is the default agent. It frames work and delegates to the
-specialists. Developer roles (`frontend`, `backend`, `devops`, `qa`) are the
-only roles allowed to write code or commit. Non-developer reports are written
-under `docs/work/<role>/` only when a role needs a persistent deliverable; the
-directory is not tracked when empty.
-
-After changing `opencode.json` or any file in `.opencode/agents/`, restart
-opencode so the configuration reloads.
+`make build` produces a release binary. `make dev` and `make build` use
+`-tags webkit2_41` on Linux and source `.env` when present. See
+[docs/RELEASE.md](docs/RELEASE.md) for platform builds, signing, migrations,
+and release checks.
 
 ## Documentation
 

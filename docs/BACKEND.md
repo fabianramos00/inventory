@@ -26,97 +26,15 @@ framework. No new dependency without an entry in [DECISIONS.md](DECISIONS.md).
 
 ## Layout
 
-```text
-main.go                 Wails entry and server lifecycle
-app.go                  Wails bindings (GetAPIBaseURL)
-internal/
-  application/
-    auth.go             auth use cases
-    catalog.go          catalog validation and use cases
-    product.go          product validation, SKU generation, and use cases
-    client.go           client validation and use cases
-    sale.go             sale totals, statuses, stock, and item mutations
-    purchase_order.go   order totals, receiving, catalog upsert, item mutations
-    inventory.go
-    supply_chain.go
-    dashboard.go
-    users.go
-  ports/
-    inbound/
-      auth.go           AuthUseCase, LoginResult, TokenPair
-      catalog.go        CatalogUseCase, list and create/update inputs
-      product.go        ProductUseCase, filters, and partial-update inputs
-      client.go         ClientUseCase, list filter, and partial-update inputs
-      sale.go           SaleUseCase, filters, and create/update/item inputs
-      purchase_order.go PurchaseOrderUseCase, filters, and item inputs
-      dashboard.go      DashboardUseCase
-      users.go          UserUseCase, UserList, create/update inputs
-    outbound/
-      catalog.go        CatalogRepository and ProductRepository interfaces
-      client.go         ClientRepository interface
-      sale.go           SaleRepository interface
-      purchase_order.go PurchaseOrderRepository interface
-      dashboard.go      DashboardRepository interface
-      stock.go          StockRepository interface
-      uow.go            UnitOfWork and TxRepos
-      users.go          UserRepository interface
-      refresh_tokens.go RefreshTokenRepository interface
-      password_hasher.go
-      access_token_issuer.go
-      refresh_token_service.go
-  domain/
-    catalog.go          Category, Brand, Material, MeasurementUnit, Product
-    client.go           Client
-    purchase_order.go   PurchaseOrder and OrderItem
-    dashboard.go        Dashboard aggregate result types
-    user.go             User, RefreshToken (no JSON tags)
-    errors.go           domain sentinel errors (not found, conflict, validation, auth)
-  adapters/
-    inbound/
-      httpapi/
-        router.go       route table
-        middleware.go   auth, CORS, recovery, request ID, logging
-        response.go     JSON and error helpers
-        auth.go         auth handlers
-        catalog.go      catalog CRUD handlers and request/response DTOs
-        product.go      product CRUD, stats handlers, and money JSON DTOs
-        client.go       client CRUD handlers and request/response DTOs
-        sale.go         sale/item handlers, filters, and response DTOs
-        purchase_order.go order/item handlers and response DTOs
-        dashboard.go    dashboard handlers and response DTOs
-        user_dto.go     shared user response DTO and mapper
-        users.go        user CRUD handlers and superuser guard
-    outbound/
-      persistence/
-        gormstore/
-          timestamp.go  fixed-width UTC Timestamp type
-          catalog.go    catalog models and repositories
-          product.go    product queries and money normalization
-          client.go     client queries and timestamp round-trip
-          sale.go       sale/item queries, status mapping, money conversion
-          purchase_order.go order/item queries, status mapping, receiving lock
-          dashboard.go  aggregate queries, Bogota date buckets, money conversion
-          stock.go      sorted locking and conditional stock deltas
-          uow.go        transaction boundary and tx-bound stores
-          user_model.go
-          refresh_token_model.go
-          users.go      UserRepository
-          refresh_tokens.go RefreshTokenRepository
-      security/
-        jwt.go          AccessTokenIssuer
-        password.go     PasswordHasher
-        refresh.go      RefreshTokenService
-  config/
-    config.go
-  db/
-    postgres.go         OpenPostgresGORM, MigratePostgres
-    sqlite.go           OpenSQLiteGORM, MigrateSQLite
-  bootstrap/
-    database.go         DB_MODE selection and store wiring
-migrations/
-  postgres/
-  sqlite/
-```
+- `main.go`, `app.go`, `main_bindings.go`: Wails entry, lifecycle, and bindings.
+- `internal/application/`: use cases; imports only domain and ports.
+- `internal/ports/{inbound,outbound}/`: use-case and repository/security interfaces.
+- `internal/domain/`: entities and domain errors (no database or HTTP tags).
+- `internal/adapters/inbound/httpapi/`: router, middleware, handlers, HTTP DTOs.
+- `internal/adapters/outbound/persistence/gormstore/`: GORM models and repositories.
+- `internal/adapters/outbound/security/`: JWT, bcrypt, refresh-token crypto.
+- `internal/{config,db,bootstrap}/`: configuration, database open/migrate, wiring.
+- `migrations/{postgres,sqlite}/`: embedded goose SQL files.
 
 Dependency direction: `adapters/inbound/httpapi → ports/inbound ← application → ports/outbound ← adapters/outbound/{persistence,security}`.
 The domain package is shared. Application services depend only on inbound and
@@ -528,6 +446,9 @@ is used. Generate and persist `SECRET_KEY` when missing.
   embedded with `embed.FS`.
 - Naming: `00001_enums.sql`, `00002_catalog.sql`, `00003_identity.sql`,
   `00004_products.sql`, `00005_purchases.sql`, `00006_sales.sql`.
+- PostgreSQL integer ids use `GENERATED BY DEFAULT AS IDENTITY`. The legacy
+  per-table `id` and name indexes (`ix_*_id`, `ix_products_name`,
+  `ix_providers_name`, `ix_users_full_name`) are gone.
 - The initial schema is split by domain across versions 1–6; future changes
   get one new file each (`00007_add_index.sql`).
 - The split changed the baseline: databases created before the split must be
@@ -574,10 +495,11 @@ generic detail; log the cause with the request ID.
 
 ```bash
 go test ./...
+go test -race ./...
 go vet ./...
 gofmt -w .
-go run .            # dev once the Wails scaffold exists
-wails build
+make dev
+make build
 ```
 
 ## Boundaries

@@ -24,15 +24,6 @@ WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`) only, so the 4.0 ABI is unavailable.
 The development database is PostgreSQL 17 from `docker-compose.yml`, exposed
 on port `5433`.
 
-## Scope
-
-This release includes the Wails shell, PostgreSQL and SQLite persistence behind
-ports/adapters, authentication, the seed command, and every business module:
-catalog, products, clients, providers, supplier catalogs, sales, purchase
-orders, and the dashboard. The full SQLite business schema is available, so
-the release supports both the PostgreSQL primary and the offline SQLite
-backend.
-
 ## Versioning
 
 - Semantic versioning: `MAJOR.MINOR.PATCH`.
@@ -68,11 +59,12 @@ database is required only when the built app runs, or for seed and parity
 tests.
 
 The `Makefile` wraps the same steps: `make dev`, `make build`, `make test`,
-`make lint`, `make db-up`, `make db-down`, and `make seed`. To seed the offline
-dataset, run `DB_MODE=sqlite SEED_EMAIL=... SEED_PASSWORD=... make seed`.
-Local SQLite accounts are separate from PostgreSQL accounts until sync exists. The `scripts/dev.sh`
-and `scripts/build.sh` wrappers source `.env` when it exists and call the
-matching make target.
+`make lint`, `make verify`, `make db-up`, `make db-down`, and `make seed`.
+`make dev` and `make build` source `.env` when present; `make dev` sets
+`APP_ENV=development`, while `make build` unsets `APP_ENV` and
+`ALLOW_DEV_ORIGINS`. To seed the offline dataset, run
+`DB_MODE=sqlite SEED_EMAIL=... SEED_PASSWORD=... make seed`. Local SQLite
+accounts are separate from PostgreSQL accounts until sync exists.
 
 Platform builds:
 
@@ -82,7 +74,8 @@ wails build -platform windows/amd64
 wails build -platform darwin/universal
 ```
 
-Artifacts land in `build/bin/`. Do not commit them.
+Artifacts land in `build/bin/`. Wails regenerates the `build/**` scaffold on
+build; do not commit scaffold files or binaries.
 
 Optional packaging:
 
@@ -127,59 +120,14 @@ Publish SHA-256 checksums with every artifact.
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push and pull request. It pins Go
-1.26, Node 24, and pnpm 12, and starts a PostgreSQL 17 service on port 5433
-with the `inventory` and `inventory_desktop_test` databases. The Go steps run
-with `INVENTORY_TEST_DATABASE_URL` pointed at the test database.
-
-The workflow runs, in order:
-
-1. `go test ./... -count=1`
-2. `go test -race ./... -count=1`
-3. `go vet ./...`
-4. `gofmt -l internal cmd main.go app.go` (must be empty)
-5. `govulncheck ./...`
-6. `pnpm install --frozen-lockfile`
-7. `pnpm lint`
-8. `pnpm test`
-9. `pnpm build`
-10. `pnpm audit --audit-level=high`
-
-A red step blocks the release. Do not skip tests to ship. `scripts/verify.sh`
-(also `make verify`) runs the same local checks, adding `git diff --check`;
-the PostgreSQL pass is skipped unless `INVENTORY_TEST_DATABASE_URL` is set.
+`.github/workflows/ci.yml` is the source of truth. It runs `make verify`, one
+`go test -race ./... -count=1`, and `govulncheck` via `go run`. A red step
+blocks the release; do not skip tests to ship.
 
 Wails platform builds and the FastAPI-vs-Go contract parity suite when
-`LEGACY_API_URL` is available remain release-time steps, not part of this
-first workflow. Playwright E2E is a documented follow-up: add it once the
-service/database setup is reliable in CI.
-
-```bash
-scripts/verify.sh
-```
-
-## Local release verification
-
-Verified on Linux amd64 (WebKitGTK 4.1):
-
-- Wails build: `pnpm install --frozen-lockfile && pnpm build` followed by
-  `wails build -tags webkit2_41` succeeded and produced
-  `build/bin/inventory-desktop`. The binary stays ignored and is not committed.
-- Backup/restore: `pg_dump` of `inventory_desktop_test` from the
-  `inventory-postgres-1` container restored into a throwaway
-  `inventory_desktop_restore_test` database. The restored database had the
-  same 16 public tables and matching representative rows (`users`,
-  `products`, `goose_db_version`); the restore database was dropped afterwards.
-- Full local suite: `scripts/verify.sh` with `INVENTORY_TEST_DATABASE_URL`
-  pointed at `inventory_desktop_test` passed gofmt, `go vet`, Go unit tests,
-  PostgreSQL tests, Vitest (197 tests), ESLint (warnings only), the frontend
-  build, and `git diff --check`.
-
-Blocked until credentials or other OS hosts are available:
-
-- Windows and macOS Wails builds and installer packaging.
-- Authenticode signing, Developer ID signing, and notarization.
-- Published SHA-256 checksums and the manual smoke test on Windows and macOS.
+`LEGACY_API_URL` is available remain release-time steps, not part of CI.
+Playwright E2E is a documented follow-up: add it once the service/database
+setup is reliable in CI.
 
 ## Release checklist
 
@@ -207,16 +155,3 @@ Blocked until credentials or other OS hosts are available:
 5. Record the incident and the failed version in the release notes.
 
 Never roll back only the binary if the schema changed.
-
-## Known release constraints
-
-- PostgreSQL must be provisioned separately.
-- Linux builds require WebKitGTK 4.1 and the `webkit2_41` build tag. Distros
-  that only provide WebKitGTK 4.0 are not supported by the current build.
-- Development PostgreSQL runs on port `5433` and must not be reused for
-  production data.
-- There is no auto-update mechanism yet.
-- SQLite is not encrypted at rest; the UI shows a persistent offline banner
-  whenever the app runs on the local backend.
-- Multi-station use requires a shared PostgreSQL server and a shared
-  `SECRET_KEY`.
