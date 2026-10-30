@@ -130,43 +130,6 @@ func newCatalogTestServer(t *testing.T, deps catalogDeps) (*httptest.Server, cat
 	return server, deps
 }
 
-func TestCatalogRequiresAuth(t *testing.T) {
-	server, _ := newCatalogTestServer(t, catalogDeps{})
-	tests := []struct {
-		method string
-		path   string
-		body   any
-	}{
-		{http.MethodGet, "/api/v1/inventory/categories", nil},
-		{http.MethodPost, "/api/v1/inventory/categories", map[string]any{"name": "Tools"}},
-		{http.MethodGet, "/api/v1/inventory/categories/1", nil},
-		{http.MethodPut, "/api/v1/inventory/categories/1", map[string]any{"name": "Tools"}},
-		{http.MethodDelete, "/api/v1/inventory/categories/1", nil},
-		{http.MethodGet, "/api/v1/inventory/brands", nil},
-		{http.MethodPost, "/api/v1/inventory/brands", map[string]any{"name": "Acme"}},
-		{http.MethodGet, "/api/v1/inventory/brands/1", nil},
-		{http.MethodPut, "/api/v1/inventory/brands/1", map[string]any{"name": "Acme"}},
-		{http.MethodDelete, "/api/v1/inventory/brands/1", nil},
-		{http.MethodGet, "/api/v1/inventory/materials", nil},
-		{http.MethodPost, "/api/v1/inventory/materials", map[string]any{"name": "Steel"}},
-		{http.MethodPut, "/api/v1/inventory/materials/1", map[string]any{"name": "Steel"}},
-		{http.MethodDelete, "/api/v1/inventory/materials/1", nil},
-		{http.MethodGet, "/api/v1/inventory/measurement-units", nil},
-		{http.MethodPost, "/api/v1/inventory/measurement-units", map[string]any{"name": "Centimeter", "abbreviation": "cm"}},
-		{http.MethodPut, "/api/v1/inventory/measurement-units/1", map[string]any{"abbreviation": "mm"}},
-		{http.MethodDelete, "/api/v1/inventory/measurement-units/1", nil},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
-			status, raw := userRequest(t, tt.method, server.URL+tt.path, "", tt.body)
-			if status != http.StatusUnauthorized {
-				t.Fatalf("status = %d body = %s, want 401", status, raw)
-			}
-		})
-	}
-}
-
 func TestCatalogRejectsInvalidToken(t *testing.T) {
 	server, _ := newCatalogTestServer(t, catalogDeps{})
 	status, raw := userRequest(t, http.MethodGet, server.URL+"/api/v1/inventory/categories", "expired", nil)

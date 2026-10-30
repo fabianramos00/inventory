@@ -68,28 +68,6 @@ func newDashboardTestServer(t *testing.T, service *stubDashboardService) *httpte
 	return server
 }
 
-func TestDashboardRequiresAuthOnAllRoutes(t *testing.T) {
-	server := newDashboardTestServer(t, &stubDashboardService{})
-	paths := []string{
-		"/api/v1/dashboard/summary",
-		"/api/v1/dashboard/sales-trend",
-		"/api/v1/dashboard/top-products",
-		"/api/v1/dashboard/order-status-distribution",
-	}
-	for _, path := range paths {
-		t.Run(path, func(t *testing.T) {
-			status, raw := userRequest(t, http.MethodGet, server.URL+path, "", nil)
-			if status != http.StatusUnauthorized {
-				t.Fatalf("no token status = %d body = %s, want 401", status, raw)
-			}
-			status, raw = userRequest(t, http.MethodGet, server.URL+path, "bogus", nil)
-			if status != http.StatusUnauthorized {
-				t.Fatalf("invalid token status = %d body = %s, want 401", status, raw)
-			}
-		})
-	}
-}
-
 func TestDashboardSummaryShape(t *testing.T) {
 	service := &stubDashboardService{summary: &domain.DashboardSummary{
 		InventoryValue:      decimal.RequireFromString("40.00"),

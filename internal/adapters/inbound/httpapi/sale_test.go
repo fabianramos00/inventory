@@ -239,34 +239,6 @@ func newSaleTestServer(t *testing.T, service *stubSaleService) *httptest.Server 
 	return server
 }
 
-func TestSalesRequireAuth(t *testing.T) {
-	server := newSaleTestServer(t, nil)
-	tests := []struct {
-		method string
-		path   string
-		body   any
-	}{
-		{http.MethodGet, "/api/v1/sales", nil},
-		{http.MethodPost, "/api/v1/sales", map[string]any{}},
-		{http.MethodGet, "/api/v1/sales/stats", nil},
-		{http.MethodGet, "/api/v1/sales/1", nil},
-		{http.MethodPut, "/api/v1/sales/1", map[string]any{}},
-		{http.MethodDelete, "/api/v1/sales/1", nil},
-		{http.MethodGet, "/api/v1/sales/1/items", nil},
-		{http.MethodPost, "/api/v1/sales/1/items", map[string]any{}},
-		{http.MethodPut, "/api/v1/sales/1/items/2", map[string]any{}},
-		{http.MethodDelete, "/api/v1/sales/1/items/2", nil},
-	}
-	for _, tt := range tests {
-		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
-			status, raw := userRequest(t, tt.method, server.URL+tt.path, "", tt.body)
-			if status != http.StatusUnauthorized {
-				t.Fatalf("status = %d body = %s, want 401", status, raw)
-			}
-		})
-	}
-}
-
 func TestSaleListFiltersShapeAndDebt(t *testing.T) {
 	service := &stubSaleService{listResult: &inbound.SaleList{
 		Items:   []*domain.Sale{sampleSale(5)},

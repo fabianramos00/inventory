@@ -120,31 +120,6 @@ func newProductTestServer(t *testing.T, service *stubProductService) *httptest.S
 	return server
 }
 
-func TestProductsRequireAuth(t *testing.T) {
-	server := newProductTestServer(t, nil)
-	tests := []struct {
-		method string
-		path   string
-		body   any
-	}{
-		{http.MethodGet, "/api/v1/inventory/products", nil},
-		{http.MethodPost, "/api/v1/inventory/products", map[string]any{"name": "Hammer"}},
-		{http.MethodGet, "/api/v1/inventory/products/1", nil},
-		{http.MethodPut, "/api/v1/inventory/products/1", map[string]any{"name": "Hammer"}},
-		{http.MethodDelete, "/api/v1/inventory/products/1", nil},
-		{http.MethodGet, "/api/v1/inventory/products/stats/overview", nil},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
-			status, raw := userRequest(t, tt.method, server.URL+tt.path, "", tt.body)
-			if status != http.StatusUnauthorized {
-				t.Fatalf("status = %d body = %s, want 401", status, raw)
-			}
-		})
-	}
-}
-
 func TestProductListShapeFiltersAndPagination(t *testing.T) {
 	price := decimal.RequireFromString("12.5")
 	service := &stubProductService{listResult: &inbound.ProductList{

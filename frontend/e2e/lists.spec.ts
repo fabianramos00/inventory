@@ -33,7 +33,7 @@ function providerRoutes(): Routes {
       const items = search
         ? [provider(99, `Ana ${search}`)]
         : Array.from({ length: 10 }, (_, index) => provider(skip + index + 1))
-      return { body: { items, total: 30, page: skip / 10 + 1, size: 10, pages: 3 } }
+      return { body: { items, has_next: skip + 10 < 30, skip, limit: 10 } }
     },
   }
 }
@@ -46,7 +46,7 @@ function userRoutes(): Routes {
       const items = search
         ? [user(99, `Ana ${search}`)]
         : Array.from({ length: 10 }, (_, index) => user(skip + index + 1))
-      return { body: { items, total: 30, page: skip / 10 + 1, size: 10, pages: 3 } }
+      return { body: { items, has_next: skip + 10 < 30, skip, limit: 10 } }
     },
   }
 }
@@ -84,8 +84,8 @@ const cases = [
     placeholder: 'Buscar proveedor por nombre o contacto...',
     firstRow: 'Proveedor 1',
     secondRow: 'Proveedor 11',
-    pageTwo: 'Página 2 de 3',
-    pageOne: 'Página 1 de 3',
+    pageTwo: 'Página 2',
+    pageOne: 'Página 1',
     routes: providerRoutes(),
   },
   {
@@ -95,8 +95,8 @@ const cases = [
     placeholder: 'Buscar usuario...',
     firstRow: 'Usuario 1',
     secondRow: 'Usuario 11',
-    pageTwo: 'Página 2 de 3',
-    pageOne: 'Página 1 de 3',
+    pageTwo: 'Página 2',
+    pageOne: 'Página 1',
     routes: userRoutes(),
   },
   {

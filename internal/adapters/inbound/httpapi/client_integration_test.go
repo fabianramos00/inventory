@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,10 +20,8 @@ import (
 	"inventory-desktop/internal/adapters/outbound/persistence/gormstore"
 	"inventory-desktop/internal/adapters/outbound/security"
 	"inventory-desktop/internal/application"
-	"inventory-desktop/internal/db"
 	"inventory-desktop/internal/domain"
 	"inventory-desktop/internal/ports/outbound"
-	"inventory-desktop/tests/testdb"
 )
 
 // HTTP-level client verification: real router, service, and GORM repository
@@ -88,48 +84,13 @@ func runClientBackendSuite(t *testing.T, b *ciBackend) {
 
 func newCiSQLiteBackend(t *testing.T) *ciBackend {
 	t.Helper()
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "inventory.sqlite")
-	gormDB, conn, err := db.OpenSQLiteGORM(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	if err := db.MigrateSQLite(ctx, conn); err != nil {
-		t.Fatal(err)
-	}
+	gormDB, conn := openTestDB(t, "sqlite")
 	return newCiBackend(t, "sqlite", gormDB, conn)
 }
 
 func newCiPostgresBackend(t *testing.T) *ciBackend {
 	t.Helper()
-	dsn := os.Getenv("INVENTORY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set INVENTORY_TEST_DATABASE_URL to run the postgres client integration suite")
-	}
-	ctx := context.Background()
-	release, err := testdb.Lock(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(release)
-
-	gormDB, conn, err := db.OpenPostgresGORM(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	if err := conn.PingContext(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.MigratePostgres(ctx, conn); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := conn.ExecContext(ctx, `TRUNCATE
-		refresh_tokens, users, clients, sales, sale_items
-		RESTART IDENTITY CASCADE`); err != nil {
-		t.Fatal(err)
-	}
+	gormDB, conn := openTestDB(t, "postgres")
 	return newCiBackend(t, "postgres", gormDB, conn)
 }
 
@@ -184,34 +145,7 @@ func newCiBackend(t *testing.T, name string, gormDB *gorm.DB, conn *sql.DB) *ciB
 
 func (b *ciBackend) request(t *testing.T, method, path string, body any, token *string) (int, []byte) {
 	t.Helper()
-	var reader io.Reader
-	if body != nil {
-		raw, err := json.Marshal(body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		reader = strings.NewReader(string(raw))
-	}
-	request, err := http.NewRequest(method, b.server.URL+path, reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if body != nil {
-		request.Header.Set("Content-Type", "application/json")
-	}
-	if token != nil {
-		request.Header.Set("Authorization", "Bearer "+*token)
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	raw, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return response.StatusCode, raw
+	return doRequest(t, b.server, method, path, body, token)
 }
 
 func (b *ciBackend) authRequest(t *testing.T, method, path string, body any) (int, []byte) {
@@ -262,10 +196,6 @@ func ciAssertError(t *testing.T, status int, raw []byte, wantStatus int, wantCod
 		t.Fatalf("code = %q, want %q", body.Code, wantCode)
 	}
 	return body
-}
-
-func ciPtr(value string) *string {
-	return &value
 }
 
 func ciQuery(value string) string {

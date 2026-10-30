@@ -1,19 +1,15 @@
 import { expect, test } from '@playwright/test'
-
-const admin = {
-  email: 'admin@example.com',
-  password: 'admin12345',
-}
+import { ADMIN, uniqueSuffix } from './helpers'
 
 test('creates, searches, edits, toggles, and deletes a user against the real API', async ({ page }) => {
-  const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+  const suffix = uniqueSuffix()
   const name = `Usuario E2E ${suffix}`
   const editedName = `Usuario Editado ${suffix}`
   const email = `e2e.${suffix}@example.com`
 
   await page.goto('/#/login')
-  await page.getByLabel('Correo electrónico').fill(admin.email)
-  await page.getByLabel('Contraseña', { exact: true }).fill(admin.password)
+  await page.getByLabel('Correo electrónico').fill(ADMIN.email)
+  await page.getByLabel('Contraseña', { exact: true }).fill(ADMIN.password)
   await page.getByRole('button', { name: 'Ingresar' }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
 
@@ -28,7 +24,7 @@ test('creates, searches, edits, toggles, and deletes a user against the real API
   await createDialog.getByLabel('Correo Electrónico').fill(email)
   await createDialog.getByLabel('Contraseña', { exact: true }).fill('password123')
   await createDialog.getByRole('button', { name: 'Rol' }).click()
-  await createDialog.getByRole('button', { name: 'Usuario', exact: true }).click()
+  await createDialog.getByRole('option', { name: 'Usuario', exact: true }).click()
   await createDialog.getByRole('button', { name: 'Guardar' }).click()
   await expect(createDialog).toBeHidden()
 

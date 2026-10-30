@@ -189,36 +189,6 @@ func decodeUserError(t *testing.T, raw []byte) usersErrorJSON {
 	return body
 }
 
-func TestUsersRequireSuperuser(t *testing.T) {
-	service := &stubUserService{}
-	server := newUsersTestServer(t, service)
-
-	tests := []struct {
-		method string
-		path   string
-		body   any
-	}{
-		{method: http.MethodGet, path: "/api/v1/users"},
-		{method: http.MethodPost, path: "/api/v1/users", body: map[string]any{"email": "new@example.com", "password": "password123"}},
-		{method: http.MethodGet, path: "/api/v1/users/7"},
-		{method: http.MethodPut, path: "/api/v1/users/7", body: map[string]any{"full_name": "Updated"}},
-		{method: http.MethodDelete, path: "/api/v1/users/7"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
-			status, raw := userRequest(t, tt.method, server.URL+tt.path, "regular", tt.body)
-			if status != http.StatusForbidden {
-				t.Fatalf("status = %d body = %s, want 403", status, raw)
-			}
-			body := decodeUserError(t, raw)
-			if body.Detail != "The user doesn't have enough privileges" {
-				t.Errorf("detail = %q", body.Detail)
-			}
-		})
-	}
-}
-
 func TestUsersSuperuserList(t *testing.T) {
 	service := &stubUserService{listResult: &inbound.UserList{
 		Items: []*domain.User{

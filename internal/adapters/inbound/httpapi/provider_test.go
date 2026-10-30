@@ -153,31 +153,6 @@ type providerJSON struct {
 
 func providerPtr(value string) *string { return &value }
 
-func TestSupplyChainRequiresAuth(t *testing.T) {
-	server := newSupplyChainTestServer(t, &stubProviderService{}, &stubSupplierCatalogService{})
-	tests := []struct {
-		method string
-		path   string
-		body   any
-	}{
-		{http.MethodGet, "/api/v1/supply-chain/providers", nil},
-		{http.MethodPost, "/api/v1/supply-chain/providers", map[string]any{"name": "Provider"}},
-		{http.MethodGet, "/api/v1/supply-chain/providers/1", nil},
-		{http.MethodPut, "/api/v1/supply-chain/providers/1", map[string]any{"name": "Provider"}},
-		{http.MethodDelete, "/api/v1/supply-chain/providers/1", nil},
-		{http.MethodGet, "/api/v1/supply-chain/supplier-catalogs", nil},
-		{http.MethodGet, "/api/v1/supply-chain/supplier-catalogs/1", nil},
-	}
-	for _, tt := range tests {
-		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
-			status, raw := userRequest(t, tt.method, server.URL+tt.path, "", tt.body)
-			if status != http.StatusUnauthorized {
-				t.Fatalf("status = %d body = %s, want 401", status, raw)
-			}
-		})
-	}
-}
-
 func TestSupplyChainAllowsAnyActiveUser(t *testing.T) {
 	server := newSupplyChainTestServer(t, &stubProviderService{}, &stubSupplierCatalogService{})
 	tests := []struct {

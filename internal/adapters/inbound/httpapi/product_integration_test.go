@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -23,10 +21,8 @@ import (
 	"inventory-desktop/internal/adapters/outbound/persistence/gormstore"
 	"inventory-desktop/internal/adapters/outbound/security"
 	"inventory-desktop/internal/application"
-	"inventory-desktop/internal/db"
 	"inventory-desktop/internal/domain"
 	"inventory-desktop/internal/ports/outbound"
-	"inventory-desktop/tests/testdb"
 )
 
 // This file is an independent, HTTP-level verification of the products module.
@@ -160,50 +156,13 @@ func runProductBackendSuite(t *testing.T, backend *piBackend) {
 
 func newPISQLiteBackend(t *testing.T) *piBackend {
 	t.Helper()
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "inventory.sqlite")
-	gormDB, conn, err := db.OpenSQLiteGORM(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	if err := db.MigrateSQLite(ctx, conn); err != nil {
-		t.Fatal(err)
-	}
+	gormDB, conn := openTestDB(t, "sqlite")
 	return newPIBackend(t, "sqlite", gormDB, conn)
 }
 
 func newPIPostgresBackend(t *testing.T) *piBackend {
 	t.Helper()
-	dsn := os.Getenv("INVENTORY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set INVENTORY_TEST_DATABASE_URL to run the postgres product integration suite")
-	}
-	ctx := context.Background()
-	release, err := testdb.Lock(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(release)
-
-	gormDB, conn, err := db.OpenPostgresGORM(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	if err := conn.PingContext(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.MigratePostgres(ctx, conn); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := conn.ExecContext(ctx, `TRUNCATE
-		refresh_tokens, users, categories, materials, brands, measurement_units,
-		products, price_history, clients, providers, supplier_catalogs,
-		purchase_orders, order_items, sales, sale_items
-		RESTART IDENTITY CASCADE`); err != nil {
-		t.Fatal(err)
-	}
+	gormDB, conn := openTestDB(t, "postgres")
 	return newPIBackend(t, "postgres", gormDB, conn)
 }
 
@@ -322,42 +281,13 @@ func newPIBackend(t *testing.T, name string, gormDB *gorm.DB, conn *sql.DB) *piB
 
 func (b *piBackend) request(t *testing.T, method, path string, body any, token *string) (int, []byte) {
 	t.Helper()
-	var reader io.Reader
-	if body != nil {
-		raw, err := json.Marshal(body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		reader = strings.NewReader(string(raw))
-	}
-	request, err := http.NewRequest(method, b.server.URL+path, reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if body != nil {
-		request.Header.Set("Content-Type", "application/json")
-	}
-	if token != nil {
-		request.Header.Set("Authorization", "Bearer "+*token)
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	raw, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return response.StatusCode, raw
+	return doRequest(t, b.server, method, path, body, token)
 }
 
 func (b *piBackend) authRequest(t *testing.T, method, path string, body any) (int, []byte) {
 	t.Helper()
 	return b.request(t, method, path, body, &b.validToken)
 }
-
-func piStringPtr(value string) *string { return &value }
 
 func piNumber(value string) json.Number { return json.Number(value) }
 

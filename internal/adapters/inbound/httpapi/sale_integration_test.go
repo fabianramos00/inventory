@@ -8,10 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -22,10 +19,8 @@ import (
 	"inventory-desktop/internal/adapters/outbound/persistence/gormstore"
 	"inventory-desktop/internal/adapters/outbound/security"
 	"inventory-desktop/internal/application"
-	"inventory-desktop/internal/db"
 	"inventory-desktop/internal/domain"
 	"inventory-desktop/internal/ports/outbound"
-	"inventory-desktop/tests/testdb"
 )
 
 type siBackend struct {
@@ -313,50 +308,13 @@ func runSaleBackendSuite(t *testing.T, backend *siBackend) {
 
 func newSISQLiteBackend(t *testing.T) *siBackend {
 	t.Helper()
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "inventory.sqlite")
-	gormDB, conn, err := db.OpenSQLiteGORM(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	if err := db.MigrateSQLite(ctx, conn); err != nil {
-		t.Fatal(err)
-	}
+	gormDB, conn := openTestDB(t, "sqlite")
 	return newSIBackend(t, "sqlite", gormDB, conn)
 }
 
 func newSIPostgresBackend(t *testing.T) *siBackend {
 	t.Helper()
-	dsn := os.Getenv("INVENTORY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set INVENTORY_TEST_DATABASE_URL to run the postgres sale integration suite")
-	}
-	ctx := context.Background()
-	release, err := testdb.Lock(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(release)
-
-	gormDB, conn, err := db.OpenPostgresGORM(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	if err := conn.PingContext(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.MigratePostgres(ctx, conn); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := conn.ExecContext(ctx, `TRUNCATE
-		refresh_tokens, users, categories, materials, brands, measurement_units,
-		products, price_history, clients, providers, supplier_catalogs,
-		purchase_orders, order_items, sales, sale_items
-		RESTART IDENTITY CASCADE`); err != nil {
-		t.Fatal(err)
-	}
+	gormDB, conn := openTestDB(t, "postgres")
 	return newSIBackend(t, "postgres", gormDB, conn)
 }
 
@@ -459,32 +417,7 @@ func newSIBackend(t *testing.T, name string, gormDB *gorm.DB, conn *sql.DB) *siB
 
 func (b *siBackend) request(t *testing.T, method, path string, body any) (int, []byte) {
 	t.Helper()
-	var reader io.Reader
-	if body != nil {
-		raw, err := json.Marshal(body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		reader = strings.NewReader(string(raw))
-	}
-	request, err := http.NewRequest(method, b.server.URL+path, reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if body != nil {
-		request.Header.Set("Content-Type", "application/json")
-	}
-	request.Header.Set("Authorization", "Bearer "+b.token)
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	raw, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return response.StatusCode, raw
+	return doRequest(t, b.server, method, path, body, &b.token)
 }
 
 func (b *siBackend) stock(t *testing.T, productID int64) int {
