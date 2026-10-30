@@ -49,8 +49,11 @@ WebKit.
 ```bash
 make db-up
 SEED_EMAIL=admin@example.com SEED_PASSWORD='change-me-now' make seed
+make seed-catalogs
 make dev
 ```
+
+`make seed-catalogs` loads the default categories, brands, materials, and measurement units; it is idempotent and safe to re-run.
 
 `make build` produces a release binary. `make dev` and `make build` use
 `-tags webkit2_41` on Linux and source `.env` when present. See

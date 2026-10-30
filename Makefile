@@ -5,10 +5,10 @@ endif
 
 export SEED_EMAIL SEED_PASSWORD SEED_NAME
 
-.PHONY: help dev build test lint verify db-up db-down seed
+.PHONY: help dev build test lint verify db-up db-down seed seed-catalogs
 
 help:
-	@echo "Targets: dev build test lint verify db-up db-down seed"
+	@echo "Targets: dev build test lint verify db-up db-down seed seed-catalogs"
 
 dev:
 	@set -e; \
@@ -47,3 +47,6 @@ seed:
 	@test -n "$$SEED_EMAIL" || { echo "SEED_EMAIL is required"; exit 1; }
 	@test -n "$$SEED_PASSWORD" || { echo "SEED_PASSWORD is required"; exit 1; }
 	go run ./cmd/seed
+
+seed-catalogs:
+	go run ./cmd/seed-catalogs
