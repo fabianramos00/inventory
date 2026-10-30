@@ -75,20 +75,13 @@ export default function Sales() {
     setPage(1)
   }
 
-  function renderCobroCell(amountPaid: number, debtAmount: number, totalAmount: number) {
-    const pct = totalAmount > 0 ? Math.min((amountPaid / totalAmount) * 100, 100) : 100
+  function renderCobroCell(debtAmount: number, totalAmount: number) {
     return (
       <div className={styles.cobroCell}>
-        <span className={styles.cobroTotalRow}>
-          <span className={styles.cobroTotal}>{formatCurrency(totalAmount)}</span>
-          {debtAmount > 0 && <span className={styles.cobroDebt}>Debe {formatCurrency(debtAmount)}</span>}
+        <span className={styles.cobroTotal}>
+          {Number.isFinite(totalAmount) ? formatCurrency(totalAmount) : '—'}
         </span>
-        <span className={styles.cobroLine}>
-          <span>{formatCurrency(amountPaid)}</span>
-          <span className={styles.cobroSep}>/</span>
-          <span>{formatCurrency(totalAmount)}</span>
-        </span>
-        <progress className={styles.cobroBar} max={100} value={pct} aria-hidden="true" />
+        {debtAmount > 0 && <span className={styles.cobroDebt}>Debe {formatCurrency(debtAmount)}</span>}
       </div>
     )
   }
@@ -182,9 +175,9 @@ export default function Sales() {
             onRetry={refetch}
             loadingText="Cargando ventas..."
             emptyText="No se encontraron ventas."
-            minWidth="760px"
+            minWidth="940px"
             skeletonRows={5}
-            skeletonColumns={6}
+            skeletonColumns={8}
             stickyFirstColumn
             currentPage={page}
             hasNext={hasNext}
@@ -194,9 +187,11 @@ export default function Sales() {
             <thead>
               <tr>
                 <th scope="col" className={styles.colSale}>Venta</th>
+                <th scope="col" className={styles.colDate}>Fecha</th>
                 <th scope="col" className={styles.colClient}>Cliente</th>
                 <th scope="col" className={`${styles.colCobro} num`}>Total / Cobro</th>
-                <th scope="col" className={styles.colStatus}>Estado</th>
+                <th scope="col" className={styles.colPayment}>Estado pago</th>
+                <th scope="col" className={styles.colDelivery}>Entrega</th>
                 <th scope="col" className={styles.colUser}>Usuario</th>
                 <th scope="col" className={`${styles.colActions} num`}>Acciones</th>
               </tr>
@@ -205,22 +200,29 @@ export default function Sales() {
               {sales.map(s => (
                 <tr key={s.id}>
                   <td className={styles.colSale}>
-                    <button className={listStyles.codeLink} onClick={() => navigate(`/sales/${s.id}`)} title="Ver venta">
+                    <button
+                      className={listStyles.codeLink}
+                      onClick={() => navigate(`/sales/${s.id}`)}
+                      title="Ver venta"
+                      aria-label={`Ver venta #${s.id}`}
+                    >
                       #{s.id}
                     </button>
-                    <span className={styles.cellSubline}>{formatDate(s.created_at)}</span>
+                  </td>
+                  <td className={`${styles.colDate} ${listStyles.dateCell}`}>
+                    {s.created_at ? formatDate(s.created_at) : '—'}
                   </td>
                   <td><span className={listStyles.customerCell}>{s.client?.name ?? <span className={styles.emptyCell}>Sin cliente</span>}</span></td>
-                  <td className={`${styles.colCobro} num`}>{renderCobroCell(s.amount_paid, s.debt_amount, s.total_amount)}</td>
-                  <td className={styles.colStatus}>
-                    <div className={styles.statusCell}>
-                      <span className={'badge ' + (paymentStatusBadge[s.payment_status] ?? 'badge--neutral')}>
-                        {paymentStatusLabel[s.payment_status] ?? s.payment_status}
-                      </span>
-                      <span className={styles.deliveryLine}>
-                        Entrega: {deliveryStatusLabel[s.delivery_status] ?? s.delivery_status}
-                      </span>
-                    </div>
+                  <td className={`${styles.colCobro} num`}>{renderCobroCell(s.debt_amount, s.total_amount)}</td>
+                  <td className={styles.colPayment}>
+                    <span className={'badge ' + (paymentStatusBadge[s.payment_status] ?? 'badge--neutral')}>
+                      {paymentStatusLabel[s.payment_status] ?? s.payment_status}
+                    </span>
+                  </td>
+                  <td className={styles.colDelivery}>
+                    <span className={styles.deliveryText} data-status={s.delivery_status}>
+                      {deliveryStatusLabel[s.delivery_status] ?? s.delivery_status}
+                    </span>
                   </td>
                   <td className={styles.colUser}><span className={styles.userCell}>{s.created_by.full_name}</span></td>
                   <td className={`${styles.colActions} num`}>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Sales from './Sales'
@@ -29,7 +29,7 @@ function sale(overrides: Record<string, unknown> = {}) {
     delivery_status: 'pending',
     payment_method: 'cash',
     client_id: 5,
-    created_at: '2026-01-02T03:04:05Z',
+    created_at: '2026-01-15T12:00:00Z',
     updated_at: null,
     created_by_id: 2,
     created_by: { id: 2, full_name: 'Ana Pérez', email: 'ana@example.com', is_active: true, is_superuser: false },
@@ -53,7 +53,7 @@ function baseResult(overrides: Record<string, unknown> = {}) {
 }
 
 function renderSales() {
-  render(
+  return render(
     <MemoryRouter initialEntries={['/sales']}>
       <Sales />
     </MemoryRouter>,
@@ -77,7 +77,24 @@ describe('Sales list', () => {
     expect(screen.getByText('Carlos Ruiz')).toBeTruthy()
     expect(screen.getByText('Ana Pérez')).toBeTruthy()
     expect(screen.getByText('Parcial')).toBeTruthy()
-    expect(screen.getByText('Entrega: Pendiente')).toBeTruthy()
+  })
+
+  it('renders the split columns with independent payment and delivery states', () => {
+    const { container } = renderSales()
+
+    const headers = screen.getAllByRole('columnheader').map(th => th.textContent)
+    expect(headers).toEqual(['Venta', 'Fecha', 'Cliente', 'Total / Cobro', 'Estado pago', 'Entrega', 'Usuario', 'Acciones'])
+
+    const row = screen.getByText('Carlos Ruiz').closest('tr')!
+    expect(within(row).getByRole('button', { name: 'Ver venta #1' })).toBeTruthy()
+    expect(within(row).getByText('15/01/2026')).toBeTruthy()
+    expect(within(row).getByText('Parcial')).toBeTruthy()
+    expect(within(row).getByText('Pendiente')).toBeTruthy()
+
+    const moneyTexts = within(row).getAllByText(/\$/).map(node => node.textContent)
+    expect(moneyTexts).toEqual(['$ 100,00', 'Debe $ 40,00'])
+
+    expect(container.querySelector('progress')).toBeNull()
   })
 
   it('moves to the next page only while the cursor reports has_next', async () => {
