@@ -27,6 +27,7 @@ var businessTableNames = []string{
 	"providers",
 	"purchase_orders",
 	"sale_items",
+	"sale_payments",
 	"sales",
 	"supplier_catalogs",
 }
@@ -44,6 +45,7 @@ var publicTableNames = []string{
 	"purchase_orders",
 	"refresh_tokens",
 	"sale_items",
+	"sale_payments",
 	"sales",
 	"supplier_catalogs",
 	"users",
@@ -84,6 +86,7 @@ func TestSQLiteBusinessSchemaColumnTypes(t *testing.T) {
 		{"price_history", "new_price"},
 		{"sales", "total_amount"},
 		{"sales", "amount_paid"},
+		{"sale_payments", "amount"},
 		{"sale_items", "unit_price"},
 		{"sale_items", "subtotal"},
 		{"order_items", "unit_cost"},
@@ -102,6 +105,7 @@ func TestSQLiteBusinessSchemaColumnTypes(t *testing.T) {
 		{"clients", "updated_at"},
 		{"sales", "created_at"},
 		{"sales", "updated_at"},
+		{"sale_payments", "created_at"},
 		{"price_history", "changed_at"},
 		{"purchase_orders", "order_date"},
 	}
@@ -379,8 +383,12 @@ func seedRepresentativeRows(t *testing.T, conn *sql.DB) seedIDs {
 		orderID, ids.productID, 2, 90000, 180000, "PROV-SKU-1",
 	)
 	ids.saleID = insert(
-		`INSERT INTO sales (created_at, updated_at, total_amount, amount_paid, payment_method, created_by_id, client_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		schemaTestTimestamp, schemaTestTimestamp, 123456, 123456, "CASH", ids.userID, clientID,
+		`INSERT INTO sales (created_at, updated_at, total_amount, amount_paid, created_by_id, client_id) VALUES (?, ?, ?, ?, ?, ?)`,
+		schemaTestTimestamp, schemaTestTimestamp, 123456, 123456, ids.userID, clientID,
+	)
+	insert(
+		`INSERT INTO sale_payments (sale_id, amount, payment_method, created_at, created_by_id) VALUES (?, ?, ?, ?, ?)`,
+		ids.saleID, 123456, "CASH", schemaTestTimestamp, ids.userID,
 	)
 	insert(
 		`INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, subtotal, delivered_quantity) VALUES (?, ?, ?, ?, ?, ?)`,
