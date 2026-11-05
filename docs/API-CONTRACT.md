@@ -208,12 +208,15 @@ is `422`. Product `price` and `cost` round half away from zero to two decimals.
 | POST | `/sales` | `payment_method?`, `amount_paid`, `client_id?`, `items[]` |
 | GET | `/sales/stats` | `unpaid_count`, `undelivered_count`, `total_amount_sum`, `amount_paid_sum` |
 | GET | `/sales/{id}` | |
-| PUT | `/sales/{id}` | `payment_method?`, `amount_paid?`, `client_id?` |
-| DELETE | `/sales/{id}` | Restores stock |
+| PUT | `/sales/{id}` | `client_id?` only |
+| DELETE | `/sales/{id}` | Restores stock and cascades payments |
 | GET | `/sales/{id}/items` | `skip`, `limit` |
 | POST | `/sales/{id}/items` | `product_id`, `quantity`, `delivered_quantity?`, `unit_price?` |
 | PUT | `/sales/{id}/items/{item_id}` | Partial |
 | DELETE | `/sales/{id}/items/{item_id}` | Restores stock |
+| GET | `/sales/{id}/payments` | `skip`, `limit` |
+| POST | `/sales/{id}/payments` | `amount`, `payment_method` |
+| DELETE | `/sales/{id}/payments/{payment_id}` | Returns the updated sale |
 
 #### Clients
 
@@ -262,7 +265,6 @@ Sale response:
   "debt_amount": 15.95,
   "payment_status": "partial",
   "delivery_status": "partial",
-  "payment_method": "cash",
   "amount_paid": 5.25,
   "client_id": 9,
   "created_at": "2026-10-24T15:04:05Z",
@@ -292,8 +294,8 @@ Sale response:
   by the client; it comes from the bearer token.
 - `client` is the full client object or `null`.
 - `payment_status` is `pending`, `partial`, or `paid`; `delivery_status` is
-  `pending`, `partial`, or `delivered`; `payment_method` is `cash`, `credit`,
-  `debit`, or `null`.
+  `pending`, `partial`, or `delivered`. Sale responses do not include
+  `payment_method`; method belongs to each payment row.
 - Every list and detail response includes both relations.
 - Lists order `id DESC`. `start_date` and `end_date` are RFC 3339 instants and
   inclusive. Invalid dates or enum values return `422 VALIDATION_ERROR`.
@@ -329,12 +331,58 @@ Creating a sale requires at least one item. One item per product per sale.
 `unit_price` defaults to the product price. The server calculates subtotals,
 total, payment status, and delivery status.
 
-Known legacy gap to preserve in v1:
+`amount_paid` is the sum of the sale's payment rows:
 
-- `amount_paid > total_amount` is accepted and the sale becomes `paid`; the UI
-  prevents it but the API does not. PostgreSQL does enforce
-  `delivered_quantity <= quantity`, so the create path must surface that
-  constraint as a readable error.
+- `amount_paid > 0` requires `payment_method` and creates one initial payment
+  with the authenticated user and the current UTC time.
+- `amount_paid = 0` creates no payment and rejects a supplied
+  `payment_method`.
+- `amount_paid > total_amount` is `422`.
+- `PUT /sales/{id}` accepts only `client_id`; `amount_paid` and
+  `payment_method` are rejected as unknown fields (`422`).
+- `GET /sales?payment_method=` matches sales with at least one payment using
+  that method.
+
+#### Sale payments
+
+Payment item:
+
+```json
+{
+  "id": 4,
+  "sale_id": 1,
+  "amount": 5.25,
+  "payment_method": "cash",
+  "created_at": "2026-10-24T15:04:05Z",
+  "created_by_id": 2,
+  "created_by": {
+    "id": 2,
+    "full_name": "Ana Pérez",
+    "email": "ana@example.com",
+    "is_active": true,
+    "is_superuser": false
+  }
+}
+```
+
+- `GET /sales/{id}/payments` returns the standard paginated shape ordered
+  `id DESC`; `limit` defaults to 100 and is capped at 200. Missing sale is
+  `404 Sale not found`.
+- `POST /sales/{id}/payments` requires `amount > 0` (rounded to two decimals),
+  `amount <= remaining debt`, and `payment_method` in `cash|credit|debit`.
+  A paid sale or overpayment is `422`; missing sale is `404 Sale not found`.
+- A successful insert or delete recomputes `amount_paid`,
+  `payment_status`, and `debt_amount`, and returns the updated sale.
+- `DELETE /sales/{id}/payments/{payment_id}` hard-deletes the row. A missing
+  sale or payment is `404` (`Sale not found` / `Sale payment not found`).
+- `payment_method` is nullable only for backfilled legacy rows whose old sale
+  method was null.
+- Deleting a sale cascades its payments.
+
+Deliberate divergence from the legacy API: overpayment is now rejected on
+sale creation and new payments, and `amount_paid`/`payment_method` are no
+longer editable on `PUT /sales/{id}`. See
+[DECISIONS.md](DECISIONS.md#adr-0022--sale-payments-are-a-hard-delete-ledger).
 
 ### Supply chain
 
@@ -555,8 +603,9 @@ Time, empty data, and status details:
 
 ## Endpoint count
 
-67 legacy endpoints plus `GET /healthz`. The parity matrix in
-[TESTING.md](TESTING.md) tracks each one.
+67 legacy endpoints plus three sale-payment endpoints and `GET /healthz`. The
+parity matrix in [TESTING.md](TESTING.md) tracks each one; the payment ledger
+is an approved additive divergence.
 
 ## Parity rules
 

@@ -336,3 +336,46 @@ Encryption at rest is deferred.
 **Consequences:** Operators must protect the device and any backups of the
 SQLite file. The fallback is no longer silent because the UI surfaces it.
 Encryption at rest and sync each require a future ADR before implementation.
+
+## ADR-0022 — Sale payments are a hard-delete ledger
+
+**Status:** Accepted
+
+**Context:** The legacy sale stored one mutable `amount_paid` and one optional
+`payment_method`. The store needs several payments per sale, a history visible
+in the sale detail, and the method attached to each payment instead of a sale.
+The legacy API also accepted overpayment.
+
+**Decision:**
+
+- Add `sale_payments` with one row per received payment. Each row stores
+  `amount`, `payment_method`, `created_at`, and `created_by_id`; `sale_id`
+  cascades on sale delete.
+- Keep `sales.amount_paid` as a cache of `SUM(sale_payments.amount)`. Every
+  payment insert/delete recomputes the cache from scratch inside the same
+  transaction and re-derives `payment_status` and `debt_amount`. Never use
+  incremental `+=`.
+- Payments are hard-deleted. There is no void flag, reversal row, or audit
+  trail. This keeps the ledger simple and matches the product scope, but it is
+  not accounting-grade: deleting a payment erases the only trace that it
+  existed.
+- Remove `sales.payment_method`. `POST /sales` still accepts
+  `payment_method` only when `amount_paid > 0`, and uses it for the single
+  opening payment; zero paid rejects a supplied method. `PUT /sales/{id}`
+  accepts only `client_id`.
+- Migration `00007_sale_payments` creates the table, backfills exactly one
+  opening payment for every sale with `amount_paid > 0` (copying the old
+  method, creator, and sale timestamp), adds the payment index, then drops the
+  sale column. Legacy rows with a null method keep a null payment method; no
+  row is created for `amount_paid = 0`.
+- Reject overpayment on sale creation and on new payments with `422` when
+  `amount > remaining debt`. Existing legacy overpaid sales remain readable
+  and can still have payments deleted. `payment_method` on a sale filter
+  matches any payment with that method via `EXISTS`.
+
+**Consequences:** The Go API deliberately diverges from the legacy API for
+overpayment and for `PUT /sales/{id}`; any parity fixture that exercised those
+legacy behaviors must be updated. Deletion is unaudited, so reconciliation
+relies on the sale row and backups. The sale row is locked during payment and
+amount-affecting mutations so the cached total cannot be overwritten by a
+stale item recalculation.

@@ -332,12 +332,14 @@ Never log passwords, tokens, authorization headers, or full request bodies.
 ## Sales
 
 - Endpoints under `/api/v1/sales`: list, create, stats, get, update, delete,
-  item list/add/update/delete. All require an active user.
+  item list/add/update/delete, and payment list/create/delete. All require an
+  active user.
 - The response shape is `{id, total_amount, debt_amount, payment_status,
-  delivery_status, payment_method, amount_paid, client_id, created_at,
-  updated_at, created_by_id, created_by, client}`. `created_by` is the full
-  user without password fields; `client` is the full client or `null`.
-  `debt_amount` is `max(total_amount - amount_paid, 0)`.
+  delivery_status, amount_paid, client_id, created_at, updated_at,
+  created_by_id, created_by, client}`. `created_by` is the full user without
+  password fields; `client` is the full client or `null`. Sale responses do
+  not include `payment_method`. `debt_amount` is
+  `max(total_amount - amount_paid, 0)`.
 - Lists support `user_id`, `client_id`, `no_client`, `start_date`, `end_date`,
   `payment_status`, `delivery_status`, and `payment_method`. Dates are RFC 3339
   and inclusive; invalid dates or enum values are `422`. Ordering is `id DESC`
@@ -347,13 +349,26 @@ Never log passwords, tokens, authorization headers, or full request bodies.
   product price. Totals, payment status, and delivery status are derived by
   the service. `created_by_id` comes from the authenticated user, never from
   the body.
-- Update is partial: omitted fields stay unchanged, `payment_method` and
-  `client_id` accept `null` to clear, and `amount_paid` must be present and
-  non-negative when supplied. Overpayment is accepted and marks the sale
-  `paid`, preserving legacy behavior.
+- `sales.amount_paid` is a cache of the sum of `sale_payments.amount`.
+  `POST /sales` with `amount_paid > 0` requires a method and inserts exactly
+  one opening payment for the authenticated user; zero paid inserts none.
+  `amount_paid > total_amount` is `422`.
+- Update accepts only `client_id`; omitted stays unchanged and `null` clears.
+  `amount_paid` and `payment_method` are rejected as unknown fields (`422`).
 - Item mutations adjust stock by the quantity delta, recalculate the sale,
   and set `updated_at`. Deleting a sale or one of its items restores stock.
-  An empty sale has total `0` and both statuses `pending`.
+  Deleting a sale cascades its payment rows. An empty sale has total `0` and
+  both statuses `pending`.
+- Payment list is ordered `id DESC` with the shared pagination rules. Each
+  payment returns `{id, sale_id, amount, payment_method, created_at,
+  created_by_id, created_by}`; `created_by` is the full user without password
+  fields. Legacy backfilled rows may have a null method or creator.
+- Creating or deleting a payment locks the sale row, validates against the
+  remaining debt, recomputes `amount_paid` from `SUM(sale_payments.amount)`
+  (never `+=`), then re-derives status, debt, and `updated_at` in the same
+  transaction. A paid sale or an amount above the debt is `422`.
+- `GET /sales?payment_method=` uses `EXISTS` against `sale_payments`, so it
+  matches sales paid with that method at least once.
 - Status values are lowercase in the API and uppercase in the database. The
   adapter maps explicitly; see [DOMAIN.md](DOMAIN.md#database-representation).
 - Item list responses are ordered `id ASC` and include product name/SKU plus
@@ -404,12 +419,30 @@ BEGIN
 COMMIT
 ```
 
-Any failure rolls back the whole sale. Item mutations use the same boundary,
-adjusting stock by the delta, recalculating the sale, and setting
-`updated_at`. Deleting a sale locks the product ids, restores each item
-quantity, deletes the items, then deletes the sale. PostgreSQL serializes
-competing stock writers with `SELECT ... FOR UPDATE`; SQLite uses its single
-connection. The same rule applies to order receiving.
+Any failure rolls back the whole sale. If `amount_paid > 0`, the same
+transaction inserts its opening payment and recomputes the cached total.
+
+Sale and payment mutations lock the sale row before reading or writing
+`amount_paid`:
+
+```text
+BEGIN
+  SELECT ... FROM sales WHERE id = ? FOR UPDATE      -- SQLite: write txn
+  read amount_paid / validate remaining debt
+  insert or delete sale_payments row
+  amount_paid = SUM(sale_payments.amount) for this sale
+  update payment_status, debt_amount, updated_at
+COMMIT
+```
+
+The lock is taken by `Update`, item add/update/delete, recalculation, sale
+delete, and payment insert/delete. A stale item recalculation therefore cannot
+overwrite a committed payment. Item mutations use the same boundary, adjusting
+stock by the delta and recalculating the sale. Deleting a sale locks the
+product ids, restores each item quantity, deletes the items, then deletes the
+sale (payments cascade). PostgreSQL serializes competing writers with
+`SELECT ... FOR UPDATE`; SQLite forces a write transaction before the read.
+The same stock rule applies to order receiving.
 
 Order receiving:
 
@@ -467,18 +500,22 @@ TCP timeout. The `auto` probe keeps its 3-second timeout.
 - SQL files live under `migrations/postgres/` and `migrations/sqlite/`, each
   embedded with `embed.FS`.
 - Naming: `00001_enums.sql`, `00002_catalog.sql`, `00003_identity.sql`,
-  `00004_products.sql`, `00005_purchases.sql`, `00006_sales.sql`.
+  `00004_products.sql`, `00005_purchases.sql`, `00006_sales.sql`,
+  `00007_sale_payments.sql`.
 - PostgreSQL integer ids use `GENERATED BY DEFAULT AS IDENTITY`. The legacy
   per-table `id` and name indexes (`ix_*_id`, `ix_products_name`,
   `ix_providers_name`, `ix_users_full_name`) are gone.
-- The initial schema is split by domain across versions 1–6; future changes
-  get one new file each (`00007_add_index.sql`).
+- The initial schema is split by domain across versions 1–6; version 7 adds
+  the sale payment ledger, backfills one opening payment per paid sale, and
+  drops `sales.payment_method`. SQLite rebuilds `sales` to remove the column
+  and its table CHECK. Future changes get one new file each.
 - The split changed the baseline: databases created before the split must be
   recreated. A goose row for version `1` alone is not a valid baseline for the
   split set.
 - SQLite uses goose dialect `sqlite3`. Version 1 creates the auth tables
   (`users`, `refresh_tokens`); versions 2–6 create the full business schema
-  split by domain: catalog, identity, products, purchases, sales.
+  split by domain: catalog, identity, products, purchases, sales; version 7
+  adds `sale_payments` and rebuilds `sales` inside one atomic migration.
 - The catalog, product, client, provider, supplier catalog, purchase order,
   and sales repositories and handlers are implemented. Dashboard aggregates
   are implemented and contract-tested on both backends. Do not translate

@@ -43,8 +43,9 @@ number.
 | Entity | Key fields | Rules |
 |---|---|---|
 | `Client` | `name`, `identity_card` unique optional, `email`, `phone` | A sale may have no client |
-| `Sale` | `total_amount`, `amount_paid`, `payment_status`, `payment_method`, `delivery_status`, `client_id`, `created_by_id` | Totals are server-calculated |
+| `Sale` | `total_amount`, `amount_paid`, `payment_status`, `delivery_status`, `client_id`, `created_by_id` | Totals and `amount_paid` are server-calculated; `amount_paid` is the sum of its payment rows |
 | `SaleItem` | `sale_id`, `product_id`, `quantity`, `delivered_quantity`, `unit_price`, `subtotal` | One row per product per sale |
+| `SalePayment` | `sale_id`, `amount`, `payment_method`, `created_at`, `created_by_id` | Append/delete ledger row; hard delete, no void state |
 
 ### Supply chain
 
@@ -133,9 +134,10 @@ Several legacy defaults are Python-side only and are absent from PostgreSQL:
    `quantity`. PostgreSQL enforces this with `ck_sale_items_delivered_valid`;
    the legacy add/update item paths also validate it. The create path must map
    the database constraint violation to a readable `400`/`422`.
-3. `amount_paid` is non-negative. The UI prevents overpayment. The legacy API
-   accepts `amount_paid > total_amount` and marks the sale paid; preserve that
-   behavior in v1 and record the gap.
+3. `amount_paid` is non-negative and equals the sum of the sale's payment
+   rows. New sales and new payments reject `amount > remaining debt` with
+   `422`; existing legacy overpaid sales remain readable. Payment amounts are
+   positive and rounded to two decimals.
 4. Sale creation decrements stock atomically. Insufficient stock rejects the
    whole sale.
 5. Deleting a sale restores stock for every item.
@@ -219,6 +221,6 @@ Known quirks:
 | Category / brand / material / unit | Fails if referenced by products |
 | Client | Fails if referenced by sales; the FK must not cascade-delete sales |
 | Provider | Fails if referenced by orders or catalogs |
-| Sale | Deletes items and restores stock |
+| Sale | Deletes items and payment rows, and restores stock |
 | Purchase order | Deletes items; received stock is not reversed |
 | User | Fails or cascades refresh tokens; historical `created_by_id` may become null |
