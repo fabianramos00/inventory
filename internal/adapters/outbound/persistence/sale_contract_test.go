@@ -91,7 +91,6 @@ func testSales(t *testing.T, repos *repositories) {
 		DebtAmount:     saleDecimal("16.20"),
 		PaymentStatus:  domain.PaymentStatusPartial,
 		DeliveryStatus: domain.DeliveryStatusPartial,
-		PaymentMethod:  saleString(domain.PaymentMethodCash),
 		ClientID:       &client.ID,
 		CreatedByID:    user.ID,
 	}
@@ -106,6 +105,19 @@ func testSales(t *testing.T, repos *repositories) {
 	if created.ID <= 0 {
 		t.Fatalf("Create returned id %d, want a positive id", created.ID)
 	}
+	openingPayment, err := repos.sales.CreatePayment(ctx, &domain.SalePayment{
+		SaleID:        created.ID,
+		Amount:        saleDecimal("5.00"),
+		PaymentMethod: saleString(domain.PaymentMethodCash),
+		CreatedAt:     createdAt,
+		CreatedByID:   &user.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if openingPayment.ID <= 0 {
+		t.Fatalf("CreatePayment returned id %d", openingPayment.ID)
+	}
 
 	t.Run("get relations statuses and money", func(t *testing.T) {
 		got, err := repos.sales.Get(ctx, created.ID)
@@ -117,9 +129,6 @@ func testSales(t *testing.T, repos *repositories) {
 		}
 		if got.PaymentStatus != domain.PaymentStatusPartial || got.DeliveryStatus != domain.DeliveryStatusPartial {
 			t.Fatalf("statuses = %q/%q", got.PaymentStatus, got.DeliveryStatus)
-		}
-		if got.PaymentMethod == nil || *got.PaymentMethod != domain.PaymentMethodCash {
-			t.Fatalf("payment method = %v", got.PaymentMethod)
 		}
 		if !got.CreatedAt.Equal(createdAt) || got.UpdatedAt != nil {
 			t.Fatalf("timestamps = %v/%v, want %v/nil", got.CreatedAt, got.UpdatedAt, createdAt)
@@ -136,8 +145,8 @@ func testSales(t *testing.T, repos *repositories) {
 
 		var rawStatus, rawDelivery, rawMethod string
 		if err := repos.gorm.Raw(
-			"SELECT payment_status, delivery_status, payment_method FROM sales WHERE id = ?", created.ID,
-		).Row().Scan(&rawStatus, &rawDelivery, &rawMethod); err != nil {
+			"SELECT payment_status, delivery_status FROM sales WHERE id = ?", created.ID,
+		).Row().Scan(&rawStatus, &rawDelivery); err != nil {
 			t.Fatal(err)
 		}
 		if rawStatus != "PARTIAL" {
@@ -145,6 +154,11 @@ func testSales(t *testing.T, repos *repositories) {
 		}
 		if rawDelivery != "PARTIAL" {
 			t.Fatalf("stored delivery status = %q, want PARTIAL", rawDelivery)
+		}
+		if err := repos.gorm.Raw(
+			"SELECT payment_method FROM sale_payments WHERE id = ?", openingPayment.ID,
+		).Row().Scan(&rawMethod); err != nil {
+			t.Fatal(err)
 		}
 		if rawMethod != "CASH" {
 			t.Fatalf("stored payment method = %q, want CASH", rawMethod)
@@ -331,6 +345,76 @@ func testSales(t *testing.T, repos *repositories) {
 		}
 	})
 
+	t.Run("payment ledger", func(t *testing.T) {
+		secondPayment, err := repos.sales.CreatePayment(ctx, &domain.SalePayment{
+			SaleID:        created.ID,
+			Amount:        saleDecimal("2.00"),
+			PaymentMethod: saleString(domain.PaymentMethodDebit),
+			CreatedAt:     time.Date(2026, time.January, 2, 5, 6, 7, 0, time.UTC),
+			CreatedByID:   &user.ID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		list, hasNext, err := repos.sales.ListPayments(ctx, created.ID, 0, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !hasNext || len(list) != 1 || list[0].ID != secondPayment.ID {
+			t.Fatalf("payment page = %+v has_next=%v, want newest %d", list, hasNext, secondPayment.ID)
+		}
+		if list[0].CreatedBy == nil || list[0].CreatedBy.ID != user.ID {
+			t.Fatalf("payment creator = %+v", list[0].CreatedBy)
+		}
+		if list[0].PaymentMethod == nil || *list[0].PaymentMethod != domain.PaymentMethodDebit {
+			t.Fatalf("payment method = %v", list[0].PaymentMethod)
+		}
+		if !list[0].Amount.Equal(saleDecimal("2.00")) {
+			t.Fatalf("payment amount = %s, want 2.00", list[0].Amount)
+		}
+
+		got, err := repos.sales.GetPayment(ctx, created.ID, secondPayment.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.ID != secondPayment.ID || got.SaleID != created.ID {
+			t.Fatalf("get payment = %+v", got)
+		}
+		if _, err := repos.sales.GetPayment(ctx, created.ID, secondPayment.ID+1000); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("missing payment error = %v, want ErrNotFound", err)
+		}
+		total, err := repos.sales.SumPayments(ctx, created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !total.Equal(saleDecimal("7.00")) {
+			t.Fatalf("payment sum = %s, want 7.00", total)
+		}
+
+		byMethod, _, err := repos.sales.List(ctx, outbound.SaleFilter{Limit: 100, PaymentMethod: domain.PaymentMethodDebit})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(byMethod) != 1 || byMethod[0].ID != created.ID {
+			t.Fatalf("debit filter = %+v, want only %d for a non-opening payment", byMethod, created.ID)
+		}
+
+		if err := repos.sales.DeletePayment(ctx, created.ID, secondPayment.ID); err != nil {
+			t.Fatal(err)
+		}
+		total, err = repos.sales.SumPayments(ctx, created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !total.Equal(saleDecimal("5.00")) {
+			t.Fatalf("payment sum after delete = %s, want 5.00", total)
+		}
+		if err := repos.sales.DeletePayment(ctx, created.ID, secondPayment.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("second delete error = %v, want ErrNotFound", err)
+		}
+	})
+
 	t.Run("item mutations and delete", func(t *testing.T) {
 		sale, err := repos.sales.Get(ctx, created.ID)
 		if err != nil {
@@ -377,6 +461,13 @@ func testSales(t *testing.T, repos *repositories) {
 		}
 		if _, err := repos.sales.Get(ctx, created.ID); !errors.Is(err, domain.ErrNotFound) {
 			t.Fatalf("deleted sale Get error = %v, want ErrNotFound", err)
+		}
+		var paymentCount int
+		if err := repos.gorm.Raw("SELECT COUNT(*) FROM sale_payments WHERE sale_id = ?", created.ID).Row().Scan(&paymentCount); err != nil {
+			t.Fatal(err)
+		}
+		if paymentCount != 0 {
+			t.Fatalf("payments after sale delete = %d, want 0", paymentCount)
 		}
 		if err := repos.sales.Delete(ctx, created.ID); !errors.Is(err, domain.ErrNotFound) {
 			t.Fatalf("second delete error = %v, want ErrNotFound", err)

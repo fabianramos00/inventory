@@ -116,6 +116,9 @@ func NewRouter(deps Deps) http.Handler {
 	salesMux.HandleFunc("POST /{id}/items", salesHandler.AddItem)
 	salesMux.HandleFunc("PUT /{id}/items/{item_id}", salesHandler.UpdateItem)
 	salesMux.HandleFunc("DELETE /{id}/items/{item_id}", salesHandler.DeleteItem)
+	salesMux.HandleFunc("GET /{id}/payments", salesHandler.ListPayments)
+	salesMux.HandleFunc("POST /{id}/payments", salesHandler.CreatePayment)
+	salesMux.HandleFunc("DELETE /{id}/payments/{payment_id}", salesHandler.DeletePayment)
 	salesMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Not found", "NOT_FOUND")
 	})

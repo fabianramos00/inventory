@@ -41,6 +41,30 @@ func (s *saleStore) Get(ctx context.Context, id int64) (*domain.Sale, error) {
 	return sale, nil
 }
 
+func (s *saleStore) Lock(ctx context.Context, id int64) (*domain.Sale, error) {
+	if s.sqlite {
+		if err := s.db.WithContext(ctx).Exec("UPDATE sales SET id = id WHERE id = ?", id).Error; err != nil {
+			return nil, fmt.Errorf("lock sale: %w", err)
+		}
+	}
+	query := s.selectSQL() + " WHERE s.id = ?"
+	if !s.sqlite {
+		query += " FOR UPDATE"
+	}
+	row := s.db.WithContext(ctx).Raw(query, id).Row()
+	sale, err := s.scanSale(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lock sale: %w", err)
+	}
+	if err := s.attachRelations(ctx, []*domain.Sale{sale}); err != nil {
+		return nil, err
+	}
+	return sale, nil
+}
+
 func (s *saleStore) List(ctx context.Context, filter outbound.SaleFilter) ([]*domain.Sale, bool, error) {
 	where, args := s.filterSQL(filter)
 	query := s.selectSQL() + where + " ORDER BY s.id DESC LIMIT ? OFFSET ?"
@@ -103,8 +127,8 @@ func (s *saleStore) Create(ctx context.Context, sale *domain.Sale, items []*doma
 	var id int64
 	err := s.db.WithContext(ctx).Raw(
 		`INSERT INTO sales
-			(created_at, updated_at, total_amount, amount_paid, payment_status, delivery_status, payment_method, client_id, created_by_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(created_at, updated_at, total_amount, amount_paid, payment_status, delivery_status, client_id, created_by_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		 RETURNING id`,
 		Timestamp(sale.CreatedAt),
 		nil,
@@ -112,7 +136,6 @@ func (s *saleStore) Create(ctx context.Context, sale *domain.Sale, items []*doma
 		moneyToDB(s.sqlite, sale.AmountPaid),
 		dbPaymentStatus(sale.PaymentStatus),
 		dbDeliveryStatus(sale.DeliveryStatus),
-		dbPaymentMethod(sale.PaymentMethod),
 		sale.ClientID,
 		nullableID(sale.CreatedByID),
 	).Scan(&id).Error
@@ -133,14 +156,13 @@ func (s *saleStore) Update(ctx context.Context, id int64, sale *domain.Sale) err
 	result := s.db.WithContext(ctx).Exec(
 		`UPDATE sales SET
 			updated_at = ?, total_amount = ?, amount_paid = ?, payment_status = ?,
-			delivery_status = ?, payment_method = ?, client_id = ?
+			delivery_status = ?, client_id = ?
 		 WHERE id = ?`,
 		nullableTimestampValue(sale.UpdatedAt),
 		moneyToDB(s.sqlite, sale.TotalAmount),
 		moneyToDB(s.sqlite, sale.AmountPaid),
 		dbPaymentStatus(sale.PaymentStatus),
 		dbDeliveryStatus(sale.DeliveryStatus),
-		dbPaymentMethod(sale.PaymentMethod),
 		sale.ClientID,
 		id,
 	)
@@ -162,6 +184,93 @@ func (s *saleStore) Delete(ctx context.Context, id int64) error {
 		return domain.ErrNotFound
 	}
 	return nil
+}
+
+func (s *saleStore) ListPayments(ctx context.Context, saleID int64, skip, limit int) ([]*domain.SalePayment, bool, error) {
+	rows, err := s.db.WithContext(ctx).Raw(
+		s.paymentsSQL()+" WHERE p.sale_id = ? ORDER BY p.id DESC LIMIT ? OFFSET ?",
+		saleID, limit+1, skip,
+	).Rows()
+	if err != nil {
+		return nil, false, fmt.Errorf("list sale payments: %w", err)
+	}
+	payments, err := s.scanPayments(rows)
+	if err != nil {
+		return nil, false, fmt.Errorf("list sale payments: %w", err)
+	}
+	hasNext := len(payments) > limit
+	if hasNext {
+		payments = payments[:limit]
+	}
+	if err := s.attachPaymentUsers(ctx, payments); err != nil {
+		return nil, false, err
+	}
+	return payments, hasNext, nil
+}
+
+func (s *saleStore) GetPayment(ctx context.Context, saleID, paymentID int64) (*domain.SalePayment, error) {
+	row := s.db.WithContext(ctx).Raw(
+		s.paymentsSQL()+" WHERE p.sale_id = ? AND p.id = ?", saleID, paymentID,
+	).Row()
+	payment, err := s.scanPayment(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get sale payment: %w", err)
+	}
+	if err := s.attachPaymentUsers(ctx, []*domain.SalePayment{payment}); err != nil {
+		return nil, err
+	}
+	return payment, nil
+}
+
+func (s *saleStore) CreatePayment(ctx context.Context, payment *domain.SalePayment) (*domain.SalePayment, error) {
+	var id int64
+	err := s.db.WithContext(ctx).Raw(
+		`INSERT INTO sale_payments (sale_id, amount, payment_method, created_at, created_by_id)
+		 VALUES (?, ?, ?, ?, ?)
+		 RETURNING id`,
+		payment.SaleID,
+		moneyToDB(s.sqlite, payment.Amount),
+		dbPaymentMethod(payment.PaymentMethod),
+		Timestamp(payment.CreatedAt),
+		nullableInt64Value(payment.CreatedByID),
+	).Scan(&id).Error
+	if err != nil {
+		return nil, storeError(s.db, "create sale payment", err)
+	}
+	payment.ID = id
+	return payment, nil
+}
+
+func (s *saleStore) DeletePayment(ctx context.Context, saleID, paymentID int64) error {
+	result := s.db.WithContext(ctx).Exec(
+		"DELETE FROM sale_payments WHERE id = ? AND sale_id = ?", paymentID, saleID,
+	)
+	if result.Error != nil {
+		return storeError(s.db, "delete sale payment", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+func (s *saleStore) SumPayments(ctx context.Context, saleID int64) (decimal.Decimal, error) {
+	var raw any
+	err := s.db.WithContext(ctx).Raw(
+		"SELECT "+moneySQL(s.sqlite, "COALESCE(SUM(p.amount), 0)")+" FROM sale_payments p WHERE p.sale_id = ?",
+		saleID,
+	).Row().Scan(&raw)
+	if err != nil {
+		return decimal.Zero, fmt.Errorf("sum sale payments: %w", err)
+	}
+	paid, err := moneyFromDB(s.sqlite, raw)
+	if err != nil {
+		return decimal.Zero, fmt.Errorf("decode sale payments total: %w", err)
+	}
+	return paid, nil
 }
 
 func (s *saleStore) ListItems(ctx context.Context, saleID int64, skip, limit int) ([]*domain.SaleItem, bool, error) {
@@ -284,8 +393,14 @@ func (s *saleStore) DeleteItems(ctx context.Context, saleID int64) error {
 func (s *saleStore) selectSQL() string {
 	return `SELECT
 		s.id, s.created_at, s.updated_at, ` + moneySQL(s.sqlite, "s.total_amount") + `, ` + moneySQL(s.sqlite, "s.amount_paid") + `,
-		s.payment_status, s.delivery_status, s.payment_method, s.client_id, s.created_by_id
+		s.payment_status, s.delivery_status, s.client_id, s.created_by_id
 	FROM sales s`
+}
+
+func (s *saleStore) paymentsSQL() string {
+	return `SELECT
+		p.id, p.sale_id, ` + moneySQL(s.sqlite, "p.amount") + `, p.payment_method, p.created_at, p.created_by_id
+	FROM sale_payments p`
 }
 
 func (s *saleStore) itemsSQL() string {
@@ -338,7 +453,7 @@ func (s *saleStore) filterSQL(filter outbound.SaleFilter) (string, []any) {
 		args = append(args, dbDeliveryStatus(filter.DeliveryStatus))
 	}
 	if filter.PaymentMethod != "" {
-		conditions = append(conditions, "s.payment_method = ?")
+		conditions = append(conditions, "EXISTS (SELECT 1 FROM sale_payments p WHERE p.sale_id = s.id AND p.payment_method = ?)")
 		args = append(args, dbPaymentMethod(&filter.PaymentMethod))
 	}
 	if len(conditions) == 0 {
@@ -369,13 +484,12 @@ func (s *saleStore) scanSale(row rowScanner) (*domain.Sale, error) {
 		paidRaw        any
 		paymentStatus  string
 		deliveryStatus string
-		paymentMethod  sql.NullString
 		clientID       sql.NullInt64
 		createdByID    sql.NullInt64
 	)
 	err := row.Scan(
 		&id, &createdAt, &updatedAt, &totalRaw, &paidRaw,
-		&paymentStatus, &deliveryStatus, &paymentMethod, &clientID, &createdByID,
+		&paymentStatus, &deliveryStatus, &clientID, &createdByID,
 	)
 	if err != nil {
 		return nil, err
@@ -401,13 +515,52 @@ func (s *saleStore) scanSale(row rowScanner) (*domain.Sale, error) {
 		DebtAmount:     debt,
 		PaymentStatus:  apiPaymentStatus(paymentStatus),
 		DeliveryStatus: apiDeliveryStatus(deliveryStatus),
-		PaymentMethod:  apiPaymentMethod(paymentMethod),
 		ClientID:       nullableInt64Ptr(clientID),
 	}
 	if createdByID.Valid {
 		sale.CreatedByID = createdByID.Int64
 	}
 	return sale, nil
+}
+
+func (s *saleStore) scanPayments(rows *sql.Rows) ([]*domain.SalePayment, error) {
+	defer rows.Close()
+	payments := make([]*domain.SalePayment, 0)
+	for rows.Next() {
+		payment, err := s.scanPayment(rows)
+		if err != nil {
+			return nil, err
+		}
+		payments = append(payments, payment)
+	}
+	return payments, rows.Err()
+}
+
+func (s *saleStore) scanPayment(row rowScanner) (*domain.SalePayment, error) {
+	var (
+		id          int64
+		saleID      int64
+		amountRaw   any
+		method      sql.NullString
+		createdAt   Timestamp
+		createdByID sql.NullInt64
+	)
+	err := row.Scan(&id, &saleID, &amountRaw, &method, &createdAt, &createdByID)
+	if err != nil {
+		return nil, err
+	}
+	amount, err := moneyFromDB(s.sqlite, amountRaw)
+	if err != nil {
+		return nil, fmt.Errorf("decode sale payment amount: %w", err)
+	}
+	return &domain.SalePayment{
+		ID:            id,
+		SaleID:        saleID,
+		Amount:        amount,
+		PaymentMethod: apiPaymentMethod(method),
+		CreatedAt:     createdAt.Time(),
+		CreatedByID:   nullableInt64Ptr(createdByID),
+	}, nil
 }
 
 func (s *saleStore) scanItems(rows *sql.Rows) ([]*domain.SaleItem, error) {
@@ -526,6 +679,38 @@ func (s *saleStore) attachRelations(ctx context.Context, sales []*domain.Sale) e
 	return nil
 }
 
+func (s *saleStore) attachPaymentUsers(ctx context.Context, payments []*domain.SalePayment) error {
+	userIDs := make([]int64, 0, len(payments))
+	seen := map[int64]struct{}{}
+	for _, payment := range payments {
+		if payment.CreatedByID == nil {
+			continue
+		}
+		if _, ok := seen[*payment.CreatedByID]; ok {
+			continue
+		}
+		seen[*payment.CreatedByID] = struct{}{}
+		userIDs = append(userIDs, *payment.CreatedByID)
+	}
+	if len(userIDs) == 0 {
+		return nil
+	}
+	var records []userModel
+	if err := s.db.WithContext(ctx).Where("id IN ?", userIDs).Find(&records).Error; err != nil {
+		return fmt.Errorf("load sale payment users: %w", err)
+	}
+	users := make(map[int64]*domain.User, len(records))
+	for i := range records {
+		users[records[i].ID] = records[i].toDomain()
+	}
+	for _, payment := range payments {
+		if payment.CreatedByID != nil {
+			payment.CreatedBy = users[*payment.CreatedByID]
+		}
+	}
+	return nil
+}
+
 func dbPaymentStatus(value string) string {
 	return strings.ToUpper(value)
 }
@@ -562,6 +747,13 @@ func nullableID(value int64) any {
 		return nil
 	}
 	return value
+}
+
+func nullableInt64Value(value *int64) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }
 
 func nullableInt64Ptr(value sql.NullInt64) *int64 {

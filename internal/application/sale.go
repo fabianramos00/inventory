@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -118,6 +119,9 @@ func (s *SaleService) Create(ctx context.Context, input inbound.CreateSaleInput)
 
 		now := nowUTC()
 		paid := input.AmountPaid.Round(2)
+		if paid.GreaterThan(total) {
+			return fmt.Errorf("%w: amount_paid cannot exceed total_amount", domain.ErrValidation)
+		}
 		sale := &domain.Sale{
 			CreatedAt:      now,
 			TotalAmount:    total,
@@ -125,13 +129,23 @@ func (s *SaleService) Create(ctx context.Context, input inbound.CreateSaleInput)
 			DebtAmount:     debtAmount(total, paid),
 			PaymentStatus:  derivePaymentStatus(total, paid),
 			DeliveryStatus: deriveDeliveryStatus(items),
-			PaymentMethod:  input.PaymentMethod,
 			ClientID:       input.ClientID,
 			CreatedByID:    input.CreatedByID,
 		}
 		created, err := repos.Sales.Create(ctx, sale, items)
 		if err != nil {
 			return err
+		}
+		if paid.IsPositive() {
+			if _, err := repos.Sales.CreatePayment(ctx, &domain.SalePayment{
+				SaleID:        created.ID,
+				Amount:        paid,
+				PaymentMethod: input.PaymentMethod,
+				CreatedAt:     now,
+				CreatedByID:   &input.CreatedByID,
+			}); err != nil {
+				return err
+			}
 		}
 		result, err = repos.Sales.Get(ctx, created.ID)
 		return err
@@ -143,35 +157,18 @@ func (s *SaleService) Create(ctx context.Context, input inbound.CreateSaleInput)
 }
 
 func (s *SaleService) Update(ctx context.Context, id int64, input inbound.UpdateSaleInput) (*domain.Sale, error) {
-	if input.PaymentMethod.Set && input.PaymentMethod.Value != nil && !domain.ValidPaymentMethod(*input.PaymentMethod.Value) {
-		return nil, fmt.Errorf("%w: invalid payment_method", domain.ErrValidation)
-	}
-	if input.AmountPaid.Set {
-		if input.AmountPaid.Value == nil {
-			return nil, requiredField("amount_paid")
-		}
-		if input.AmountPaid.Value.IsNegative() {
-			return nil, nonNegative("amount_paid")
-		}
-	}
 	if input.ClientID.Set && input.ClientID.Value != nil && *input.ClientID.Value <= 0 {
 		return nil, fmt.Errorf("%w: client_id must be greater than zero", domain.ErrValidation)
 	}
-	if !input.PaymentMethod.Set && !input.AmountPaid.Set && !input.ClientID.Set {
+	if !input.ClientID.Set {
 		return s.Get(ctx, id)
 	}
 
 	var result *domain.Sale
 	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
-		sale, err := repos.Sales.Get(ctx, id)
+		sale, err := repos.Sales.Lock(ctx, id)
 		if err != nil {
 			return referenceError(err, "Sale", id)
-		}
-		if input.PaymentMethod.Set {
-			sale.PaymentMethod = clonePtr(input.PaymentMethod.Value)
-		}
-		if input.AmountPaid.Set {
-			sale.AmountPaid = input.AmountPaid.Value.Round(2)
 		}
 		if input.ClientID.Set {
 			if input.ClientID.Value == nil {
@@ -202,7 +199,7 @@ func (s *SaleService) Update(ctx context.Context, id int64, input inbound.Update
 func (s *SaleService) Delete(ctx context.Context, id int64) (*domain.Sale, error) {
 	var result *domain.Sale
 	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
-		sale, err := repos.Sales.Get(ctx, id)
+		sale, err := repos.Sales.Lock(ctx, id)
 		if err != nil {
 			return referenceError(err, "Sale", id)
 		}
@@ -255,7 +252,7 @@ func (s *SaleService) AddItem(ctx context.Context, saleID int64, input inbound.A
 
 	var result *domain.Sale
 	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
-		if _, err := repos.Sales.Get(ctx, saleID); err != nil {
+		if _, err := repos.Sales.Lock(ctx, saleID); err != nil {
 			return referenceError(err, "Sale", saleID)
 		}
 		product, err := repos.Products.Get(ctx, input.ProductID)
@@ -327,7 +324,7 @@ func (s *SaleService) UpdateItem(ctx context.Context, saleID, itemID int64, inpu
 
 	var result *domain.Sale
 	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
-		if _, err := repos.Sales.Get(ctx, saleID); err != nil {
+		if _, err := repos.Sales.Lock(ctx, saleID); err != nil {
 			return referenceError(err, "Sale", saleID)
 		}
 		item, err := repos.Sales.GetItem(ctx, saleID, itemID)
@@ -389,7 +386,7 @@ func (s *SaleService) UpdateItem(ctx context.Context, saleID, itemID int64, inpu
 func (s *SaleService) DeleteItem(ctx context.Context, saleID, itemID int64) (*domain.Sale, error) {
 	var result *domain.Sale
 	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
-		if _, err := repos.Sales.Get(ctx, saleID); err != nil {
+		if _, err := repos.Sales.Lock(ctx, saleID); err != nil {
 			return referenceError(err, "Sale", saleID)
 		}
 		item, err := repos.Sales.GetItem(ctx, saleID, itemID)
@@ -414,8 +411,100 @@ func (s *SaleService) DeleteItem(ctx context.Context, saleID, itemID int64) (*do
 	return result, nil
 }
 
+func (s *SaleService) ListPayments(ctx context.Context, saleID int64, skip, limit int) (*inbound.SalePaymentList, error) {
+	if _, err := s.Get(ctx, saleID); err != nil {
+		return nil, err
+	}
+	items, hasNext, err := s.repository.ListPayments(ctx, saleID, skip, limit)
+	if err != nil {
+		return nil, err
+	}
+	return &inbound.SalePaymentList{Items: items, HasNext: hasNext, Skip: skip, Limit: limit}, nil
+}
+
+func (s *SaleService) CreatePayment(ctx context.Context, saleID int64, input inbound.CreateSalePaymentInput) (*domain.Sale, error) {
+	if !domain.ValidPaymentMethod(input.PaymentMethod) {
+		return nil, fmt.Errorf("%w: invalid payment_method", domain.ErrValidation)
+	}
+	amount := input.Amount.Round(2)
+	if !amount.IsPositive() {
+		return nil, fmt.Errorf("%w: amount must be greater than zero", domain.ErrValidation)
+	}
+
+	var result *domain.Sale
+	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
+		sale, err := repos.Sales.Lock(ctx, saleID)
+		if err != nil {
+			return referenceError(err, "Sale", saleID)
+		}
+		remaining := debtAmount(sale.TotalAmount, sale.AmountPaid)
+		if remaining.IsZero() {
+			return fmt.Errorf("%w: sale is already paid", domain.ErrValidation)
+		}
+		if amount.GreaterThan(remaining) {
+			return fmt.Errorf("%w: amount cannot exceed remaining debt", domain.ErrValidation)
+		}
+		now := nowUTC()
+		if _, err := repos.Sales.CreatePayment(ctx, &domain.SalePayment{
+			SaleID:        saleID,
+			Amount:        amount,
+			PaymentMethod: &input.PaymentMethod,
+			CreatedAt:     now,
+			CreatedByID:   &input.CreatedByID,
+		}); err != nil {
+			return err
+		}
+		if err := applyPaymentTotals(ctx, repos, sale, now); err != nil {
+			return err
+		}
+		result, err = repos.Sales.Get(ctx, saleID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (s *SaleService) DeletePayment(ctx context.Context, saleID, paymentID int64) (*domain.Sale, error) {
+	var result *domain.Sale
+	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
+		sale, err := repos.Sales.Lock(ctx, saleID)
+		if err != nil {
+			return referenceError(err, "Sale", saleID)
+		}
+		if _, err := repos.Sales.GetPayment(ctx, saleID, paymentID); err != nil {
+			return referenceError(err, "Sale payment", paymentID)
+		}
+		if err := repos.Sales.DeletePayment(ctx, saleID, paymentID); err != nil {
+			return referenceError(err, "Sale payment", paymentID)
+		}
+		if err := applyPaymentTotals(ctx, repos, sale, nowUTC()); err != nil {
+			return err
+		}
+		result, err = repos.Sales.Get(ctx, saleID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func applyPaymentTotals(ctx context.Context, repos outbound.TxRepos, sale *domain.Sale, now time.Time) error {
+	paid, err := repos.Sales.SumPayments(ctx, sale.ID)
+	if err != nil {
+		return err
+	}
+	sale.AmountPaid = paid.Round(2)
+	sale.PaymentStatus = derivePaymentStatus(sale.TotalAmount, sale.AmountPaid)
+	sale.DebtAmount = debtAmount(sale.TotalAmount, sale.AmountPaid)
+	sale.UpdatedAt = &now
+	return repos.Sales.Update(ctx, sale.ID, sale)
+}
+
 func (s *SaleService) recalculate(ctx context.Context, repos outbound.TxRepos, saleID int64) (*domain.Sale, error) {
-	sale, err := repos.Sales.Get(ctx, saleID)
+	sale, err := repos.Sales.Lock(ctx, saleID)
 	if err != nil {
 		return nil, err
 	}
@@ -449,6 +538,13 @@ func validateCreateSale(input inbound.CreateSaleInput) error {
 	}
 	if input.AmountPaid.IsNegative() {
 		return nonNegative("amount_paid")
+	}
+	roundedPaid := input.AmountPaid.Round(2)
+	if roundedPaid.IsPositive() && input.PaymentMethod == nil {
+		return requiredField("payment_method")
+	}
+	if !roundedPaid.IsPositive() && input.PaymentMethod != nil {
+		return fmt.Errorf("%w: payment_method is not allowed when amount_paid is zero", domain.ErrValidation)
 	}
 	if input.ClientID != nil && *input.ClientID <= 0 {
 		return fmt.Errorf("%w: client_id must be greater than zero", domain.ErrValidation)

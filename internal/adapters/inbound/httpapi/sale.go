@@ -30,9 +30,12 @@ type createSaleRequest struct {
 }
 
 type updateSaleRequest struct {
-	PaymentMethod optional[string]          `json:"payment_method"`
-	AmountPaid    optional[decimal.Decimal] `json:"amount_paid"`
-	ClientID      optional[int64]           `json:"client_id"`
+	ClientID optional[int64] `json:"client_id"`
+}
+
+type createSalePaymentRequest struct {
+	Amount        decimal.Decimal `json:"amount"`
+	PaymentMethod string          `json:"payment_method"`
 }
 
 type addSaleItemRequest struct {
@@ -54,7 +57,6 @@ type saleResponse struct {
 	DebtAmount     moneyJSON       `json:"debt_amount"`
 	PaymentStatus  string          `json:"payment_status"`
 	DeliveryStatus string          `json:"delivery_status"`
-	PaymentMethod  *string         `json:"payment_method"`
 	AmountPaid     moneyJSON       `json:"amount_paid"`
 	ClientID       *int64          `json:"client_id"`
 	CreatedAt      string          `json:"created_at"`
@@ -62,6 +64,16 @@ type saleResponse struct {
 	CreatedByID    int64           `json:"created_by_id"`
 	CreatedBy      *userResponse   `json:"created_by"`
 	Client         *clientResponse `json:"client"`
+}
+
+type salePaymentResponse struct {
+	ID            int64         `json:"id"`
+	SaleID        int64         `json:"sale_id"`
+	Amount        moneyJSON     `json:"amount"`
+	PaymentMethod *string       `json:"payment_method"`
+	CreatedAt     string        `json:"created_at"`
+	CreatedByID   *int64        `json:"created_by_id"`
+	CreatedBy     *userResponse `json:"created_by"`
 }
 
 type saleItemResponse struct {
@@ -261,9 +273,7 @@ func (h *SaleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sale, err := h.service.Update(r.Context(), id, inbound.UpdateSaleInput{
-		PaymentMethod: toOptional(body.PaymentMethod),
-		AmountPaid:    toOptional(body.AmountPaid),
-		ClientID:      toOptional(body.ClientID),
+		ClientID: toOptional(body.ClientID),
 	})
 	if err != nil {
 		h.writeSaleError(w, r, err)
@@ -388,6 +398,76 @@ func (h *SaleHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, newSaleResponse(sale))
 }
 
+func (h *SaleHandler) ListPayments(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusUnprocessableEntity, "Invalid id", "VALIDATION_ERROR")
+		return
+	}
+	skip, limit, _, err := parseListQuery(r)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "Invalid query parameters", "VALIDATION_ERROR")
+		return
+	}
+	result, err := h.service.ListPayments(r.Context(), id, skip, limit)
+	if err != nil {
+		h.writeSaleError(w, r, err)
+		return
+	}
+	items := make([]salePaymentResponse, len(result.Items))
+	for i, payment := range result.Items {
+		items[i] = newSalePaymentResponse(payment)
+	}
+	writePage(w, items, result.HasNext, result.Skip, result.Limit)
+}
+
+func (h *SaleHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusUnprocessableEntity, "Invalid id", "VALIDATION_ERROR")
+		return
+	}
+	var body createSalePaymentRequest
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeRequestError(w, err)
+		return
+	}
+	user := UserFromContext(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "Not authenticated", "NOT_AUTHENTICATED")
+		return
+	}
+	sale, err := h.service.CreatePayment(r.Context(), id, inbound.CreateSalePaymentInput{
+		Amount:        body.Amount,
+		PaymentMethod: body.PaymentMethod,
+		CreatedByID:   user.ID,
+	})
+	if err != nil {
+		h.writeSaleError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, newSaleResponse(sale))
+}
+
+func (h *SaleHandler) DeletePayment(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusUnprocessableEntity, "Invalid id", "VALIDATION_ERROR")
+		return
+	}
+	paymentID, ok := pathValueID(r, "payment_id")
+	if !ok {
+		writeError(w, http.StatusUnprocessableEntity, "Invalid payment id", "VALIDATION_ERROR")
+		return
+	}
+	sale, err := h.service.DeletePayment(r.Context(), id, paymentID)
+	if err != nil {
+		h.writeSaleError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, newSaleResponse(sale))
+}
+
 func (h *SaleHandler) writeSaleError(w http.ResponseWriter, r *http.Request, err error) {
 	var notFound *domain.NotFoundError
 	var stockErr *domain.InsufficientStockError
@@ -420,7 +500,6 @@ func newSaleResponse(sale *domain.Sale) saleResponse {
 		DebtAmount:     moneyJSON(sale.DebtAmount),
 		PaymentStatus:  sale.PaymentStatus,
 		DeliveryStatus: sale.DeliveryStatus,
-		PaymentMethod:  sale.PaymentMethod,
 		AmountPaid:     moneyJSON(sale.AmountPaid),
 		ClientID:       sale.ClientID,
 		CreatedAt:      sale.CreatedAt.UTC().Format(time.RFC3339),
@@ -436,6 +515,21 @@ func newSaleResponse(sale *domain.Sale) saleResponse {
 	if sale.Client != nil {
 		client := newClientResponse(sale.Client)
 		response.Client = &client
+	}
+	return response
+}
+
+func newSalePaymentResponse(payment *domain.SalePayment) salePaymentResponse {
+	response := salePaymentResponse{
+		ID:            payment.ID,
+		SaleID:        payment.SaleID,
+		Amount:        moneyJSON(payment.Amount),
+		PaymentMethod: payment.PaymentMethod,
+		CreatedAt:     payment.CreatedAt.UTC().Format(time.RFC3339),
+		CreatedByID:   payment.CreatedByID,
+	}
+	if payment.CreatedBy != nil {
+		response.CreatedBy = newUserResponse(payment.CreatedBy)
 	}
 	return response
 }

@@ -1,7 +1,6 @@
 package httpapi_test
 
 import (
-	"database/sql"
 	"net/http"
 	"testing"
 
@@ -75,6 +74,27 @@ func TestSaleCreateValidationAndRollback(t *testing.T) {
 			{
 				name: "negative amount paid",
 				body: map[string]any{"amount_paid": -1, "items": []map[string]any{
+					{"product_id": b.productIDs[0], "quantity": 1},
+				}},
+				status: http.StatusUnprocessableEntity,
+			},
+			{
+				name: "overpaid create",
+				body: map[string]any{"payment_method": "cash", "amount_paid": 11, "items": []map[string]any{
+					{"product_id": b.productIDs[0], "quantity": 1},
+				}},
+				status: http.StatusUnprocessableEntity,
+			},
+			{
+				name: "method with zero amount",
+				body: map[string]any{"payment_method": "cash", "amount_paid": 0, "items": []map[string]any{
+					{"product_id": b.productIDs[0], "quantity": 1},
+				}},
+				status: http.StatusUnprocessableEntity,
+			},
+			{
+				name: "positive amount without method",
+				body: map[string]any{"amount_paid": 1, "items": []map[string]any{
 					{"product_id": b.productIDs[0], "quantity": 1},
 				}},
 				status: http.StatusUnprocessableEntity,
@@ -190,11 +210,9 @@ func TestSaleStatusesFiltersAndUpdate(t *testing.T) {
 		if pending.PaymentStatus != domain.PaymentStatusPending || pending.DeliveryStatus != domain.DeliveryStatusPending {
 			t.Fatalf("pending statuses = %q/%q", pending.PaymentStatus, pending.DeliveryStatus)
 		}
-		if pending.PaymentMethod != nil {
-			t.Fatalf("pending payment_method = %v, want nil", pending.PaymentMethod)
-		}
-		assertRawSaleEnum(t, b, pending.ID, "PENDING", "PENDING", "")
+		assertRawSaleEnum(t, b, pending.ID, "PENDING", "PENDING")
 		assertRawSaleTotal(t, b, pending.ID, "21.00")
+		assertRawPaymentCount(t, b, pending.ID, 0)
 
 		status, raw = b.request(t, http.MethodPost, "/api/v1/sales", map[string]any{
 			"payment_method": "debit",
@@ -213,10 +231,8 @@ func TestSaleStatusesFiltersAndUpdate(t *testing.T) {
 		if delivered.PaymentStatus != domain.PaymentStatusPaid || delivered.DeliveryStatus != domain.DeliveryStatusDelivered {
 			t.Fatalf("delivered statuses = %q/%q", delivered.PaymentStatus, delivered.DeliveryStatus)
 		}
-		if delivered.PaymentMethod == nil || *delivered.PaymentMethod != domain.PaymentMethodDebit {
-			t.Fatalf("delivered payment_method = %v", delivered.PaymentMethod)
-		}
-		assertRawSaleEnum(t, b, delivered.ID, "PAID", "DELIVERED", "DEBIT")
+		assertRawSaleEnum(t, b, delivered.ID, "PAID", "DELIVERED")
+		assertRawPaymentMethod(t, b, delivered.ID, "DEBIT")
 
 		status, raw = b.request(t, http.MethodGet,
 			"/api/v1/sales?payment_status=paid&delivery_status=delivered&payment_method=debit", nil)
@@ -300,22 +316,36 @@ func TestSaleStatusesFiltersAndUpdate(t *testing.T) {
 		status, raw = b.request(t, http.MethodPut, "/api/v1/sales/"+itoa(pending.ID), map[string]any{
 			"amount_paid": 100,
 		})
-		if status != http.StatusOK {
-			t.Fatalf("overpay update status = %d body = %s", status, raw)
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("amount_paid update status = %d body = %s, want 422", status, raw)
 		}
-		overpaid := siDecode[siSale](t, raw)
-		if overpaid.PaymentStatus != domain.PaymentStatusPaid {
-			t.Fatalf("overpaid status = %q, want paid", overpaid.PaymentStatus)
-		}
-		assertNumber(t, overpaid.DebtAmount, "0")
 
-		for _, path := range []string{"/api/v1/sales/999999", "/api/v1/sales/999999/items"} {
+		status, raw = b.request(t, http.MethodPost, "/api/v1/sales/"+itoa(pending.ID)+"/payments", map[string]any{
+			"amount": 22, "payment_method": "cash",
+		})
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("overpayment status = %d body = %s, want 422", status, raw)
+		}
+
+		status, raw = b.request(t, http.MethodPost, "/api/v1/sales/"+itoa(pending.ID)+"/payments", map[string]any{
+			"amount": 21, "payment_method": "cash",
+		})
+		if status != http.StatusOK {
+			t.Fatalf("payment status = %d body = %s", status, raw)
+		}
+		paid := siDecode[siSale](t, raw)
+		if paid.PaymentStatus != domain.PaymentStatusPaid {
+			t.Fatalf("paid status = %q, want paid", paid.PaymentStatus)
+		}
+		assertNumber(t, paid.DebtAmount, "0")
+
+		for _, path := range []string{"/api/v1/sales/999999", "/api/v1/sales/999999/items", "/api/v1/sales/999999/payments"} {
 			status, raw = b.request(t, http.MethodGet, path, nil)
 			if status != http.StatusNotFound {
 				t.Fatalf("GET %s status = %d body = %s, want 404", path, status, raw)
 			}
 		}
-		status, raw = b.request(t, http.MethodPut, "/api/v1/sales/999999", map[string]any{"amount_paid": 1})
+		status, raw = b.request(t, http.MethodPut, "/api/v1/sales/999999", map[string]any{"client_id": 1})
 		if status != http.StatusNotFound {
 			t.Fatalf("update missing sale status = %d body = %s, want 404", status, raw)
 		}
@@ -510,26 +540,36 @@ func siScalarInt(t *testing.T, b *siBackend, query string) int {
 	return value
 }
 
-func assertRawSaleEnum(t *testing.T, b *siBackend, id int64, payment, delivery, method string) {
+func assertRawSaleEnum(t *testing.T, b *siBackend, id int64, payment, delivery string) {
 	t.Helper()
 	var gotPayment, gotDelivery string
-	var gotMethod sql.NullString
 	if err := b.gorm.Raw(
-		"SELECT payment_status, delivery_status, payment_method FROM sales WHERE id = ?", id,
-	).Row().Scan(&gotPayment, &gotDelivery, &gotMethod); err != nil {
+		"SELECT payment_status, delivery_status FROM sales WHERE id = ?", id,
+	).Row().Scan(&gotPayment, &gotDelivery); err != nil {
 		t.Fatal(err)
 	}
 	if gotPayment != payment || gotDelivery != delivery {
 		t.Fatalf("stored statuses = %q/%q, want %q/%q", gotPayment, gotDelivery, payment, delivery)
 	}
-	if method == "" {
-		if gotMethod.Valid {
-			t.Fatalf("stored payment_method = %q, want NULL", gotMethod.String)
-		}
-		return
+}
+
+func assertRawPaymentCount(t *testing.T, b *siBackend, saleID int64, want int) {
+	t.Helper()
+	if got := siScalarInt(t, b, "SELECT COUNT(*) FROM sale_payments WHERE sale_id = "+itoa(saleID)); got != want {
+		t.Fatalf("sale_payments rows = %d, want %d", got, want)
 	}
-	if !gotMethod.Valid || gotMethod.String != method {
-		t.Fatalf("stored payment_method = %v, want %q", gotMethod, method)
+}
+
+func assertRawPaymentMethod(t *testing.T, b *siBackend, saleID int64, want string) {
+	t.Helper()
+	var method string
+	if err := b.gorm.Raw(
+		"SELECT payment_method FROM sale_payments WHERE sale_id = ? ORDER BY id DESC LIMIT 1", saleID,
+	).Row().Scan(&method); err != nil {
+		t.Fatal(err)
+	}
+	if method != want {
+		t.Fatalf("stored payment method = %q, want %q", method, want)
 	}
 }
 

@@ -42,7 +42,6 @@ type siSale struct {
 	DebtAmount     json.Number `json:"debt_amount"`
 	PaymentStatus  string      `json:"payment_status"`
 	DeliveryStatus string      `json:"delivery_status"`
-	PaymentMethod  *string     `json:"payment_method"`
 	AmountPaid     json.Number `json:"amount_paid"`
 	ClientID       *int64      `json:"client_id"`
 	CreatedAt      string      `json:"created_at"`
@@ -75,6 +74,16 @@ type siList[T any] struct {
 	HasNext bool `json:"has_next"`
 	Skip    int  `json:"skip"`
 	Limit   int  `json:"limit"`
+}
+
+type siPayment struct {
+	ID            int64       `json:"id"`
+	SaleID        int64       `json:"sale_id"`
+	Amount        json.Number `json:"amount"`
+	PaymentMethod *string     `json:"payment_method"`
+	CreatedAt     string      `json:"created_at"`
+	CreatedByID   *int64      `json:"created_by_id"`
+	CreatedBy     *authUser   `json:"created_by"`
 }
 
 type siStats struct {
@@ -187,17 +196,36 @@ func runSaleBackendSuite(t *testing.T, backend *siBackend) {
 		assertNumber(t, stats.AmountPaidSum, "5.25")
 	})
 
-	t.Run("update payment", func(t *testing.T) {
-		status, raw := backend.request(t, http.MethodPut, "/api/v1/sales/"+itoa(sale.ID), map[string]any{
-			"amount_paid": 21.20,
+	t.Run("payments", func(t *testing.T) {
+		status, raw := backend.request(t, http.MethodGet, "/api/v1/sales/"+itoa(sale.ID)+"/payments?limit=10", nil)
+		if status != http.StatusOK {
+			t.Fatalf("list payments status = %d body = %s", status, raw)
+		}
+		list := siDecode[siList[siPayment]](t, raw)
+		if len(list.Items) != 1 {
+			t.Fatalf("opening payments = %+v, want 1", list.Items)
+		}
+		opening := list.Items[0]
+		assertNumber(t, opening.Amount, "5.25")
+		if opening.PaymentMethod == nil || *opening.PaymentMethod != domain.PaymentMethodCash {
+			t.Fatalf("opening method = %v", opening.PaymentMethod)
+		}
+		if opening.CreatedByID == nil || *opening.CreatedByID != backend.userID ||
+			opening.CreatedBy == nil || opening.CreatedBy.Email != "sales-"+backend.name+"@example.com" {
+			t.Fatalf("opening creator = %v / %+v", opening.CreatedByID, opening.CreatedBy)
+		}
+
+		status, raw = backend.request(t, http.MethodPost, "/api/v1/sales/"+itoa(sale.ID)+"/payments", map[string]any{
+			"amount": 15.95, "payment_method": "debit",
 		})
 		if status != http.StatusOK {
-			t.Fatalf("update status = %d body = %s", status, raw)
+			t.Fatalf("create payment status = %d body = %s", status, raw)
 		}
 		updated := siDecode[siSale](t, raw)
 		if updated.PaymentStatus != domain.PaymentStatusPaid {
 			t.Fatalf("payment status = %q, want paid", updated.PaymentStatus)
 		}
+		assertNumber(t, updated.AmountPaid, "21.20")
 		assertNumber(t, updated.DebtAmount, "0")
 		if updated.UpdatedAt == nil {
 			t.Fatal("updated_at is nil")
@@ -206,6 +234,40 @@ func runSaleBackendSuite(t *testing.T, backend *siBackend) {
 			t.Fatalf("updated_at = %q: %v", *updated.UpdatedAt, err)
 		}
 		sale = updated
+
+		status, raw = backend.request(t, http.MethodGet, "/api/v1/sales/"+itoa(sale.ID)+"/payments?limit=10", nil)
+		if status != http.StatusOK {
+			t.Fatalf("list payments status = %d body = %s", status, raw)
+		}
+		list = siDecode[siList[siPayment]](t, raw)
+		if len(list.Items) != 2 || list.Items[0].ID < list.Items[1].ID {
+			t.Fatalf("payment order = %+v, want id DESC", list.Items)
+		}
+		secondID := list.Items[0].ID
+
+		status, raw = backend.request(t, http.MethodPost, "/api/v1/sales/"+itoa(sale.ID)+"/payments", map[string]any{
+			"amount": 0.01, "payment_method": "cash",
+		})
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("overpayment status = %d body = %s, want 422", status, raw)
+		}
+
+		status, raw = backend.request(t, http.MethodDelete, "/api/v1/sales/"+itoa(sale.ID)+"/payments/"+itoa(secondID), nil)
+		if status != http.StatusOK {
+			t.Fatalf("delete payment status = %d body = %s", status, raw)
+		}
+		deleted := siDecode[siSale](t, raw)
+		if deleted.PaymentStatus != domain.PaymentStatusPartial {
+			t.Fatalf("after delete status = %q, want partial", deleted.PaymentStatus)
+		}
+		assertNumber(t, deleted.AmountPaid, "5.25")
+		assertNumber(t, deleted.DebtAmount, "15.95")
+		sale = deleted
+
+		status, _ = backend.request(t, http.MethodDelete, "/api/v1/sales/"+itoa(sale.ID)+"/payments/"+itoa(secondID), nil)
+		if status != http.StatusNotFound {
+			t.Fatalf("second delete status = %d, want 404", status)
+		}
 	})
 
 	t.Run("items", func(t *testing.T) {
@@ -302,6 +364,9 @@ func runSaleBackendSuite(t *testing.T, backend *siBackend) {
 		status, _ = backend.request(t, http.MethodGet, "/api/v1/sales/"+itoa(sale.ID), nil)
 		if status != http.StatusNotFound {
 			t.Fatalf("get deleted status = %d, want 404", status)
+		}
+		if count := siScalarInt(t, backend, "SELECT COUNT(*) FROM sale_payments WHERE sale_id = "+itoa(sale.ID)); count != 0 {
+			t.Fatalf("payments after cascade = %d, want 0", count)
 		}
 	})
 }

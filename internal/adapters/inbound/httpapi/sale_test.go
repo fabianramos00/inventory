@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +66,22 @@ type stubSaleService struct {
 	deleteItemErr    error
 	deleteItemSaleID int64
 	deleteItemID     int64
+
+	paymentsResult *inbound.SalePaymentList
+	paymentsErr    error
+	paymentsSaleID int64
+	paymentsSkip   int
+	paymentsLimit  int
+
+	createPaymentResult *domain.Sale
+	createPaymentErr    error
+	createPaymentSaleID int64
+	createPaymentInput  inbound.CreateSalePaymentInput
+
+	deletePaymentResult *domain.Sale
+	deletePaymentErr    error
+	deletePaymentSaleID int64
+	deletePaymentID     int64
 }
 
 func sampleSale(id int64) *domain.Sale {
@@ -79,7 +96,6 @@ func sampleSale(id int64) *domain.Sale {
 		DebtAmount:     decimal.RequireFromString("10.25"),
 		PaymentStatus:  domain.PaymentStatusPartial,
 		DeliveryStatus: domain.DeliveryStatusPending,
-		PaymentMethod:  strPtr(domain.PaymentMethodCash),
 		ClientID:       &clientID,
 		CreatedByID:    7,
 		CreatedBy: &domain.User{
@@ -219,6 +235,39 @@ func (s *stubSaleService) DeleteItem(_ context.Context, saleID, itemID int64) (*
 	return s.deleteItemResult, nil
 }
 
+func (s *stubSaleService) ListPayments(_ context.Context, saleID int64, skip, limit int) (*inbound.SalePaymentList, error) {
+	s.paymentsSaleID, s.paymentsSkip, s.paymentsLimit = saleID, skip, limit
+	if s.paymentsErr != nil {
+		return nil, s.paymentsErr
+	}
+	if s.paymentsResult == nil {
+		return &inbound.SalePaymentList{Skip: skip, Limit: limit}, nil
+	}
+	return s.paymentsResult, nil
+}
+
+func (s *stubSaleService) CreatePayment(_ context.Context, saleID int64, input inbound.CreateSalePaymentInput) (*domain.Sale, error) {
+	s.createPaymentSaleID, s.createPaymentInput = saleID, input
+	if s.createPaymentErr != nil {
+		return nil, s.createPaymentErr
+	}
+	if s.createPaymentResult == nil {
+		return sampleSale(saleID), nil
+	}
+	return s.createPaymentResult, nil
+}
+
+func (s *stubSaleService) DeletePayment(_ context.Context, saleID, paymentID int64) (*domain.Sale, error) {
+	s.deletePaymentSaleID, s.deletePaymentID = saleID, paymentID
+	if s.deletePaymentErr != nil {
+		return nil, s.deletePaymentErr
+	}
+	if s.deletePaymentResult == nil {
+		return sampleSale(saleID), nil
+	}
+	return s.deletePaymentResult, nil
+}
+
 func newSaleTestServer(t *testing.T, service *stubSaleService) *httptest.Server {
 	t.Helper()
 	if service == nil {
@@ -282,12 +331,15 @@ func TestSaleListFiltersShapeAndDebt(t *testing.T) {
 	item := body.Items[0]
 	for _, key := range []string{
 		"id", "total_amount", "debt_amount", "payment_status", "delivery_status",
-		"payment_method", "amount_paid", "client_id", "created_at", "updated_at",
+		"amount_paid", "client_id", "created_at", "updated_at",
 		"created_by_id", "created_by", "client",
 	} {
 		if _, ok := item[key]; !ok {
 			t.Fatalf("missing key %q in %s", key, raw)
 		}
+	}
+	if _, ok := item["payment_method"]; ok {
+		t.Fatalf("sale response still includes payment_method: %s", raw)
 	}
 	var debt decimal.Decimal
 	if err := json.Unmarshal(item["debt_amount"], &debt); err != nil {
@@ -459,19 +511,20 @@ func TestSaleUpdateMapsPresenceAwareFields(t *testing.T) {
 	service := &stubSaleService{updateResult: sampleSale(4)}
 	server := newSaleTestServer(t, service)
 
-	body := map[string]any{"payment_method": nil, "client_id": nil}
+	body := map[string]any{"client_id": nil}
 	status, raw := userRequest(t, http.MethodPut, server.URL+"/api/v1/sales/4", "user", body)
 	if status != http.StatusOK {
 		t.Fatalf("status = %d body = %s", status, raw)
 	}
-	if !service.updateInput.PaymentMethod.Set || service.updateInput.PaymentMethod.Value != nil {
-		t.Fatalf("payment_method = %+v, want set null", service.updateInput.PaymentMethod)
-	}
 	if !service.updateInput.ClientID.Set || service.updateInput.ClientID.Value != nil {
 		t.Fatalf("client_id = %+v, want set null", service.updateInput.ClientID)
 	}
-	if service.updateInput.AmountPaid.Set {
-		t.Fatal("amount_paid should be omitted")
+
+	for _, rejected := range []map[string]any{{"amount_paid": 5}, {"payment_method": "cash"}} {
+		status, raw = userRequest(t, http.MethodPut, server.URL+"/api/v1/sales/4", "user", rejected)
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("update %v status = %d body = %s, want 422", rejected, status, raw)
+		}
 	}
 }
 
@@ -604,6 +657,118 @@ func TestSaleItemEndpoints(t *testing.T) {
 	}
 	if service.deleteItemSaleID != 5 || service.deleteItemID != 2 {
 		t.Fatalf("delete ids = %d/%d", service.deleteItemSaleID, service.deleteItemID)
+	}
+}
+
+func samplePayment(id, saleID int64) *domain.SalePayment {
+	createdByID := int64(7)
+	method := domain.PaymentMethodCash
+	return &domain.SalePayment{
+		ID:            id,
+		SaleID:        saleID,
+		Amount:        decimal.RequireFromString("5.25"),
+		PaymentMethod: &method,
+		CreatedAt:     time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		CreatedByID:   &createdByID,
+		CreatedBy:     &domain.User{ID: 7, FullName: "Seller", Email: "seller@example.com", IsActive: true},
+	}
+}
+
+func TestSalePaymentEndpoints(t *testing.T) {
+	service := &stubSaleService{
+		paymentsResult: &inbound.SalePaymentList{
+			Items:   []*domain.SalePayment{samplePayment(3, 5), samplePayment(2, 5)},
+			HasNext: true,
+			Skip:    0,
+			Limit:   2,
+		},
+	}
+	server := newSaleTestServer(t, service)
+
+	status, raw := userRequest(t, http.MethodGet, server.URL+"/api/v1/sales/5/payments?skip=0&limit=2", "user", nil)
+	if status != http.StatusOK {
+		t.Fatalf("list status = %d body = %s", status, raw)
+	}
+	if service.paymentsSaleID != 5 || service.paymentsSkip != 0 || service.paymentsLimit != 2 {
+		t.Fatalf("payment query = %d/%d/%d", service.paymentsSaleID, service.paymentsSkip, service.paymentsLimit)
+	}
+	var list struct {
+		Items   []map[string]json.RawMessage `json:"items"`
+		HasNext bool                         `json:"has_next"`
+		Skip    int                          `json:"skip"`
+		Limit   int                          `json:"limit"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil {
+		t.Fatal(err)
+	}
+	if !list.HasNext || len(list.Items) != 2 || list.Skip != 0 || list.Limit != 2 {
+		t.Fatalf("payment list = %+v", list)
+	}
+	for _, key := range []string{"id", "sale_id", "amount", "payment_method", "created_at", "created_by_id", "created_by"} {
+		if _, ok := list.Items[0][key]; !ok {
+			t.Fatalf("missing payment key %q in %s", key, raw)
+		}
+	}
+	var createdBy map[string]json.RawMessage
+	if err := json.Unmarshal(list.Items[0]["created_by"], &createdBy); err != nil {
+		t.Fatal(err)
+	}
+	if _, leaked := createdBy["hashed_password"]; leaked {
+		t.Fatal("payment created_by leaked hashed_password")
+	}
+
+	status, raw = userRequest(t, http.MethodPost, server.URL+"/api/v1/sales/5/payments", "user", map[string]any{
+		"amount": 5.25, "payment_method": "cash",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("create status = %d body = %s", status, raw)
+	}
+	if service.createPaymentSaleID != 5 ||
+		!service.createPaymentInput.Amount.Equal(decimal.RequireFromString("5.25")) ||
+		service.createPaymentInput.PaymentMethod != domain.PaymentMethodCash ||
+		service.createPaymentInput.CreatedByID != 42 {
+		t.Fatalf("create payment input = %+v sale %d", service.createPaymentInput, service.createPaymentSaleID)
+	}
+	if strings.Contains(string(raw), `"payment_method"`) {
+		t.Fatalf("sale response still includes payment_method: %s", raw)
+	}
+
+	status, raw = userRequest(t, http.MethodDelete, server.URL+"/api/v1/sales/5/payments/3", "user", nil)
+	if status != http.StatusOK {
+		t.Fatalf("delete status = %d body = %s", status, raw)
+	}
+	if service.deletePaymentSaleID != 5 || service.deletePaymentID != 3 {
+		t.Fatalf("delete ids = %d/%d", service.deletePaymentSaleID, service.deletePaymentID)
+	}
+}
+
+func TestSalePaymentErrorsMapToHTTP(t *testing.T) {
+	server := newSaleTestServer(t, &stubSaleService{
+		createPaymentErr: &domain.NotFoundError{Entity: "Sale", ID: 5},
+	})
+	status, raw := userRequest(t, http.MethodPost, server.URL+"/api/v1/sales/5/payments", "user", map[string]any{
+		"amount": 1, "payment_method": "cash",
+	})
+	if status != http.StatusNotFound || !contains(raw, "Sale not found") {
+		t.Fatalf("status = %d body = %s", status, raw)
+	}
+
+	server = newSaleTestServer(t, &stubSaleService{
+		deletePaymentErr: &domain.NotFoundError{Entity: "Sale payment", ID: 3},
+	})
+	status, raw = userRequest(t, http.MethodDelete, server.URL+"/api/v1/sales/5/payments/3", "user", nil)
+	if status != http.StatusNotFound || !contains(raw, "Sale payment not found") {
+		t.Fatalf("status = %d body = %s", status, raw)
+	}
+
+	server = newSaleTestServer(t, &stubSaleService{
+		createPaymentErr: fmt.Errorf("%w: amount cannot exceed remaining debt", domain.ErrValidation),
+	})
+	status, raw = userRequest(t, http.MethodPost, server.URL+"/api/v1/sales/5/payments", "user", map[string]any{
+		"amount": 99, "payment_method": "cash",
+	})
+	if status != http.StatusUnprocessableEntity || !contains(raw, "amount cannot exceed remaining debt") {
+		t.Fatalf("status = %d body = %s", status, raw)
 	}
 }
 

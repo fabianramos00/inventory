@@ -13,21 +13,24 @@ import (
 )
 
 type fakeSaleEnv struct {
-	sales        map[int64]*domain.Sale
-	items        map[int64][]*domain.SaleItem
-	stock        map[int64]int64
-	products     map[int64]*domain.ProductDetail
-	clients      map[int64]*domain.Client
-	users        map[int64]*domain.User
-	nextSaleID   int64
-	nextItemID   int64
-	createdSales int
+	sales         map[int64]*domain.Sale
+	items         map[int64][]*domain.SaleItem
+	payments      map[int64]*domain.SalePayment
+	stock         map[int64]int64
+	products      map[int64]*domain.ProductDetail
+	clients       map[int64]*domain.Client
+	users         map[int64]*domain.User
+	nextSaleID    int64
+	nextItemID    int64
+	nextPaymentID int64
+	createdSales  int
 }
 
 func newFakeSaleEnv() *fakeSaleEnv {
 	return &fakeSaleEnv{
 		sales:    map[int64]*domain.Sale{},
 		items:    map[int64][]*domain.SaleItem{},
+		payments: map[int64]*domain.SalePayment{},
 		stock:    map[int64]int64{},
 		products: map[int64]*domain.ProductDetail{},
 		clients:  map[int64]*domain.Client{},
@@ -78,22 +81,26 @@ func (u *fakeUnitOfWork) WithinTx(ctx context.Context, fn func(context.Context, 
 }
 
 type saleEnvSnapshot struct {
-	sales        map[int64]*domain.Sale
-	items        map[int64][]*domain.SaleItem
-	stock        map[int64]int64
-	nextSaleID   int64
-	nextItemID   int64
-	createdSales int
+	sales         map[int64]*domain.Sale
+	items         map[int64][]*domain.SaleItem
+	payments      map[int64]*domain.SalePayment
+	stock         map[int64]int64
+	nextSaleID    int64
+	nextItemID    int64
+	nextPaymentID int64
+	createdSales  int
 }
 
 func (e *fakeSaleEnv) snapshot() saleEnvSnapshot {
 	snapshot := saleEnvSnapshot{
-		sales:        make(map[int64]*domain.Sale, len(e.sales)),
-		items:        make(map[int64][]*domain.SaleItem, len(e.items)),
-		stock:        make(map[int64]int64, len(e.stock)),
-		nextSaleID:   e.nextSaleID,
-		nextItemID:   e.nextItemID,
-		createdSales: e.createdSales,
+		sales:         make(map[int64]*domain.Sale, len(e.sales)),
+		items:         make(map[int64][]*domain.SaleItem, len(e.items)),
+		payments:      make(map[int64]*domain.SalePayment, len(e.payments)),
+		stock:         make(map[int64]int64, len(e.stock)),
+		nextSaleID:    e.nextSaleID,
+		nextItemID:    e.nextItemID,
+		nextPaymentID: e.nextPaymentID,
+		createdSales:  e.createdSales,
 	}
 	for id, sale := range e.sales {
 		copied := *sale
@@ -110,15 +117,21 @@ func (e *fakeSaleEnv) snapshot() saleEnvSnapshot {
 	for id, quantity := range e.stock {
 		snapshot.stock[id] = quantity
 	}
+	for id, payment := range e.payments {
+		copied := *payment
+		snapshot.payments[id] = &copied
+	}
 	return snapshot
 }
 
 func (e *fakeSaleEnv) restore(snapshot saleEnvSnapshot) {
 	e.sales = snapshot.sales
 	e.items = snapshot.items
+	e.payments = snapshot.payments
 	e.stock = snapshot.stock
 	e.nextSaleID = snapshot.nextSaleID
 	e.nextItemID = snapshot.nextItemID
+	e.nextPaymentID = snapshot.nextPaymentID
 	e.createdSales = snapshot.createdSales
 }
 
@@ -144,6 +157,10 @@ func (r *fakeSaleRepo) Get(_ context.Context, id int64) (*domain.Sale, error) {
 		return nil, domain.ErrNotFound
 	}
 	return r.copySale(sale), nil
+}
+
+func (r *fakeSaleRepo) Lock(_ context.Context, id int64) (*domain.Sale, error) {
+	return r.Get(context.Background(), id)
 }
 
 func (r *fakeSaleRepo) Stats(context.Context) (*domain.SaleStats, error) {
@@ -191,6 +208,11 @@ func (r *fakeSaleRepo) Delete(_ context.Context, id int64) error {
 	}
 	delete(r.env.sales, id)
 	delete(r.env.items, id)
+	for paymentID, payment := range r.env.payments {
+		if payment.SaleID == id {
+			delete(r.env.payments, paymentID)
+		}
+	}
 	return nil
 }
 
@@ -269,6 +291,75 @@ func (r *fakeSaleRepo) DeleteItem(_ context.Context, saleID, itemID int64) error
 func (r *fakeSaleRepo) DeleteItems(_ context.Context, saleID int64) error {
 	delete(r.env.items, saleID)
 	return nil
+}
+
+func (r *fakeSaleRepo) ListPayments(_ context.Context, saleID int64, skip, limit int) ([]*domain.SalePayment, bool, error) {
+	all := make([]*domain.SalePayment, 0)
+	for id := r.env.nextPaymentID; id >= 1; id-- {
+		if payment, ok := r.env.payments[id]; ok && payment.SaleID == saleID {
+			cloned := *payment
+			all = append(all, &cloned)
+		}
+	}
+	if skip >= len(all) {
+		return nil, false, nil
+	}
+	all = all[skip:]
+	hasNext := len(all) > limit
+	if hasNext {
+		all = all[:limit]
+	}
+	for _, payment := range all {
+		r.attachPaymentUser(payment)
+	}
+	return all, hasNext, nil
+}
+
+func (r *fakeSaleRepo) GetPayment(_ context.Context, saleID, paymentID int64) (*domain.SalePayment, error) {
+	payment, ok := r.env.payments[paymentID]
+	if !ok || payment.SaleID != saleID {
+		return nil, domain.ErrNotFound
+	}
+	cloned := *payment
+	r.attachPaymentUser(&cloned)
+	return &cloned, nil
+}
+
+func (r *fakeSaleRepo) CreatePayment(_ context.Context, payment *domain.SalePayment) (*domain.SalePayment, error) {
+	r.env.nextPaymentID++
+	payment.ID = r.env.nextPaymentID
+	cloned := *payment
+	r.env.payments[payment.ID] = &cloned
+	return &cloned, nil
+}
+
+func (r *fakeSaleRepo) DeletePayment(_ context.Context, saleID, paymentID int64) error {
+	payment, ok := r.env.payments[paymentID]
+	if !ok || payment.SaleID != saleID {
+		return domain.ErrNotFound
+	}
+	delete(r.env.payments, paymentID)
+	return nil
+}
+
+func (r *fakeSaleRepo) SumPayments(_ context.Context, saleID int64) (decimal.Decimal, error) {
+	total := decimal.Zero
+	for _, payment := range r.env.payments {
+		if payment.SaleID == saleID {
+			total = total.Add(payment.Amount)
+		}
+	}
+	return total, nil
+}
+
+func (r *fakeSaleRepo) attachPaymentUser(payment *domain.SalePayment) {
+	if payment.CreatedByID == nil {
+		return
+	}
+	if user, ok := r.env.users[*payment.CreatedByID]; ok {
+		userCopy := *user
+		payment.CreatedBy = &userCopy
+	}
 }
 
 func (r *fakeSaleRepo) copySale(sale *domain.Sale) *domain.Sale {

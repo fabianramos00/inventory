@@ -114,6 +114,9 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 		{http.MethodPost, "/api/v1/sales/1/items", map[string]any{}},
 		{http.MethodPut, "/api/v1/sales/1/items/2", map[string]any{}},
 		{http.MethodDelete, "/api/v1/sales/1/items/2", nil},
+		{http.MethodGet, "/api/v1/sales/1/payments", nil},
+		{http.MethodPost, "/api/v1/sales/1/payments", map[string]any{}},
+		{http.MethodDelete, "/api/v1/sales/1/payments/2", nil},
 		// Dashboard.
 		{http.MethodGet, "/api/v1/dashboard/summary", nil},
 		{http.MethodGet, "/api/v1/dashboard/sales-trend", nil},

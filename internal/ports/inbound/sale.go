@@ -41,9 +41,20 @@ type CreateSaleInput struct {
 }
 
 type UpdateSaleInput struct {
-	PaymentMethod Optional[string]
-	AmountPaid    Optional[decimal.Decimal]
-	ClientID      Optional[int64]
+	ClientID Optional[int64]
+}
+
+type CreateSalePaymentInput struct {
+	Amount        decimal.Decimal
+	PaymentMethod string
+	CreatedByID   int64
+}
+
+type SalePaymentList struct {
+	Items   []*domain.SalePayment
+	HasNext bool
+	Skip    int
+	Limit   int
 }
 
 type AddSaleItemInput struct {
@@ -70,4 +81,7 @@ type SaleUseCase interface {
 	AddItem(ctx context.Context, saleID int64, input AddSaleItemInput) (*domain.Sale, error)
 	UpdateItem(ctx context.Context, saleID, itemID int64, input UpdateSaleItemInput) (*domain.Sale, error)
 	DeleteItem(ctx context.Context, saleID, itemID int64) (*domain.Sale, error)
+	ListPayments(ctx context.Context, saleID int64, skip, limit int) (*SalePaymentList, error)
+	CreatePayment(ctx context.Context, saleID int64, input CreateSalePaymentInput) (*domain.Sale, error)
+	DeletePayment(ctx context.Context, saleID, paymentID int64) (*domain.Sale, error)
 }

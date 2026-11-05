@@ -28,6 +28,8 @@ func (e *NotFoundError) Error() string {
 		return "Sale not found"
 	case "Sale item":
 		return "Sale item not found"
+	case "Sale payment":
+		return "Sale payment not found"
 	case "Purchase order":
 		return "Purchase order not found"
 	case "Order item":

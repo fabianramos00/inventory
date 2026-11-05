@@ -29,11 +29,20 @@ type Sale struct {
 	DebtAmount     decimal.Decimal
 	PaymentStatus  string
 	DeliveryStatus string
-	PaymentMethod  *string
 	ClientID       *int64
 	CreatedByID    int64
 	CreatedBy      *User
 	Client         *Client
+}
+
+type SalePayment struct {
+	ID            int64
+	SaleID        int64
+	Amount        decimal.Decimal
+	PaymentMethod *string
+	CreatedAt     time.Time
+	CreatedByID   *int64
+	CreatedBy     *User
 }
 
 type SaleItem struct {
