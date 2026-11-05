@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultDatabaseURL = "postgresql://inventory:inventory@localhost:5433/inventory_desktop"
+	defaultDatabaseURL = "postgresql://inventory:inventory@127.0.0.1:5432/inventory_desktop"
 	defaultAccessMin   = 30
 	defaultRefreshDays = 7
 	defaultBcryptCost  = 12
