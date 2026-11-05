@@ -11,10 +11,11 @@ behavior. They are not optional polish.
 | Go handler | `httptest` | Routing, auth, status codes, JSON shape |
 | Go integration | `testing` + PostgreSQL | Transactions, stock locking, migrations |
 | Go repository contract | `testing` + PostgreSQL/SQLite | Same port cases against both adapters |
+| Go migration | `testing` + SQLite | Schema rebuild and sale-payment backfill |
 | Go bootstrap | `testing` | `DB_MODE` selection and SQLite fallback |
 | Frontend unit | Vitest | Hooks, formatters, utilities, components |
 | Frontend E2E | Playwright | Auth, users, inventory, sales, purchase orders, dashboard aggregates |
-| Contract parity | Go test | Same fixtures against FastAPI and Go |
+| Contract parity | Go test | Same fixtures against FastAPI and Go (67 legacy endpoints) |
 
 ## Commands
 
@@ -102,6 +103,21 @@ Rules:
   - Deleting a received order does not reverse stock (legacy behavior).
   - Unique SKU and identity card violations map to a readable error.
   - Dashboard queries return zero-filled 7-day data.
+  - Sale creation with `amount_paid > 0` inserts exactly one opening payment
+    (amount, method, token user, UTC timestamp); `amount_paid = 0` inserts none
+    and rejects a supplied `payment_method`.
+  - Partial and exact payments update `amount_paid`, `payment_status`, and
+    `debt_amount` from `SUM(sale_payments.amount)`; overpayment and a payment
+    on a paid sale return `422`.
+  - Payment `amount` zero or negative, and a missing or invalid
+    `payment_method`, return `422`.
+  - Deleting a payment hard-deletes the row and recomputes the sale; a second
+    delete returns `404`.
+  - Deleting a sale cascades all of its payment rows.
+  - `GET /sales?payment_method=` matches through `EXISTS`, including a sale
+    whose matching payment is not the opening row.
+  - `PUT /sales/{id}` rejects `amount_paid` and `payment_method` as unknown
+    fields (`422`) while still accepting `client_id`.
 
 ## Repository contract tests
 
@@ -117,12 +133,29 @@ drift behind the same `internal/ports/outbound` interfaces.
 - The contract suite and the `httpapi` auth integration test share the test
   database; both take the PostgreSQL advisory lock in `tests/testdb` so
   parallel package test binaries cannot truncate each other's fixtures.
+- The sale suite includes the payment ledger: opening row, `id DESC` paging,
+  `SumPayments`, `EXISTS` method filter, delete recompute, second-delete
+  `NotFound`, and sale-delete cascade must pass against both adapters.
 
 Refresh-token timestamps use `gormstore.Timestamp`, which writes a fixed-width
 UTC format (`2006-01-02T15:04:05.000000000Z`) so the lexicographic
 `expires_at > ?` comparison stays chronological on SQLite and PostgreSQL. The
 read path parses with `time.RFC3339Nano` and normalizes to UTC, so values with
 a zero fraction or trimmed trailing zeros are accepted instead of failing.
+
+## Migration and backfill tests
+
+`internal/db/sale_payments_migration_test.go` migrates a SQLite database to
+version 6, seeds legacy sales, then runs `00007_sale_payments`. It must prove:
+
+- `SUM(sale_payments.amount) = sales.amount_paid` for every sale.
+- Sales with `amount_paid = 0` get no payment rows.
+- Each paid legacy sale gets exactly one opening payment, copying amount,
+  method, creator, and sale timestamp; a null legacy method stays null.
+- The SQLite `sales` rebuild drops `payment_method` and its CHECK/index while
+  preserving ids, rows, STRICT mode, remaining constraints, and indexes.
+- Deleting a sale cascades its payment rows; `PRAGMA foreign_key_check` is
+  clean and new payments enforce positive amounts and valid methods.
 
 ## Contract parity
 
@@ -227,6 +260,24 @@ responses.
 `TestFixtureCoverage` fails if a fixture file drops one of the 67 endpoints,
 if a module declares the wrong count, or if an unlisted endpoint appears.
 Update the status column only after a verified run.
+
+### Sale payment ledger (Go-only)
+
+`GET /api/v1/sales/{id}/payments`, `POST /api/v1/sales/{id}/payments`, and
+`DELETE /api/v1/sales/{id}/payments/{payment_id}` are an approved additive
+divergence. The legacy API has no such routes, so they stay outside the
+67-endpoint matrix and no fixture targets them. Cover them with Go service,
+handler, integration, and repository tests instead.
+
+The legacy sale-level `payment_method` is normalized away on the legacy side
+of sale comparisons because the Go sale response omits it; payment rows keep
+their own `payment_method`.
+
+## Remaining risks
+
+- The PostgreSQL `00007_sale_payments` backfill and `sales.payment_method`
+  drop are not automated. Only the SQLite migration is exercised; validate the
+  PostgreSQL path on a disposable database copy before release.
 
 ## Accessibility checks
 

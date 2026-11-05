@@ -22,6 +22,16 @@ export async function bootstrap(page: Page) {
   })
 }
 
+export async function mockHealth(page: Page, database: 'sqlite' | 'postgres') {
+  await page.route('**/healthz', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'ok', database }),
+    }),
+  )
+}
+
 export async function mockApi(page: Page, routes: Routes) {
   const calls: ApiCall[] = []
 
@@ -106,7 +116,6 @@ export const sale = (id = 1) => ({
   debt_amount: 25.5,
   payment_status: 'partial',
   delivery_status: 'pending',
-  payment_method: 'cash',
   amount_paid: 100,
   client_id: 3,
   created_at: '2026-02-10T09:00:00',

@@ -39,6 +39,43 @@ func TestNormalizeGeneratedValues(t *testing.T) {
 	}
 }
 
+func TestLegacySalePaymentMethodNormalizedAway(t *testing.T) {
+	body := []byte(`{"total_amount":20,"debt_amount":10,"payment_method":"credit",
+		"items":[{"total_amount":20,"debt_amount":10,"payment_method":"cash"}],
+		"payments":[{"amount":5,"payment_method":"debit"}]}`)
+	s := &side{ids: map[string]string{}}
+
+	legacy, ok := legacySideData(s, response{Status: 200, Body: body}).body.(map[string]any)
+	if !ok {
+		t.Fatal("legacy body is not an object")
+	}
+	if _, present := legacy["payment_method"]; present {
+		t.Fatal("legacy sale payment_method was not removed")
+	}
+	items, ok := legacy["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("legacy items = %v", legacy["items"])
+	}
+	if _, present := items[0].(map[string]any)["payment_method"]; present {
+		t.Fatal("nested legacy sale payment_method was not removed")
+	}
+	payments, ok := legacy["payments"].([]any)
+	if !ok || len(payments) != 1 {
+		t.Fatalf("legacy payments = %v", legacy["payments"])
+	}
+	if payments[0].(map[string]any)["payment_method"] != "debit" {
+		t.Fatal("payment ledger payment_method must be preserved")
+	}
+
+	goBody, ok := goSideData(s, response{Status: 200, Body: body}).body.(map[string]any)
+	if !ok {
+		t.Fatal("go body is not an object")
+	}
+	if goBody["payment_method"] != "credit" {
+		t.Fatalf("go payment_method = %v, want credit", goBody["payment_method"])
+	}
+}
+
 func TestMoneyComparesAsDecimal(t *testing.T) {
 	if details := diffValues("$", json.Number("21.20"), json.Number("21.2"), false); len(details) != 0 {
 		t.Fatalf("money mismatch: %v", details)

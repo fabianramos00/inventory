@@ -48,12 +48,12 @@
       "body": null
     },
     {
-      "name": "update sale payment",
+      "name": "update sale client",
       "method": "PUT",
       "path": "/api/v1/sales/{{sale_id}}",
       "auth": "superuser",
       "body": {
-        "amount_paid": 39.8
+        "client_id": "{{client_id}}"
       },
       "expect": {
         "status": 200

@@ -36,7 +36,8 @@ export default defineConfig({
       timeout: 120_000,
       env: {
         PORT: '8787',
-        DATABASE_URL: 'postgresql://inventory:inventory@localhost:5433/inventory_desktop_test',
+        DATABASE_URL: process.env.DATABASE_URL ?? 'postgresql://inventory:inventory@localhost:5433/inventory_desktop_test',
+        DB_MODE: process.env.DB_MODE ?? 'postgres',
         SECRET_KEY: 'e2e-test-secret-0123456789abcdef',
         BCRYPT_ROUNDS: '4',
         AUTO_MIGRATE: 'true',

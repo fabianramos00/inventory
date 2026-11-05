@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import {
   AUTH_FILE,
   createApiClient,
@@ -8,8 +8,43 @@ import {
   seedProvider,
   uniqueSuffix,
 } from './helpers'
+import { mockHealth } from './support'
 
 test.use({ storageState: AUTH_FILE })
+
+const BANNER_HEIGHT_VARIABLE = '--offline-banner-height'
+
+function bannerHeightVariable(page: Page) {
+  return page.evaluate(
+    variable => document.documentElement.style.getPropertyValue(variable).trim(),
+    BANNER_HEIGHT_VARIABLE,
+  )
+}
+
+async function expectBannerOffsetPublished(page: Page) {
+  await expect
+    .poll(() => bannerHeightVariable(page), {
+      message: 'offline banner publishes --offline-banner-height',
+    })
+    .not.toBe('')
+  expect(Number.parseFloat(await bannerHeightVariable(page))).toBeGreaterThan(0)
+}
+
+async function expectNoHorizontalOverflow(page: Page) {
+  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }))
+  expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+}
+
+async function expectChromeBelowBanner(page: Page, locator: ReturnType<Page['locator']>) {
+  const bannerBox = await page.getByRole('status').filter({ hasText: 'Modo local' }).boundingBox()
+  const chromeBox = await locator.boundingBox()
+  expect(bannerBox).not.toBeNull()
+  expect(chromeBox).not.toBeNull()
+  expect(chromeBox!.y).toBeGreaterThanOrEqual(bannerBox!.y + bannerBox!.height - 1)
+}
 
 interface Summary {
   inventory_value: number
@@ -71,7 +106,6 @@ test('los agregados del dashboard reflejan una venta y un pedido sembrados', asy
     providerId = provider.id
 
     const sale = await api.post<{ id: number }>('/sales', {
-      payment_method: 'cash',
       amount_paid: 0,
       client_id: client.id,
       items: [{ product_id: product.id, quantity: 2, delivered_quantity: 2, unit_price: 125.5 }],
@@ -124,4 +158,47 @@ test('renderiza los KPIs y gráficos del dashboard en /#/', async ({ page }) => 
   await expect(page.getByText('Pedidos pendientes', { exact: true })).toBeVisible()
   await expect(page.getByText('Ventas de los últimos 7 días')).toBeVisible()
   await expect(page.getByText('Top productos')).toBeVisible()
+})
+
+test.describe('banner de base de datos local', () => {
+  test('desktop: publica su altura y el sidebar fijo queda debajo', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await mockHealth(page, 'sqlite')
+    await page.goto('/#/')
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+
+    const banner = page.getByRole('status').filter({ hasText: 'Modo local' })
+    await expect(banner).toBeVisible()
+    await expectBannerOffsetPublished(page)
+
+    await expectChromeBelowBanner(page, page.locator('#app-sidebar'))
+    await expectNoHorizontalOverflow(page)
+  })
+
+  test('mobile: publica su altura y el header fijo queda debajo', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await mockHealth(page, 'sqlite')
+    await page.goto('/#/')
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+
+    const banner = page.getByRole('status').filter({ hasText: 'Modo local' })
+    await expect(banner).toBeVisible()
+    await expectBannerOffsetPublished(page)
+
+    await expectChromeBelowBanner(page, page.getByRole('banner'))
+    await expectNoHorizontalOverflow(page)
+  })
+
+  test('postgres: no renderiza el banner ni define la variable', async ({ page }) => {
+    await mockHealth(page, 'postgres')
+    const healthResponse = page.waitForResponse(
+      response => new URL(response.url()).pathname === '/healthz',
+    )
+    await page.goto('/#/')
+    await healthResponse
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+
+    await expect(page.getByRole('status').filter({ hasText: 'Modo local' })).toHaveCount(0)
+    await expect.poll(() => bannerHeightVariable(page)).toBe('')
+  })
 })

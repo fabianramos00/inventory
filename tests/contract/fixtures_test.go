@@ -9,6 +9,12 @@ import (
 	"testing"
 )
 
+// expectedEndpoints is the frozen 67-endpoint legacy parity matrix.
+//
+// Sale payments (GET/POST/DELETE /api/v1/sales/{id}/payments) are a deliberate
+// additive divergence: the legacy API has no such routes. They are covered by
+// Go-only service, handler, repository, and SQLite migration tests instead of
+// this matrix.
 var expectedEndpoints = map[string][]string{
 	"auth": {
 		"POST /api/v1/auth/login",

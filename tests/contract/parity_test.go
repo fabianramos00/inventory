@@ -813,7 +813,38 @@ type comparisonResponse struct {
 }
 
 func legacySideData(s *side, resp response) comparisonResponse {
-	return comparisonResponse{status: resp.Status, body: decodeNormalized(resp.Body, s)}
+	return comparisonResponse{status: resp.Status, body: dropLegacySalePaymentMethod(decodeNormalized(resp.Body, s))}
+}
+
+// dropLegacySalePaymentMethod removes the deprecated sale-level
+// payment_method that the legacy API still returns. The Go contract moved the
+// method to sale_payments and deliberately omits it from sale responses; the
+// payment endpoints themselves are Go-only and are not part of the 67-endpoint
+// parity matrix. This normalization keeps the remaining sale fixtures
+// comparable without weakening the Go-side shape check.
+func dropLegacySalePaymentMethod(value any) any {
+	switch node := value.(type) {
+	case map[string]any:
+		_, hasTotal := node["total_amount"]
+		_, hasDebt := node["debt_amount"]
+		isSale := hasTotal && hasDebt
+		out := make(map[string]any, len(node))
+		for key, item := range node {
+			if key == "payment_method" && isSale {
+				continue
+			}
+			out[key] = dropLegacySalePaymentMethod(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(node))
+		for i, item := range node {
+			out[i] = dropLegacySalePaymentMethod(item)
+		}
+		return out
+	default:
+		return value
+	}
 }
 
 func goSideData(s *side, resp response) comparisonResponse {
