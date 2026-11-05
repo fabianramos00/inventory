@@ -128,13 +128,22 @@ export type PaymentStatus = 'pending' | 'paid' | 'partial'
 export type DeliveryStatus = 'pending' | 'partial' | 'delivered'
 export type PaymentMethod = 'cash' | 'credit' | 'debit' | null
 
+export interface SalePayment {
+  id: number
+  sale_id: number
+  amount: number
+  payment_method: PaymentMethod
+  created_at: string
+  created_by_id: number | null
+  created_by: Pick<User, 'id' | 'full_name' | 'email' | 'is_active' | 'is_superuser'> | null
+}
+
 export interface Sale {
   id: number
   total_amount: number
   debt_amount: number
   payment_status: PaymentStatus
   delivery_status: DeliveryStatus
-  payment_method: PaymentMethod
   amount_paid: number
   client_id: number | null
   created_at: string

@@ -27,7 +27,6 @@ function sale(overrides: Record<string, unknown> = {}) {
     amount_paid: 60,
     payment_status: 'partial',
     delivery_status: 'pending',
-    payment_method: 'cash',
     client_id: 5,
     created_at: '2026-01-15T12:00:00Z',
     updated_at: null,

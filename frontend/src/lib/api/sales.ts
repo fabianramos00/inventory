@@ -1,5 +1,5 @@
 import api from '@/lib/axios'
-import type { CursorPaginatedResponse, Sale, SaleItem, CreateSaleInput, PaymentMethod } from '@/types'
+import type { CursorPaginatedResponse, Sale, SaleItem, SalePayment, CreateSaleInput, PaymentMethod } from '@/types'
 
 export interface SalesParams {
   skip?: number
@@ -33,8 +33,17 @@ export const salesApi = {
   deleteSale: (id: number) =>
     api.delete(`/sales/${id}`),
 
-  updateSale: (id: number, data: { payment_method?: PaymentMethod; amount_paid?: number; client_id?: number | null }) =>
+  updateSale: (id: number, data: { client_id: number | null }) =>
     api.put<Sale>(`/sales/${id}`, data),
+
+  getSalePayments: (id: number, params?: { skip?: number; limit?: number }) =>
+    api.get<CursorPaginatedResponse<SalePayment>>(`/sales/${id}/payments`, { params }),
+
+  addSalePayment: (id: number, data: { amount: number; payment_method: Exclude<PaymentMethod, null> }) =>
+    api.post<Sale>(`/sales/${id}/payments`, data),
+
+  deleteSalePayment: (id: number, paymentId: number) =>
+    api.delete<Sale>(`/sales/${id}/payments/${paymentId}`),
 
   addSaleItem: (saleId: number, data: { product_id: number; quantity: number; delivered_quantity: number; unit_price?: number | null }) =>
     api.post<Sale>(`/sales/${saleId}/items`, data),

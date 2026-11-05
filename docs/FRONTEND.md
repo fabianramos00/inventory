@@ -99,6 +99,34 @@ use hash URLs.
   not synchronized, and the local file is not encrypted; users must protect
   the equipment and keep backups.
 
+### Offline banner offset contract
+
+The banner sits above the router and pushes the page down by its rendered
+height. Because the sidebar, mobile header, and skip link are `position: fixed`,
+they must offset themselves instead of assuming the top of the viewport:
+
+- `OfflineDatabaseBanner` measures its own height with `ResizeObserver` and
+  sets `--offline-banner-height` on `document.documentElement`. The variable is
+  only present while `database === "sqlite"`; it is removed on cleanup, on
+  unmount, and whenever the banner is not rendered. The text wraps on narrow
+  windows, so the value is measured rather than hardcoded.
+- Consumers read it with a `0px` fallback, e.g.
+  `top: var(--offline-banner-height, 0px)`. Postgres mode therefore keeps the
+  original layout.
+- Sidebar desktop: `top: calc(12px + var(--offline-banner-height, 0px))` and
+  `height: calc(100dvh - 24px - var(--offline-banner-height, 0px))`.
+- Sidebar mobile and the mobile header start at
+  `top: var(--offline-banner-height, 0px)`.
+- The skip link starts at
+  `top: calc(8px + var(--offline-banner-height, 0px))` so it is not hidden
+  under the banner.
+- The app shell, main content, and login container use
+  `min-height: calc(100dvh - var(--offline-banner-height, 0px))` so the banner
+  does not add an artificial extra viewport of scroll.
+- Unit coverage asserts the variable is set for sqlite and removed on unmount
+  or non-sqlite. The visual overlap itself is covered by Playwright, where
+  geometry and stacking are observable.
+
 ### Browser assumptions to review
 
 | Assumption | Desktop action |
@@ -118,7 +146,7 @@ use hash URLs.
   - `['product', id]`
   - `['inventoryStats']`
   - `['sales', { page, ...filters, limit }]`, `['salesStats']`
-  - `['sale', id]`, `['saleItems', id]`
+  - `['sale', id]`, `['saleItems', id]`, `['salePayments', id]`
   - `['orders', ...]`, `['order', id]`, `['orderItems', id]`
   - `['clients', ...]`, `['providers', ...]`, `['users', ...]`
   - `['dashboardSummary']`, `['dashboardTrend']`, `['dashboardTopProducts']`,
@@ -131,17 +159,34 @@ use hash URLs.
   optional fields; provider edit sends explicit `null` for cleared
   `contact_info`, `email`, or `phone`.
 - Sale create/delete and sale-item add/update/delete change stock. Updating a
-  sale changes only payment and client details; it does not change stock.
+  sale changes only client details; it does not change stock or payments.
   These mutations invalidate `['sales']`, `['salesStats']`, `['products']`,
   `['product']` (detail prefix), `['inventoryStats']`, `['dashboardSummary']`,
   `['dashboardTrend']`, `['dashboardTopProducts']`, and
   `['dashboardLowStock']`. Item mutations also invalidate `['sale', id]` and
   `['saleItems', id]`. Clients changes invalidate `['clients']`.
+- Sale payments use `GET /sales/{id}/payments?skip=0&limit=5` (cursor via
+  `has_next`, newest first) and `POST`/`DELETE /sales/{id}/payments` returning
+  the updated sale. Payment writes invalidate `['sale', id]`,
+  `['salePayments', id]`, `['sales']`, `['salesStats']`, and the dashboard keys
+  through `invalidateSaleData`. The modal registers one payment and the history
+  card loads older pages with `Ver más`; deleting a payment asks for
+  confirmation and refreshes the same prefixes.
 - The create-sale payload is `payment_method`, `amount_paid`, `client_id`,
   and `items[{ product_id, quantity, delivered_quantity, unit_price }]`. It
   does not send `payment_status`; the server derives it from `amount_paid`.
-  The create form shows that derived status as a read-only badge and does not
-  offer a manual override.
+  `payment_method` is only shown and required when `amount_paid > 0`, and the
+  payload sends `null` when `amount_paid` is 0. The create form shows the
+  derived status as a read-only badge and does not offer a manual override.
+- Sale detail hides `Pagar` when `debt_amount` is 0 or the sale is paid. The
+  payment history renders date/time (`DD/MM/YYYY`, 24h), method, registering
+  user, and amount. Legacy payments may have `payment_method` or
+  `created_by` as `null`; the history and delete confirmation then render
+  `Sin especificar` and `Sin usuario`, never the raw value. Payment delete
+  errors keep the confirmation open and surface through the modal's error
+  box. Sale edit sends only `client_id` (explicit `null` when cleared); it
+  never sends `amount_paid` or `payment_method`. `Monto pagado` stays
+  read-only in the detail view and the sale-level method is not shown.
 - Sales date inputs emit `YYYY-MM-DD`; `useSales` converts `start_date` to
   the Bogota start of day and `end_date` to the inclusive Bogota end of day
   as RFC 3339 instants before calling the API. `useOrders` applies the same

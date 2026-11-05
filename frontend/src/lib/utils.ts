@@ -2,6 +2,13 @@ export function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+export function formatDateTime(iso: string) {
+  const date = new Date(iso)
+  const day = date.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const time = date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return `${day} ${time}`
+}
+
 const numberFormatter = new Intl.NumberFormat('es-CO')
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
   minimumFractionDigits: 2,

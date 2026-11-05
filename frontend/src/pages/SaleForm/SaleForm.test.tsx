@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SaleForm from './SaleForm'
+import { formatDateTime } from '@/lib/utils'
 
 const mocks = vi.hoisted(() => ({
   useSale: vi.fn(),
@@ -13,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   updateSaleItem: vi.fn(),
   deleteSaleItem: vi.fn(),
   getSaleItems: vi.fn(),
+  getSalePayments: vi.fn(),
+  addSalePayment: vi.fn(),
+  deleteSalePayment: vi.fn(),
   getClients: vi.fn(),
   createClient: vi.fn(),
   getProducts: vi.fn(),
@@ -31,6 +35,9 @@ vi.mock('@/lib/api/sales', () => ({
     updateSaleItem: mocks.updateSaleItem,
     deleteSaleItem: mocks.deleteSaleItem,
     getSaleItems: mocks.getSaleItems,
+    getSalePayments: mocks.getSalePayments,
+    addSalePayment: mocks.addSalePayment,
+    deleteSalePayment: mocks.deleteSalePayment,
   },
 }))
 
@@ -55,13 +62,25 @@ function sale(overrides: Record<string, unknown> = {}) {
     amount_paid: 10,
     payment_status: 'partial',
     delivery_status: 'pending',
-    payment_method: 'cash',
     client_id: null,
     created_at: '2026-01-02T03:04:05Z',
     updated_at: null,
     created_by_id: 2,
     created_by: { id: 2, full_name: 'Ana Pérez', email: 'ana@example.com', is_active: true, is_superuser: false },
     client: null,
+    ...overrides,
+  }
+}
+
+function payment(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 31,
+    sale_id: 1,
+    amount: 5.25,
+    payment_method: 'cash',
+    created_at: '2026-01-03T15:07:00Z',
+    created_by_id: 2,
+    created_by: { id: 2, full_name: 'Ana Pérez', email: 'ana@example.com', is_active: true, is_superuser: false },
     ...overrides,
   }
 }
@@ -126,6 +145,13 @@ describe('SaleForm payload wiring', () => {
     mocks.useSale.mockReset().mockReturnValue({
       sale: sale(),
       saleItems: [saleItem()],
+      payments: [],
+      paymentsHasNext: false,
+      paymentsLoading: false,
+      paymentsFetching: false,
+      paymentsError: null,
+      loadMorePayments: vi.fn(),
+      retryPayments: vi.fn(),
       isLoading: false,
       error: null,
     })
@@ -134,6 +160,9 @@ describe('SaleForm payload wiring', () => {
     mocks.addSaleItem.mockReset().mockResolvedValue({ data: sale() })
     mocks.updateSaleItem.mockReset().mockResolvedValue({ data: sale() })
     mocks.deleteSaleItem.mockReset().mockResolvedValue({ data: sale() })
+    mocks.getSalePayments.mockReset()
+    mocks.addSalePayment.mockReset()
+    mocks.deleteSalePayment.mockReset()
     mocks.getSaleItems.mockReset().mockResolvedValue({
       data: { items: [saleItem({ id: 12, product_id: 5 })], has_next: false, skip: 0, limit: 100 },
     })
@@ -142,34 +171,25 @@ describe('SaleForm payload wiring', () => {
     mocks.createClient.mockReset()
   })
 
-  it('sends the edit-details payload with explicit nulls for the nullable fields', async () => {
+  it('sends only client_id when saving sale details', async () => {
     renderSale()
     fireEvent.click(editButtons()[1])
 
-    fireEvent.change(document.getElementById('edit-amount-paid')!, { target: { value: '12.50' } })
     fireEvent.click(screen.getByRole('button', { name: /Guardar/ }))
 
     await waitFor(() => expect(mocks.updateSale).toHaveBeenCalledWith(1, {
-      payment_method: 'cash',
-      amount_paid: 12.5,
       client_id: null,
     }))
   })
 
-  it('clears the nullable edit-details fields to null', async () => {
+  it('does not expose amount paid or payment method in sale edit mode', () => {
     renderSale()
     fireEvent.click(editButtons()[1])
 
-    fireEvent.click(screen.getByRole('button', { name: 'Efectivo' }))
-    fireEvent.click(screen.getByRole('option', { name: 'Sin especificar' }))
-    fireEvent.change(document.getElementById('edit-amount-paid')!, { target: { value: '0' } })
-    fireEvent.click(screen.getByRole('button', { name: /Guardar/ }))
-
-    await waitFor(() => expect(mocks.updateSale).toHaveBeenCalledWith(1, {
-      payment_method: null,
-      amount_paid: 0,
-      client_id: null,
-    }))
+    expect(document.getElementById('edit-amount-paid')).toBeNull()
+    expect(screen.queryByText('Método pago')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Efectivo' })).toBeNull()
+    expect(screen.getByText('Los pagos se registran con «Pagar».')).toBeTruthy()
   })
 
   it('sends only the documented fields when updating an item', async () => {
@@ -224,6 +244,153 @@ describe('SaleForm payload wiring', () => {
   })
 })
 
+describe('SaleForm payments', () => {
+  function renderWithPayments(overrides: Record<string, unknown> = {}) {
+    mocks.useSale.mockReturnValue({
+      sale: sale(),
+      saleItems: [saleItem()],
+      payments: [payment()],
+      paymentsHasNext: false,
+      paymentsLoading: false,
+      paymentsFetching: false,
+      paymentsError: null,
+      loadMorePayments: vi.fn(),
+      retryPayments: vi.fn(),
+      isLoading: false,
+      error: null,
+      ...overrides,
+    })
+    renderSale()
+  }
+
+  it('renders the payment history newest first with method, user and amount', () => {
+    renderWithPayments()
+
+    expect(screen.getByRole('button', { name: /^Pagar$/ })).toBeTruthy()
+    expect(screen.getByText('Historial de pagos')).toBeTruthy()
+    expect(screen.getByText('Fecha y hora')).toBeTruthy()
+    expect(screen.getByText('Método')).toBeTruthy()
+    expect(screen.getAllByText('Registrado por').length).toBeGreaterThan(0)
+    expect(screen.getByText('Monto')).toBeTruthy()
+    expect(screen.getByText('Efectivo')).toBeTruthy()
+    expect(screen.getAllByText('Ana Pérez').length).toBeGreaterThan(0)
+    expect(screen.getByText('$ 5,25')).toBeTruthy()
+    expect(screen.getByText(formatDateTime(payment().created_at))).toBeTruthy()
+  })
+
+  it('falls back for legacy payments without method or user', () => {
+    renderWithPayments({
+      payments: [payment({ payment_method: null, created_by_id: null, created_by: null })],
+    })
+
+    expect(screen.getByText('Sin especificar')).toBeTruthy()
+    expect(screen.getByText('Sin usuario')).toBeTruthy()
+  })
+
+  it('shows the empty history with the Pagar hint', () => {
+    renderWithPayments({ payments: [] })
+
+    expect(screen.getByText('Sin pagos registrados')).toBeTruthy()
+    expect(screen.getByText('Registra el primer pago con «Pagar».')).toBeTruthy()
+  })
+
+  it('registers a payment from the modal with the required method', async () => {
+    renderWithPayments()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Pagar$/ }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    const amount = screen.getByLabelText('Monto del pago') as HTMLInputElement
+    expect(amount.value).toBe('10.00')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar pago' }))
+    await waitFor(() => expect(screen.getByText('Selecciona un método de pago.')).toBeTruthy())
+    expect(mocks.addSalePayment).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Método de pago' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Efectivo' }))
+    mocks.addSalePayment.mockResolvedValueOnce({
+      data: sale({ debt_amount: 0, amount_paid: 20, payment_status: 'paid' }),
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar pago' }))
+
+    await waitFor(() => expect(mocks.addSalePayment).toHaveBeenCalledWith(1, {
+      amount: 10,
+      payment_method: 'cash',
+    }))
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Pago de $ 10,00 registrado. Saldo pendiente: $ 0,00.'))
+  })
+
+  it('rejects zero and above-debt amounts before calling the API', async () => {
+    renderWithPayments()
+    fireEvent.click(screen.getByRole('button', { name: /^Pagar$/ }))
+
+    const amount = screen.getByLabelText('Monto del pago') as HTMLInputElement
+    fireEvent.change(amount, { target: { value: '0' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar pago' }))
+    await waitFor(() => expect(screen.getByText('Ingresa un monto mayor a 0.')).toBeTruthy())
+
+    fireEvent.change(amount, { target: { value: '10.01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar pago' }))
+    await waitFor(() => expect(screen.getByText(/no puede superar el saldo pendiente/)).toBeTruthy())
+
+    expect(mocks.addSalePayment).not.toHaveBeenCalled()
+  })
+
+  it('loads older payments with Ver más', () => {
+    const loadMorePayments = vi.fn()
+    renderWithPayments({ paymentsHasNext: true, loadMorePayments })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver más' }))
+
+    expect(loadMorePayments).toHaveBeenCalled()
+  })
+
+  it('keeps the history frame and retries after a load error', () => {
+    const retryPayments = vi.fn()
+    renderWithPayments({ payments: [], paymentsError: new Error('failed'), retryPayments })
+
+    expect(screen.getByText('No se pudieron cargar los pagos.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(retryPayments).toHaveBeenCalled()
+  })
+
+  it('deletes a payment after a confirmation naming the resulting balance', async () => {
+    renderWithPayments()
+    mocks.deleteSalePayment.mockResolvedValueOnce({ data: sale({ debt_amount: 15.25, amount_paid: 4.75 }) })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar pago de $ 5,25' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/Saldo resultante: \$ 15,25/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Eliminar' }))
+
+    await waitFor(() => expect(mocks.deleteSalePayment).toHaveBeenCalledWith(1, 31))
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Pago eliminado. Saldo pendiente: $ 15,25.'))
+  })
+
+  it('names an unspecified method in the delete confirmation', () => {
+    renderWithPayments({ payments: [payment({ payment_method: null })] })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar pago de $ 5,25' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/Sin especificar/)).toBeTruthy()
+  })
+
+  it('keeps the confirmation open and shows an error when deleting fails', async () => {
+    renderWithPayments()
+    mocks.deleteSalePayment.mockRejectedValueOnce(new Error('No se pudo eliminar el pago.'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar pago de $ 5,25' }))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Eliminar' }))
+
+    await waitFor(() => expect(mocks.deleteSalePayment).toHaveBeenCalledWith(1, 31))
+    await waitFor(() => expect(within(dialog).getByRole('alert').textContent).toContain('No se pudo eliminar el pago.'))
+    expect(within(dialog).getByRole('button', { name: 'Eliminar' })).toBeTruthy()
+  })
+})
+
 describe('SaleForm create payload', () => {
   it('submits the create payload without payment_status or unknown fields', async () => {
     mocks.useSale.mockReturnValue({ sale: null, saleItems: [], isLoading: false, error: null })
@@ -251,6 +418,23 @@ describe('SaleForm create payload', () => {
       client_id: null,
       items: [{ product_id: 5, quantity: 1, delivered_quantity: 1, unit_price: 50 }],
     })
+  })
+
+  it('shows the payment method only when amount paid is greater than zero', () => {
+    mocks.useSale.mockReturnValue({ sale: null, saleItems: [], isLoading: false, error: null })
+    renderSale('/sales/create')
+
+    expect(screen.queryByText('Método de pago')).toBeNull()
+
+    fireEvent.change(document.getElementById('create-amount-paid')!, { target: { value: '10' } })
+
+    expect(screen.getByText('Método de pago')).toBeTruthy()
+    expect((screen.getByRole('button', { name: /Guardar Venta/ }) as HTMLButtonElement).disabled).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Método de pago' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Débito' }))
+
+    expect((screen.getByRole('button', { name: /Guardar Venta/ }) as HTMLButtonElement).disabled).toBe(false)
   })
 
 

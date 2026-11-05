@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatCurrency, formatDate, formatNumber, getProductStatus } from './utils'
+import { formatCurrency, formatDate, formatDateTime, formatNumber, getProductStatus } from './utils'
 
 describe('formatCurrency', () => {
   it('formats COP with Colombian separators and two decimals', () => {
@@ -22,6 +22,12 @@ describe('formatNumber', () => {
 describe('formatDate', () => {
   it('formats dates as DD/MM/YYYY', () => {
     expect(formatDate('2026-10-24T12:00:00Z')).toBe('24/10/2026')
+  })
+})
+
+describe('formatDateTime', () => {
+  it('formats dates as DD/MM/YYYY plus 24-hour time', () => {
+    expect(formatDateTime(new Date(2026, 9, 24, 15, 7).toISOString())).toBe('24/10/2026 15:07')
   })
 })
 

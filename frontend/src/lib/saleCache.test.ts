@@ -19,7 +19,7 @@ describe('invalidateSaleData', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboardLowStock'] })
   })
 
-  it('also refreshes the sale and its items after an item mutation', () => {
+  it('also refreshes the sale, its items, and its payments after a payment or item mutation', () => {
     const queryClient = new QueryClient()
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
 
@@ -30,5 +30,6 @@ describe('invalidateSaleData', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['inventoryStats'] })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['sale', 42] })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['saleItems', 42] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['salePayments', 42] })
   })
 })

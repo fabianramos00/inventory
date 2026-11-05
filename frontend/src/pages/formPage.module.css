@@ -272,6 +272,12 @@
   background: transparent;
 }
 
+.cardHint {
+  margin: -8px 0 0;
+  color: var(--ink-meta);
+  font-size: 12px;
+}
+
 .cardActions {
   display: flex;
   align-items: center;
@@ -1001,6 +1007,187 @@
 
   .receiptTotalValue {
     color: var(--accent);
+  }
+}
+
+/* ── Payment history ────────────────────────────────────────────────── */
+
+.statusAnnouncement {
+  padding: 10px 14px;
+  border: 1px solid var(--success-ink);
+  border-radius: var(--radius-control);
+  background: var(--success-bg);
+  color: var(--success-ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.historyHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.historyTableWrapper {
+  overflow-x: auto;
+}
+
+.historyTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.historyTable th {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--table-head-bg);
+  color: var(--ink-meta);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.historyTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-1);
+  vertical-align: middle;
+}
+
+.historyTable tr:last-child td {
+  border-bottom: none;
+}
+
+.historyAmount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.historyDate {
+  white-space: nowrap;
+}
+
+.historyDelete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--ink-meta);
+  cursor: pointer;
+}
+
+.historyDelete:hover:not(:disabled) {
+  background: var(--destructive-bg);
+  color: var(--destructive-ink);
+}
+
+.historyDelete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.historyEmpty {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.historyEmptyHint {
+  margin: 4px 0 0;
+  color: var(--ink-meta);
+  font-size: 12px;
+}
+
+.historyError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--destructive-ink);
+  border-radius: var(--radius-control);
+  background: var(--destructive-bg);
+  color: var(--destructive-ink);
+  font-size: 14px;
+}
+
+.historyErrorMessage {
+  margin: 0;
+}
+
+.historySkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.historySkeletonRow {
+  height: 42px;
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+}
+
+.historyLoadMore {
+  align-self: flex-start;
+}
+
+@media (max-width: 767px) {
+  .historyTable thead {
+    display: none;
+  }
+
+  .historyTable,
+  .historyTable tbody,
+  .historyTable tr,
+  .historyTable td {
+    display: block;
+    width: 100%;
+  }
+
+  .historyTable tr {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .historyTable tr:last-child {
+    border-bottom: none;
+  }
+
+  .historyTable td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 12px;
+    border: none;
+    min-height: 32px;
+  }
+
+  .historyTable td::before {
+    content: attr(data-label);
+    color: var(--ink-meta);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .historyDate {
+    white-space: normal;
+  }
+
+  .historyDelete {
+    width: 44px;
+    height: 44px;
   }
 }
 

@@ -1,6 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { salesApi } from '@/lib/api/sales'
 import type { Sale, SaleItem } from '@/types'
+
+export const SALE_PAYMENT_PAGE_LIMIT = 5
 
 export interface SaleItemView extends SaleItem {
   product_category: string
@@ -33,9 +35,28 @@ export function useSale(id: string | undefined) {
     enabled: !!id,
   })
 
+  const paymentsQuery = useInfiniteQuery({
+    queryKey: ['salePayments', saleId],
+    queryFn: ({ pageParam }) =>
+      salesApi
+        .getSalePayments(saleId, { skip: pageParam, limit: SALE_PAYMENT_PAGE_LIMIT })
+        .then(res => res.data),
+    initialPageParam: 0,
+    getNextPageParam: lastPage =>
+      lastPage.has_next ? lastPage.skip + lastPage.items.length : undefined,
+    enabled: !!id,
+  })
+
   return {
     sale: saleQuery.data ?? null,
     saleItems: itemsQuery.data ?? [],
+    payments: paymentsQuery.data?.pages.flatMap(page => page.items) ?? [],
+    paymentsHasNext: paymentsQuery.hasNextPage,
+    paymentsLoading: paymentsQuery.isLoading,
+    paymentsFetching: paymentsQuery.isFetching,
+    paymentsError: paymentsQuery.error,
+    loadMorePayments: paymentsQuery.fetchNextPage,
+    retryPayments: paymentsQuery.refetch,
     isLoading: saleQuery.isLoading || itemsQuery.isLoading,
     error: saleQuery.error ?? itemsQuery.error,
   }

@@ -20,9 +20,10 @@ export function buildCreateSalePayload({
   clientId,
   items,
 }: CreateSalePayloadInput): CreateSaleInput {
+  const paid = parseFloat(amountPaid) || 0
   return {
-    payment_method: (paymentMethod as PaymentMethod) || null,
-    amount_paid: parseFloat(amountPaid) || 0,
+    payment_method: paid > 0 ? (paymentMethod as PaymentMethod) || null : null,
+    amount_paid: paid,
     client_id: clientId || null,
     items: items.map(item => ({
       product_id: item.product_id,

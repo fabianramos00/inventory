@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, Search, X, Loader, Package, Plus, Pencil, Check, Trash2 } from 'lucide-react'
+import { ChevronLeft, Search, X, Loader, Package, Plus, Pencil, Check, Trash2, Wallet } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import styles from '../formPage.module.css'
 import { salesApi } from '@/lib/api/sales'
@@ -11,16 +11,17 @@ import CreateFormModal from '@/components/CreateFormModal/CreateFormModal'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteModal'
 import SearchSelect from '@/components/SearchSelect/SearchSelect'
 import Dropdown from '@/components/Dropdown/Dropdown'
+import SalePaymentModal from '@/components/SalePaymentModal/SalePaymentModal'
 import DiscardChangesModal from './DiscardChangesModal'
 import { paymentStatusLabel, paymentStatusBadge, deliveryStatusLabel, deliveryStatusBadge, paymentMethodLabel } from '@/lib/constants'
-import { formatDate, formatCurrency, safeNumber } from '@/lib/utils'
+import { formatDate, formatDateTime, formatCurrency, safeNumber } from '@/lib/utils'
 import { invalidateSaleData } from '@/lib/saleCache'
 import { useSale, type SaleItemView } from '@/hooks/useSale'
 import { useDebouncedFetch } from '@/hooks/useDebouncedFetch'
 import { useClickOutside } from '@/hooks/useClickOutside'
 import { CLIENT_FIELDS, buildClientCreatePayload } from '@/lib/formFields'
 import { buildCreateSalePayload } from './salePayload'
-import type { Product, FilterOption, PaymentStatus, PaymentMethod } from '@/types'
+import type { Product, FilterOption, PaymentStatus, Sale, SalePayment } from '@/types'
 
 interface SaleItemDraft {
   id?: number
@@ -38,11 +39,14 @@ interface SaleItemDraft {
 }
 
 const PAYMENT_METHOD_OPTIONS = [
-  { value: '', label: 'Sin especificar' },
   { value: 'cash', label: 'Efectivo' },
   { value: 'debit', label: 'Débito' },
   { value: 'credit', label: 'Crédito' },
 ]
+
+function paymentMethodName(method: string | null): string {
+  return (method && paymentMethodLabel[method]) || 'Sin especificar'
+}
 
 export default function SaleForm() {
   const navigate = useNavigate()
@@ -50,7 +54,7 @@ export default function SaleForm() {
   const isCreateMode = !id
   const queryClient = useQueryClient()
 
-  const { sale, saleItems, isLoading: pageLoading, error: saleError } = useSale(id)
+  const { sale, saleItems, payments, paymentsHasNext, paymentsLoading, paymentsFetching, paymentsError, loadMorePayments, retryPayments, isLoading: pageLoading, error: saleError } = useSale(id)
 
   useEffect(() => {
     if (!isCreateMode && saleError) navigate('/sales')
@@ -72,6 +76,12 @@ export default function SaleForm() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showDiscardModal, setShowDiscardModal] = useState(false)
   const [showCreateClient, setShowCreateClient] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentToDelete, setPaymentToDelete] = useState<SalePayment | null>(null)
+  const [deletingPaymentId, setDeletingPaymentId] = useState<number | null>(null)
+  const [paymentAnnouncement, setPaymentAnnouncement] = useState<string | null>(null)
+  const payButtonRef = useRef<HTMLButtonElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
 
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending')
   const [paymentMethod, setPaymentMethod] = useState<string>('')
@@ -137,8 +147,6 @@ export default function SaleForm() {
 
   function handleStartEditDetails() {
     if (!sale) return
-    setPaymentMethod(sale.payment_method ?? '')
-    setAmountPaid(String(sale.amount_paid))
     setClientId(sale.client?.id ?? '')
     setSelectedClient(sale.client ? { id: sale.client.id, name: sale.client.name } : null)
     setIsEditingDetails(true)
@@ -153,8 +161,6 @@ export default function SaleForm() {
     setIsSaving(true)
     try {
       const res = await salesApi.updateSale(sale.id, {
-        payment_method: (paymentMethod as PaymentMethod) || null,
-        amount_paid: parseFloat(amountPaid) || 0,
         client_id: clientId || null,
       })
       queryClient.setQueryData(['sale', sale.id], res.data)
@@ -164,6 +170,34 @@ export default function SaleForm() {
       setApiError(getAPIErrorMessage(err, 'Error al guardar los detalles de la venta. Intenta de nuevo.'))
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  function handlePaymentSuccess(updatedSale: Sale, amount: number) {
+    setShowPaymentModal(false)
+    queryClient.setQueryData(['sale', updatedSale.id], updatedSale)
+    invalidateSaleData(queryClient, updatedSale.id)
+    setPaymentAnnouncement(`Pago de ${formatCurrency(amount)} registrado. Saldo pendiente: ${formatCurrency(updatedSale.debt_amount)}.`)
+    requestAnimationFrame(() => {
+      if (payButtonRef.current) payButtonRef.current.focus()
+      else titleRef.current?.focus()
+    })
+  }
+
+  async function handleDeletePayment() {
+    if (!sale || !paymentToDelete) return
+    setDeletingPaymentId(paymentToDelete.id)
+    try {
+      const res = await salesApi.deleteSalePayment(sale.id, paymentToDelete.id)
+      queryClient.setQueryData(['sale', sale.id], res.data)
+      invalidateSaleData(queryClient, sale.id)
+      setPaymentAnnouncement(`Pago eliminado. Saldo pendiente: ${formatCurrency(res.data.debt_amount)}.`)
+      setPaymentToDelete(null)
+    } catch (err) {
+      setApiError(getAPIErrorMessage(err, 'No se pudo eliminar el pago. Intenta de nuevo.'))
+      throw err
+    } finally {
+      setDeletingPaymentId(null)
     }
   }
 
@@ -327,13 +361,15 @@ export default function SaleForm() {
   }, [isCreateMode, amountPaid, draftTotal])
 
   const displayTotal = isCreateMode ? draftTotal : isEditingItems ? draftTotal : sale?.total_amount ?? 0
-  const displayDebt = displayTotal - (detailsEditable ? safeNumber(amountPaid, 0) : sale?.amount_paid ?? 0)
+  const displayDebt = displayTotal - (isCreateMode ? safeNumber(amountPaid, 0) : sale?.amount_paid ?? 0)
   const amountPaidError = (() => {
+    if (!isCreateMode) return null
     const paid = parseFloat(amountPaid)
     if (!isNaN(paid) && displayTotal > 0 && paid > displayTotal) return `máx. $ ${displayTotal.toFixed(2)}`
     return null
   })()
-  const hasLiveErrors = isCreateMode && (!!amountPaidError || items.some(item => Number(item.delivered_quantity) > Number(item.quantity)))
+  const missingPaymentMethod = isCreateMode && (parseFloat(amountPaid) || 0) > 0 && !paymentMethod
+  const hasLiveErrors = isCreateMode && (!!amountPaidError || missingPaymentMethod || items.some(item => Number(item.delivered_quantity) > Number(item.quantity)))
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -358,6 +394,10 @@ export default function SaleForm() {
     const paid = parseFloat(amountPaid) || 0
     if (paid > draftTotal) {
       setValidationError(`El monto pagado ($${paid.toFixed(2)}) no puede superar el total estimado ($${draftTotal.toFixed(2)}).`)
+      return
+    }
+    if (paid > 0 && !paymentMethod) {
+      setValidationError('Selecciona un método de pago.')
       return
     }
 
@@ -413,6 +453,8 @@ export default function SaleForm() {
     }
   }
 
+  const canPay = !isCreateMode && !!sale && sale.debt_amount > 0 && sale.payment_status !== 'paid'
+
   if (!isCreateMode && (pageLoading || !sale)) {
     return (
       <div className={styles.pageContainer}>
@@ -445,7 +487,7 @@ export default function SaleForm() {
               </span>
             </div>
             <div className={styles.titleRow}>
-              <h1 className={styles.pageTitle}>
+              <h1 ref={titleRef} tabIndex={-1} className={styles.pageTitle}>
                 {isCreateMode ? 'Crear venta' : (sale?.client?.name ?? 'Sin cliente')}
               </h1>
               {!isCreateMode && sale && (
@@ -470,7 +512,22 @@ export default function SaleForm() {
             </button>
           </div>
         )}
+        {canPay && (
+          <div className={styles.headerActions}>
+            <button
+              ref={payButtonRef}
+              type="button"
+              className="btn-primary"
+              onClick={() => setShowPaymentModal(true)}
+            >
+              <Wallet size={15} />
+              Pagar
+            </button>
+          </div>
+        )}
       </div>
+
+      {paymentAnnouncement && <div className={styles.statusAnnouncement} role="status">{paymentAnnouncement}</div>}
 
       {apiError && <div className={styles.errorBox} role="alert">{apiError}</div>}
       {validationError && <div className={styles.errorBox} role="alert">{validationError}</div>}
@@ -752,6 +809,12 @@ export default function SaleForm() {
                   {formatCurrency(displayDebt)}
                 </dd>
               </div>
+              {!isCreateMode && sale && (
+                <div className={styles.receiptRow}>
+                  <dt className={styles.receiptLabel}>Pagado</dt>
+                  <dd className={styles.receiptValue}>{formatCurrency(sale.amount_paid)}</dd>
+                </div>
+              )}
             </dl>
             {isCreateMode && items.length === 0 && (
               <p className={styles.receiptHint}>Agrega productos para ver el resumen</p>
@@ -792,6 +855,9 @@ export default function SaleForm() {
                   )}
                 </div>
               </div>
+            )}
+            {!isCreateMode && (
+              <p className={styles.cardHint}>Los pagos se registran con «Pagar».</p>
             )}
             <dl className={styles.fieldList}>
               <div className={detailsEditable ? styles.fieldRowEditing : styles.fieldRow}>
@@ -864,44 +930,48 @@ export default function SaleForm() {
                 </>
               )}
 
-              <div className={detailsEditable ? styles.fieldRowEditing : styles.fieldRow}>
-                <dt className={styles.fieldLabel}>Método pago</dt>
-                {detailsEditable ? (
+              {isCreateMode && (parseFloat(amountPaid) || 0) > 0 && (
+                <div className={styles.fieldRowEditing}>
+                  <dt className={styles.fieldLabel}>Método de pago</dt>
                   <dd className={styles.fieldValueFull}>
                     <Dropdown
                       value={paymentMethod}
                       options={PAYMENT_METHOD_OPTIONS}
                       onChange={setPaymentMethod}
-                      placeholder="Sin especificar"
+                      placeholder="Selecciona un método"
+                      ariaLabel="Método de pago"
                     />
+                    {missingPaymentMethod && <span className={styles.fieldError}>Selecciona un método de pago.</span>}
                   </dd>
-                ) : (
-                  <dd className={styles.fieldValue}>
-                    {sale?.payment_method ? paymentMethodLabel[sale.payment_method] : <span className={styles.summaryMuted}>Sin especificar</span>}
-                  </dd>
-                )}
-              </div>
+                </div>
+              )}
 
-              <div className={detailsEditable ? styles.fieldRowEditing : styles.fieldRow}>
-                <dt className={styles.fieldLabel}>Monto pagado</dt>
-                {detailsEditable ? (
+              {isCreateMode ? (
+                <div className={styles.fieldRowEditing}>
+                  <dt className={styles.fieldLabel}>Monto pagado</dt>
                   <dd className={styles.fieldValueFull}>
                     <input
-                      id={isCreateMode ? 'create-amount-paid' : 'edit-amount-paid'}
+                      id="create-amount-paid"
                       type="number"
                       className={`form-input ${styles.mono} ${amountPaidError ? styles.inputError : ''}`}
                       min={0}
                       step="0.01"
                       placeholder="0.00"
                       value={amountPaid}
-                      onChange={e => setAmountPaid(e.target.value)}
+                      onChange={e => {
+                        setAmountPaid(e.target.value)
+                        if ((parseFloat(e.target.value) || 0) === 0) setPaymentMethod('')
+                      }}
                     />
                     {amountPaidError && <span className={styles.fieldError}>{amountPaidError}</span>}
                   </dd>
-                ) : (
+                </div>
+              ) : (
+                <div className={styles.fieldRow}>
+                  <dt className={styles.fieldLabel}>Monto pagado</dt>
                   <dd className={`${styles.fieldValue} ${styles.mono}`}>$ {(sale?.amount_paid ?? 0).toFixed(2)}</dd>
-                )}
-              </div>
+                </div>
+              )}
 
               {!isCreateMode && sale && (
                 <>
@@ -920,12 +990,89 @@ export default function SaleForm() {
         </div>
       </div>
 
+      {!isCreateMode && sale && (
+        <section className={styles.card}>
+          <div className={styles.historyHeader}>
+            <h2 className={styles.cardTitle}>Historial de pagos</h2>
+          </div>
+          {paymentsLoading ? (
+            <div className={styles.historySkeleton} aria-label="Cargando pagos">
+              <div className={styles.historySkeletonRow} />
+              <div className={styles.historySkeletonRow} />
+              <div className={styles.historySkeletonRow} />
+            </div>
+          ) : paymentsError ? (
+            <div className={styles.historyError}>
+              <p className={styles.historyErrorMessage}>No se pudieron cargar los pagos.</p>
+              <button type="button" className="btn-ghost" onClick={() => { void retryPayments() }}>
+                Reintentar
+              </button>
+            </div>
+          ) : payments.length === 0 ? (
+            <div>
+              <p className={styles.historyEmpty}>Sin pagos registrados</p>
+              {sale.debt_amount > 0 && (
+                <p className={styles.historyEmptyHint}>Registra el primer pago con «Pagar».</p>
+              )}
+            </div>
+          ) : (
+            <div className={styles.historyTableWrapper}>
+              <table className={styles.historyTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">Fecha y hora</th>
+                    <th scope="col">Método</th>
+                    <th scope="col">Registrado por</th>
+                    <th scope="col" className={styles.historyAmount}>Monto</th>
+                    <th scope="col">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map(payment => (
+                    <tr key={payment.id}>
+                      <td data-label="Fecha y hora" className={styles.historyDate}>
+                        {formatDateTime(payment.created_at)}
+                      </td>
+                      <td data-label="Método">{paymentMethodName(payment.payment_method)}</td>
+                      <td data-label="Registrado por">{payment.created_by?.full_name ?? 'Sin usuario'}</td>
+                      <td data-label="Monto" className={styles.historyAmount}>{formatCurrency(payment.amount)}</td>
+                      <td data-label="Acciones">
+                        <button
+                          type="button"
+                          className={styles.historyDelete}
+                          onClick={() => { setApiError(null); setPaymentToDelete(payment) }}
+                          disabled={deletingPaymentId === payment.id}
+                          title="Eliminar pago"
+                          aria-label={`Eliminar pago de ${formatCurrency(payment.amount)}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {paymentsHasNext && !paymentsLoading && !paymentsError && (
+            <button
+              type="button"
+              className={`btn-ghost ${styles.historyLoadMore}`}
+              onClick={() => { void loadMorePayments() }}
+              disabled={paymentsFetching}
+            >
+              {paymentsFetching ? 'Cargando…' : 'Ver más'}
+            </button>
+          )}
+        </section>
+      )}
+
       {!isCreateMode && (
         <section className={styles.dangerZone}>
           <div>
             <h2 className={styles.cardTitle}>Zona de riesgo</h2>
             <p className={styles.dangerZoneText}>
-              Eliminar esta venta la quita del historial. Esta acción no se puede deshacer.
+              Eliminar esta venta la quita del historial y borra sus pagos. Esta acción no se puede deshacer.
             </p>
           </div>
           <button type="button" onClick={() => setShowDeleteModal(true)} className={styles.dangerButton}>
@@ -933,6 +1080,22 @@ export default function SaleForm() {
             Eliminar
           </button>
         </section>
+      )}
+
+      {showPaymentModal && sale && (
+        <SalePaymentModal
+          sale={sale}
+          onClose={() => setShowPaymentModal(false)}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
+      {paymentToDelete && sale && (
+        <ConfirmDeleteModal
+          title="Eliminar pago"
+          productName={`el pago de ${formatCurrency(paymentToDelete.amount)} (${paymentMethodName(paymentToDelete.payment_method)}) del ${formatDateTime(paymentToDelete.created_at)}. Saldo resultante: ${formatCurrency(sale.debt_amount + paymentToDelete.amount)}`}
+          onConfirm={handleDeletePayment}
+          onClose={() => setPaymentToDelete(null)}
+        />
       )}
 
       {showCreateClient && (
