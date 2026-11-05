@@ -21,8 +21,18 @@ dashboard.
 
 On Linux, Wails must be built with `-tags webkit2_41`. Ubuntu 26.04 ships
 WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`) only, so the 4.0 ABI is unavailable.
-The development database is PostgreSQL 17 from `docker-compose.yml`, exposed
-on port `5433`.
+The development database used by `make dev`, `make seed`, and
+`make seed-catalogs` is a local PostgreSQL 17 container on `127.0.0.1:5432`,
+started from the host compose file outside this repo: database
+`inventory_desktop`, user `inventory`, data in the fresh
+`postgresql_postgres_data_pg17` volume (defined outside the repo at
+`/home/fabian/Documents/docker/postgresql/docker-compose.yml`). The app uses
+the non-superuser project role `inventory`/`inventory`; the admin role
+`postgres`/`postgres` is only for administration. An init SQL script
+(`init/01-create-inventory.sql`, mounted at `/docker-entrypoint-initdb.d`)
+creates the role and database after the first start. The previous PG16 volume
+`postgresql_postgres_data` was deleted. The optional compose PostgreSQL 17 on
+`127.0.0.1:5433` remains available with `make db-up` and `make db-down`.
 
 ## Versioning
 
@@ -35,8 +45,10 @@ on port `5433`.
 ## Build
 
 ```bash
-# Development database
-docker compose up -d --wait postgres
+# Development database: local PostgreSQL on 127.0.0.1:5432 is the default.
+# Optional compose PostgreSQL 17 on 5433: `make db-up`.
+SEED_EMAIL=admin@example.com SEED_PASSWORD='change-me-now' make seed
+make seed-catalogs
 
 # Install frontend dependencies
 cd frontend && pnpm install --frozen-lockfile && cd ..
@@ -59,10 +71,13 @@ database is required only when the built app runs, or for seed and parity
 tests.
 
 The `Makefile` wraps the same steps: `make dev`, `make build`, `make test`,
-`make lint`, `make verify`, `make db-up`, `make db-down`, and `make seed`.
-`make dev` and `make build` source `.env` when present; `make dev` sets
-`APP_ENV=development`, while `make build` unsets `APP_ENV` and
-`ALLOW_DEV_ORIGINS`. To seed the offline dataset, run
+`make lint`, `make verify`, `make db-up`, `make db-down`, `make seed`, and
+`make seed-catalogs`. `make dev`, `make seed`, and `make seed-catalogs` source
+`.env` when present and default to `DB_MODE=postgres` with
+`DATABASE_URL=postgresql://inventory:inventory@127.0.0.1:5432/inventory_desktop`
+when those are unset. `make dev` starts the app only; it does not start Docker.
+`make dev` sets `APP_ENV=development`, while `make build` unsets `APP_ENV` and
+`ALLOW_DEV_ORIGINS`. To seed the offline dataset instead, run
 `DB_MODE=sqlite SEED_EMAIL=... SEED_PASSWORD=... make seed`. Local SQLite
 accounts are separate from PostgreSQL accounts until sync exists.
 

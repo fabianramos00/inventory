@@ -27,17 +27,20 @@ store counter, with no dependency on a remote web server.
 - The API mirrors the legacy FastAPI `/api/v1` contract.
 - The React app is reused and keeps axios, TanStack Query, and existing tests.
 - The API binds to loopback only; the port is chosen at startup.
-- PostgreSQL is the primary database; the development one runs in Docker.
+- PostgreSQL is the primary database. `make dev` and `make seed` target a local
+  PostgreSQL on `127.0.0.1:5432` by default; the optional compose PostgreSQL 17
+  on `127.0.0.1:5433` is started with `make db-up`.
 - `DB_MODE=auto` falls back to a local SQLite database when PostgreSQL is
-  unreachable. `DB_MODE=postgres` and `DB_MODE=sqlite` force a backend.
+  unreachable. `DB_MODE=postgres` fails hard instead, and `DB_MODE=sqlite`
+  forces offline mode.
 
 ## Prerequisites
 
 - Go 1.26+
 - Wails CLI 2.16+
 - Node 22+ and pnpm 12+
-- Docker (development PostgreSQL 17 on `127.0.0.1:5433`)
-- PostgreSQL 17 (recommended primary; optional when running on local SQLite)
+- PostgreSQL 17 running on `127.0.0.1:5432` for `make dev`/`make seed`
+- Docker for the optional compose PostgreSQL 17 on `127.0.0.1:5433`
 
 Wails also needs the platform webview dependencies. On Linux that is
 WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`); the Makefile passes
@@ -46,8 +49,17 @@ WebKit.
 
 ## Quickstart
 
+`make dev`, `make seed`, and `make seed-catalogs` use the local PostgreSQL 17
+on `127.0.0.1:5432` by default (`DB_MODE=postgres`, user `inventory`, database
+`inventory_desktop`,
+`DATABASE_URL=postgresql://inventory:inventory@127.0.0.1:5432/inventory_desktop`).
+The app uses the non-superuser project role `inventory` on `inventory_desktop`;
+the admin role `postgres`/`postgres` is only for administration. On first start
+an init SQL script creates the role and database. `make dev` does not start
+Docker. The local cluster stores data in the fresh
+`postgresql_postgres_data_pg17` volume; the previous PG16 volume was deleted.
+
 ```bash
-make db-up
 SEED_EMAIL=admin@example.com SEED_PASSWORD='change-me-now' make seed
 make seed-catalogs
 make dev
@@ -55,8 +67,22 @@ make dev
 
 `make seed-catalogs` loads the default categories, brands, materials, and measurement units; it is idempotent and safe to re-run.
 
-`make build` produces a release binary. `make dev` and `make build` use
-`-tags webkit2_41` on Linux and source `.env` when present. See
+The optional compose PostgreSQL 17 on port 5433 remains available:
+
+```bash
+make db-up
+DB_MODE=postgres \
+DATABASE_URL=postgresql://inventory:inventory@localhost:5433/inventory_desktop \
+SEED_EMAIL=admin@example.com SEED_PASSWORD='change-me-now' make seed
+make db-down
+```
+
+Override `DB_MODE`/`DATABASE_URL` (or any other setting) in `.env` or the
+environment; either takes precedence over the built-in local defaults.
+
+`make build` produces a release binary. `make dev`, `make build`,
+`make seed`, and `make seed-catalogs` source `.env` when present; `make dev`
+and `make build` use `-tags webkit2_41` on Linux. See
 [docs/RELEASE.md](docs/RELEASE.md) for platform builds, signing, migrations,
 and release checks.
 
