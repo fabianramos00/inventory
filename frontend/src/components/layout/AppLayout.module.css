@@ -1,6 +1,6 @@
 .shell {
   position: relative;
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--offline-banner-height, 0px));
   overflow-x: clip;
   background: linear-gradient(180deg, var(--shell-ground-top) 0%, var(--shell-ground-mid) 48%, var(--shell-ground-low) 100%);
 }
@@ -34,7 +34,7 @@
 
 .skipLink {
   position: fixed;
-  top: 8px;
+  top: calc(8px + var(--offline-banner-height, 0px));
   left: 12px;
   z-index: 80;
   padding: 8px 12px;
@@ -53,7 +53,7 @@
 
 .mobileBar {
   position: fixed;
-  inset: 0 0 auto;
+  inset: var(--offline-banner-height, 0px) 0 auto;
   z-index: 30;
   display: flex;
   align-items: center;
@@ -107,7 +107,7 @@
   position: relative;
   z-index: 1;
   min-width: 0;
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--offline-banner-height, 0px));
   transition: margin-left 240ms var(--ease-standard);
 }
 
