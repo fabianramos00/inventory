@@ -297,26 +297,6 @@
 }
 
 /* ── Skeletons ──────────────────────────────────────────────── */
-.skeletonKpiStrip {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  background-color: var(--glass-panel-bg);
-  background-image: var(--glass-sheen);
-  border: 1px solid var(--glass-panel-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--glass-panel-highlight), var(--glass-panel-shadow);
-  -webkit-backdrop-filter: var(--glass-panel-filter);
-  backdrop-filter: var(--glass-panel-filter);
-  overflow: hidden;
-}
-
-@media (min-width: 641px) {
-  .skeletonKpiStrip {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
 .skeletonKpiCell {
   display: flex;
   flex-direction: column;
@@ -382,14 +362,6 @@
 }
 
 @media (max-width: 640px) {
-  .skeletonKpiStrip[data-lead='true'] {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .skeletonKpiStrip[data-lead='true'] .skeletonKpiCell:first-child {
-    grid-column: 1 / -1;
-  }
-
   .skeletonKpiCell {
     padding: 10px;
   }

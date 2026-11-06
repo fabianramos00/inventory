@@ -178,10 +178,10 @@ export default function Inventory() {
       />
 
       <KpiStrip cards={[
-        { label: 'Productos', value: formatNumber(stats?.totalProducts ?? 0) },
-        { label: 'Stock total', value: formatNumber(stats?.totalStock ?? 0) },
-        { label: 'Stock bajo', value: formatNumber(stats?.lowStockCount ?? 0) },
-        { label: 'Valor total', value: formatCurrency(stats?.totalValue ?? 0) },
+        { label: 'Productos', value: formatNumber(stats?.totalProducts ?? 0), kind: 'count' },
+        { label: 'Stock total', value: formatNumber(stats?.totalStock ?? 0), kind: 'count' },
+        { label: 'Stock bajo', value: formatNumber(stats?.lowStockCount ?? 0), kind: 'count' },
+        { label: 'Valor total', value: formatCurrency(stats?.totalValue ?? 0), kind: 'money' },
       ]} />
 
       <nav className={styles.tabBar}>

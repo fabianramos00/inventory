@@ -1,6 +1,6 @@
 .kpiStrip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: var(--kpi-template, repeat(4, minmax(0, 1fr)));
   background-color: var(--glass-panel-bg);
   background-image: var(--glass-sheen);
   border: 1px solid var(--glass-panel-border);
@@ -14,8 +14,10 @@
 .kpiItem {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 8px;
   min-width: 0;
+  overflow: hidden;
   padding: var(--card-pad);
   box-shadow: inset -1px 0 0 var(--glass-panel-border-soft), inset 0 -1px 0 var(--glass-panel-border-soft);
 }
@@ -30,6 +32,7 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 1.3;
+  overflow: hidden;
 }
 
 .kpiLabelLead {
@@ -38,20 +41,29 @@
 
 .kpiValue {
   color: var(--ink-1);
-  font-size: 22px;
+  font-size: clamp(18px, calc(0.62rem + 1.05vw), 22px);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
   line-height: 1.1;
-  overflow-wrap: anywhere;
+}
+
+.kpiValue[data-overflow='ellipsis'] {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kpiValue[data-tone='negative'] {
+  color: var(--destructive-ink);
 }
 
 .kpiLead {
   color: var(--dark-ink-1);
-  font-size: 30px;
+  font-size: clamp(22px, calc(0.55rem + 1.75vw), 30px);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 1023px) {
   .kpiStrip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -60,27 +72,29 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .kpiStrip[data-lead='true'] .kpiItem:first-child {
+  .kpiStrip[data-lead='true'] > :first-child {
     grid-column: 1 / -1;
   }
 
+  .kpiStrip > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .kpiStrip[data-lead='true'] > :last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 640px) {
   .kpiItem {
     padding: 10px;
   }
 
   .kpiValue {
-    font-size: 22px;
+    font-size: 18px;
   }
 
   .kpiLead {
-    font-size: 30px;
-  }
-
-  .kpiItem:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
-  }
-
-  .kpiStrip[data-lead='true'] .kpiItem:last-child:nth-child(odd) {
-    grid-column: auto;
+    font-size: 22px;
   }
 }

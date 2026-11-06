@@ -102,10 +102,10 @@ export default function Sales() {
       />
 
       <KpiStrip cards={[
-        { label: 'Total vendido', value: formatCurrency(stats.totalAmountSum) },
-        { label: 'Cobrado', value: formatCurrency(stats.amountPaidSum) },
-        { label: 'Por cobrar', value: formatCurrency(porCobrar), tone: porCobrar > 0 ? 'negative' : undefined },
-        { label: 'Sin entregar', value: formatNumber(stats.undeliveredCount) },
+        { label: 'Total vendido', value: formatCurrency(stats.totalAmountSum), kind: 'money' },
+        { label: 'Cobrado', value: formatCurrency(stats.amountPaidSum), kind: 'money' },
+        { label: 'Por cobrar', value: formatCurrency(porCobrar), kind: 'money', tone: porCobrar > 0 ? 'negative' : undefined },
+        { label: 'Sin entregar', value: formatNumber(stats.undeliveredCount), kind: 'count' },
       ]} />
 
       <div className={listStyles.tableSection}>

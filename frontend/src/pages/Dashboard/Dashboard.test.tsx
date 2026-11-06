@@ -92,11 +92,12 @@ describe('Dashboard', () => {
     })
     renderDashboard()
 
-    const unpaidLabel = await screen.findByText('Ventas sin pagar')
-    expect(unpaidLabel.parentElement?.textContent).toBe('Ventas sin pagar$ 1.234,50')
+    const unpaidLabel = await screen.findByText('Saldo por cobrar')
+    expect(unpaidLabel.parentElement?.textContent).toBe('Saldo por cobrar$ 1.234,50')
     expect(screen.getByText('Ventas de hoy').parentElement?.textContent).toBe('Ventas de hoy$ 2.500,00')
     expect(screen.getByText('Pedidos pendientes').parentElement?.textContent).toBe('Pedidos pendientes2')
-    expect(screen.getByText('Hay $ 1.234,50 en ventas sin pagar.')).toBeTruthy()
+    expect(screen.getByText('Hay $ 1.234,50 por cobrar.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Revisar saldos por cobrar' })).toBeTruthy()
   })
 
   it('renders the order status distribution with counts and percentages', async () => {
@@ -322,9 +323,9 @@ describe('Dashboard', () => {
 
     const today = await screen.findByText('Ventas de hoy')
     expect(today.parentElement?.textContent).toBe('Ventas de hoy$ 0,00')
-    expect(screen.getByText('Ventas sin pagar').parentElement?.textContent).toBe('Ventas sin pagar$ 0,00')
+    expect(screen.getByText('Saldo por cobrar').parentElement?.textContent).toBe('Saldo por cobrar$ 0,00')
     expect(screen.getByText('Pedidos pendientes').parentElement?.textContent).toBe('Pedidos pendientes0')
-    expect(screen.queryByText('Hay $ 0,00 en ventas sin pagar.')).toBeNull()
+    expect(screen.queryByText('Hay $ 0,00 por cobrar.')).toBeNull()
   })
 
   it('keeps the trend calendar day when the host timezone is behind UTC', async () => {

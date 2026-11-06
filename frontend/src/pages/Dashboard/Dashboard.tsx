@@ -9,6 +9,8 @@ import {
 import { type SalesTrendData } from '@/lib/api/dashboard'
 import DataTable from '@/components/DataTable/DataTable'
 import KpiStrip, { type KpiCardConfig } from '@/components/KpiStrip/KpiStrip'
+import { kpiShape, kpiTemplateStyle } from '@/components/KpiStrip/kpiShapes'
+import kpiStyles from '@/components/KpiStrip/KpiStrip.module.css'
 import ErrorState from '@/components/ErrorState/ErrorState'
 import StockMeter from '@/components/StockMeter/StockMeter'
 import { useDashboard } from '@/hooks/useDashboard'
@@ -48,11 +50,29 @@ function VentasTooltip({ active, label, payload }: VentasTooltipProps) {
 export default function Dashboard() {
   const { summary, trend, topProducts, orderStatus, lowStock, lowStockTotal, isLoading, errors, refetch } = useDashboard()
 
+  const unpaidSales = summary?.pending_payment_sales ?? 0
+  const lowStockItems = lowStock ?? []
+  const lowStockCount = lowStockTotal ?? lowStockItems.length
+  const pendingOrders = summary?.pending_orders ?? 0
+
+  const kpiCards: KpiCardConfig[] = [
+    { label: 'Ventas de hoy', value: formatCurrency(summary?.total_sales_today ?? 0), kind: 'money', lead: true },
+    { label: 'Saldo por cobrar', value: formatCurrency(unpaidSales), kind: 'money', tone: unpaidSales > 0 ? 'negative' : undefined },
+    { label: 'Pedidos pendientes', value: formatNumber(pendingOrders), kind: 'count' },
+    { label: 'Stock bajo', value: formatNumber(lowStockCount), kind: 'count' },
+  ]
+  const kpiKinds = kpiCards.map((card) => card.kind)
+
   if (isLoading) {
     return (
       <div className={styles.container}>
         <PageHeader activeLabel="Resumen" title="Dashboard" />
-        <div className={styles.skeletonKpiStrip} data-lead="true">
+        <div
+          className={kpiStyles.kpiStrip}
+          data-lead="true"
+          data-shape={kpiShape(kpiKinds)}
+          style={kpiTemplateStyle(kpiKinds)}
+        >
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className={`${styles.skeletonKpiCell} ${i === 0 ? styles.skeletonKpiCellLead : ''}`}>
               <span className={styles.skeletonBarShort} />
@@ -72,31 +92,19 @@ export default function Dashboard() {
     )
   }
 
-  const unpaidSales = summary?.pending_payment_sales ?? 0
-  const lowStockItems = lowStock ?? []
-  const lowStockCount = lowStockTotal ?? lowStockItems.length
-  const pendingOrders = summary?.pending_orders ?? 0
-
   const finding = errors.summary && !summary
     ? undefined
     : unpaidSales > 0
-      ? `Hay ${formatCurrency(unpaidSales)} en ventas sin pagar.`
+      ? `Hay ${formatCurrency(unpaidSales)} por cobrar.`
       : lowStockCount > 0
         ? `${formatNumber(lowStockCount)} productos bajo el mínimo.`
         : 'Sin pendientes: ventas y stock al día.'
 
   const contextualAction = unpaidSales > 0
-    ? { to: '/sales', label: 'Revisar ventas sin pagar' }
+    ? { to: '/sales', label: 'Revisar saldos por cobrar' }
     : lowStockCount > 0
       ? { to: '/inventory', label: 'Ver stock bajo' }
       : null
-
-  const kpiCards: KpiCardConfig[] = [
-    { label: 'Ventas de hoy', value: formatCurrency(summary?.total_sales_today ?? 0), lead: true },
-    { label: 'Ventas sin pagar', value: formatCurrency(unpaidSales) },
-    { label: 'Pedidos pendientes', value: formatNumber(pendingOrders) },
-    { label: 'Stock bajo', value: formatNumber(lowStockCount) },
-  ]
 
   const weeklyData = (trend && trend.length > 0)
     ? trend.map((item: SalesTrendData) => ({
