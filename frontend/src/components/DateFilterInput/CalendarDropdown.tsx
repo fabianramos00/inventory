@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, type ChangeEvent, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import type { DropdownProps } from 'react-day-picker'
 import { useClickOutside } from '@/hooks/useClickOutside'
+import { useFloatingMenu } from '@/hooks/useFloatingMenu'
 import { useListbox } from '@/hooks/useListbox'
 import styles from './CalendarDropdown.module.css'
 
@@ -27,11 +29,16 @@ export default function CalendarDropdown({
     handleTriggerKeyDown: handleTriggerListKeyDown,
   } = useListbox()
 
-  useClickOutside(wrapperRef, () => close(), isOpen)
+  const { panelProps } = useFloatingMenu({ open: isOpen, anchor: triggerRef, panel: listRef, width: 'content' })
+
+  useClickOutside(wrapperRef, () => close(), isOpen, listRef)
 
   useEffect(() => {
     if (!isOpen) return
-    listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+    const selected = listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (selected && typeof selected.scrollIntoView === 'function') {
+      selected.scrollIntoView({ block: 'nearest' })
+    }
   }, [isOpen, listRef])
 
   const selected = options.find(option => String(option.value) === String(value))
@@ -45,6 +52,8 @@ export default function CalendarDropdown({
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Escape') {
       event.preventDefault()
+      // The menu may live inside a modal: only the menu closes.
+      event.stopPropagation()
       close(true)
       return
     }
@@ -80,8 +89,8 @@ export default function CalendarDropdown({
         />
       </button>
 
-      {isOpen && (
-        <div className={styles.list} id={listId} role="listbox" ref={listRef}>
+      {isOpen && createPortal(
+        <div {...panelProps} ref={listRef} id={listId} role="listbox" className={styles.list}>
           {visibleOptions.map(option => (
             <button
               key={option.value}
@@ -97,7 +106,8 @@ export default function CalendarDropdown({
               {option.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

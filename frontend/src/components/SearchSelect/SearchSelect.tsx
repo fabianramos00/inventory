@@ -1,7 +1,9 @@
-import { useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Loader } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
 import { useDebouncedFetch } from '@/hooks/useDebouncedFetch'
+import { useFloatingMenu } from '@/hooks/useFloatingMenu'
 import { useListbox } from '@/hooks/useListbox'
 import type { FilterOption } from '@/types'
 import styles from './SearchSelect.module.css'
@@ -34,6 +36,8 @@ export default function SearchSelect({
   const [search, setSearch] = useState('')
   const [cachedSelected, setCachedSelected] = useState<FilterOption | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const listId = useId()
   const {
     isOpen,
@@ -44,6 +48,14 @@ export default function SearchSelect({
     handleKeyDown: handleListKeyDown,
     handleTriggerKeyDown: handleTriggerListKeyDown,
   } = useListbox()
+
+  const { panelProps } = useFloatingMenu({
+    open: isOpen,
+    anchor: triggerRef,
+    panel: panelRef,
+    width: 'content',
+    chromeRef: searchRef,
+  })
 
   const { data: options, loading } = useDebouncedFetch(
     () => fetchOptions(search),
@@ -57,7 +69,12 @@ export default function SearchSelect({
     close(restoreFocus)
   }
 
-  useClickOutside(wrapperRef, () => closeSearch(), isOpen)
+  useClickOutside(wrapperRef, () => closeSearch(), isOpen, panelRef)
+
+  useEffect(() => {
+    if (!isOpen) return
+    searchRef.current?.focus({ preventScroll: true })
+  }, [isOpen])
 
   const selectedOption = cachedSelected?.id === value
     ? cachedSelected
@@ -81,6 +98,8 @@ export default function SearchSelect({
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Escape') {
       event.preventDefault()
+      // The menu may live inside a modal: only the menu closes.
+      event.stopPropagation()
       closeSearch(true)
       return
     }
@@ -115,9 +134,10 @@ export default function SearchSelect({
         />
       </button>
 
-      {isOpen && (
-        <div className={styles.dropdown}>
+      {isOpen && createPortal(
+        <div {...panelProps} ref={panelRef} className={styles.dropdown}>
           <input
+            ref={searchRef}
             type="text"
             className={styles.search}
             placeholder={`Buscar ${label.toLowerCase()}...`}
@@ -125,7 +145,6 @@ export default function SearchSelect({
             onChange={event => setSearch(event.target.value)}
             onKeyDown={handleKeyDown}
             size={1}
-            autoFocus
           />
           <div className={styles.options} ref={listRef} id={listId} role="listbox">
             <button
@@ -175,7 +194,8 @@ export default function SearchSelect({
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

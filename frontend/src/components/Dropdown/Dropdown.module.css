@@ -37,6 +37,7 @@
   top: calc(100% + 4px);
   left: 0;
   right: 0;
+  --floating-menu-cap: 192px;
   background: var(--glass-popover-bg);
   border: 1px solid var(--glass-popover-border);
   border-radius: var(--radius-control);
@@ -47,7 +48,7 @@
 }
 
 .selectOptions {
-  max-height: 192px;
+  max-height: min(var(--floating-menu-cap), var(--floating-menu-max-height, var(--floating-menu-cap)));
   overflow-y: auto;
 }
 

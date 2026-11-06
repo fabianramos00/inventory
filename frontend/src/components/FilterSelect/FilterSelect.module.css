@@ -57,11 +57,13 @@
   width: max-content;
   min-width: 100%;
   max-width: calc(100vw - 32px);
+  max-height: var(--floating-menu-max-height, none);
   background: var(--glass-popover-bg);
   border: 1px solid var(--glass-popover-border);
   border-radius: var(--radius-control);
   box-shadow: var(--glass-popover-shadow);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   animation: dropdownSlideDown var(--motion-base) var(--ease-out);
 }
 

@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
+import { useFloatingMenu } from '@/hooks/useFloatingMenu'
 import { useListbox } from '@/hooks/useListbox'
 import styles from './Dropdown.module.css'
 
@@ -27,14 +29,20 @@ export default function Dropdown({
   autoFocus,
 }: DropdownProps) {
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const listId = useId()
   const { isOpen, setIsOpen, triggerRef, listRef, close, handleKeyDown, handleTriggerKeyDown } = useListbox()
+  const { panelProps } = useFloatingMenu({ open: isOpen, anchor: triggerRef, panel: panelRef, width: 'trigger' })
 
-  useClickOutside(wrapperRef, () => close(), isOpen)
+  useClickOutside(wrapperRef, () => close(), isOpen, panelRef)
 
   useEffect(() => {
     if (!isOpen) return
-    listRef.current?.querySelector<HTMLElement>('[role="option"]')?.focus()
+    const option = listRef.current?.querySelector<HTMLElement>('[role="option"]')
+    option?.focus({ preventScroll: true })
+    if (option && typeof option.scrollIntoView === 'function') {
+      option.scrollIntoView({ block: 'nearest' })
+    }
   }, [isOpen, listRef])
 
   const selectedOption = options.find(opt => opt.value === value)
@@ -63,8 +71,8 @@ export default function Dropdown({
         <ChevronDown size={16} />
       </button>
 
-      {isOpen && (
-        <div className={styles.selectContent}>
+      {isOpen && createPortal(
+        <div {...panelProps} ref={panelRef} className={styles.selectContent}>
           <div className={styles.selectOptions} id={listId} role="listbox" ref={listRef}>
             {options.length === 0 ? (
               <div className={styles.emptyOption}>No hay opciones disponibles</div>
@@ -85,7 +93,8 @@ export default function Dropdown({
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

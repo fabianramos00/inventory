@@ -89,7 +89,8 @@
   border-radius: var(--radius-control);
   box-shadow: var(--glass-popover-shadow);
   z-index: 50;
-  max-height: 240px;
+  --floating-menu-cap: 240px;
+  max-height: min(var(--floating-menu-cap), var(--floating-menu-max-height, var(--floating-menu-cap)));
   overflow-y: auto;
   animation: productDropdownIn var(--motion-base) var(--ease-out);
 }

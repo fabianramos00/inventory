@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { floatingMenuOwner } from './useFloatingMenu'
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -34,6 +35,11 @@ export function useDialogFocus(onClose: () => void) {
       }
 
       if (event.key !== 'Tab') return
+
+      // A portaled menu is outside the dialog DOM: the trap must not pull the
+      // focus back while the menu that belongs to this dialog is open.
+      const owner = floatingMenuOwner(document.activeElement)
+      if (owner && (!owner.anchor || dialog.contains(owner.anchor))) return
 
       const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE))
       if (focusable.length === 0) {

@@ -1,6 +1,8 @@
 import { useId, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
+import { useFloatingMenu } from '@/hooks/useFloatingMenu'
 import { useListbox } from '@/hooks/useListbox'
 import styles from './FilterSelect.module.css'
 
@@ -27,8 +29,9 @@ export default function FilterSelect({
   const wrapperRef = useRef<HTMLDivElement>(null)
   const listId = useId()
   const { isOpen, setIsOpen, triggerRef, listRef, close, handleKeyDown, handleTriggerKeyDown } = useListbox()
+  const { panelProps } = useFloatingMenu({ open: isOpen, anchor: triggerRef, panel: listRef, width: 'content' })
 
-  useClickOutside(wrapperRef, () => close(), isOpen)
+  useClickOutside(wrapperRef, () => close(), isOpen, listRef)
 
   const selectedLabel = options.find(option => option.value === value)?.label || label
 
@@ -56,8 +59,8 @@ export default function FilterSelect({
         />
       </button>
 
-      {isOpen && (
-        <div className={styles.dropdown} id={listId} role="listbox" ref={listRef}>
+      {isOpen && createPortal(
+        <div {...panelProps} ref={listRef} id={listId} role="listbox" className={styles.dropdown}>
           <button
             type="button"
             role="option"
@@ -83,7 +86,8 @@ export default function FilterSelect({
               {option.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
