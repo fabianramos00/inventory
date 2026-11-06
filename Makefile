@@ -5,13 +5,12 @@ endif
 
 export SEED_EMAIL SEED_PASSWORD SEED_NAME
 
-# Local development database, already running outside this repo. Override it
-# with .env or the environment; `make db-up` starts the optional compose
-# Postgres 17 on 5433 instead.
-LOCAL_DATABASE_URL := postgresql://inventory:inventory@127.0.0.1:5432/inventory_desktop
+# Local development database, already running outside this repo. The DSN is the
+# app's built-in default (internal/config/config.go); override it with .env or
+# the environment. `make db-up` starts the optional compose Postgres 17 on
+# POSTGRES_HOST_PORT (default 5433) instead.
 DB_ENV := if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
-	if [ -z "$$DB_MODE" ]; then DB_MODE=postgres; export DB_MODE; fi; \
-	if [ -z "$$DATABASE_URL" ]; then DATABASE_URL="$(LOCAL_DATABASE_URL)"; export DATABASE_URL; fi
+	if [ -z "$$DB_MODE" ]; then DB_MODE=postgres; export DB_MODE; fi
 
 .PHONY: help dev build test lint verify db-up db-down seed seed-catalogs
 

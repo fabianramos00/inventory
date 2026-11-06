@@ -22,17 +22,24 @@ dashboard.
 On Linux, Wails must be built with `-tags webkit2_41`. Ubuntu 26.04 ships
 WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`) only, so the 4.0 ABI is unavailable.
 The development database used by `make dev`, `make seed`, and
-`make seed-catalogs` is a local PostgreSQL 17 container on `127.0.0.1:5432`,
-started from the host compose file outside this repo: database
-`inventory_desktop`, user `inventory`, data in the fresh
-`postgresql_postgres_data_pg17` volume (defined outside the repo at
+`make seed-catalogs` is a local PostgreSQL 17 on `127.0.0.1:5432`, started
+from the host compose file outside this repo: database `inventory_desktop`,
+user `inventory`, data in the fresh `postgresql_postgres_data_pg17` volume
+(defined outside the repo at
 `/home/fabian/Documents/docker/postgresql/docker-compose.yml`). The app uses
 the non-superuser project role `inventory`/`inventory`; the admin role
 `postgres`/`postgres` is only for administration. An init SQL script
 (`init/01-create-inventory.sql`, mounted at `/docker-entrypoint-initdb.d`)
 creates the role and database after the first start. The previous PG16 volume
-`postgresql_postgres_data` was deleted. The optional compose PostgreSQL 17 on
-`127.0.0.1:5433` remains available with `make db-up` and `make db-down`.
+`postgresql_postgres_data` was deleted.
+
+### Database ports
+
+- `5432` is the PostgreSQL 17 the app uses by default.
+- `5433` belongs only to the optional in-repo container started by `make db-up`.
+  Override it with `POSTGRES_HOST_PORT` (default `5433`).
+- CI publishes its own container on `5433`; that port is CI-only and unrelated
+  to both of the above.
 
 ## Versioning
 
@@ -45,8 +52,8 @@ creates the role and database after the first start. The previous PG16 volume
 ## Build
 
 ```bash
-# Development database: local PostgreSQL on 127.0.0.1:5432 is the default.
-# Optional compose PostgreSQL 17 on 5433: `make db-up`.
+# Development database: PostgreSQL 17 on 5432 (see Database ports above).
+# Optional compose container: `make db-up`.
 SEED_EMAIL=admin@example.com SEED_PASSWORD='change-me-now' make seed
 make seed-catalogs
 
@@ -73,11 +80,11 @@ tests.
 The `Makefile` wraps the same steps: `make dev`, `make build`, `make test`,
 `make lint`, `make verify`, `make db-up`, `make db-down`, `make seed`, and
 `make seed-catalogs`. `make dev`, `make seed`, and `make seed-catalogs` source
-`.env` when present and default to `DB_MODE=postgres` with
-`DATABASE_URL=postgresql://inventory:inventory@127.0.0.1:5432/inventory_desktop`
-when those are unset. `make dev` starts the app only; it does not start Docker.
-`make dev` sets `APP_ENV=development`, while `make build` unsets `APP_ENV` and
-`ALLOW_DEV_ORIGINS`. To seed the offline dataset instead, run
+`.env` when present and default to `DB_MODE=postgres`; the DSN comes from the
+app's built-in default unless `DATABASE_URL` is set. `make dev` starts the app
+only; it does not start Docker. `make dev` sets `APP_ENV=development`, while
+`make build` unsets `APP_ENV` and `ALLOW_DEV_ORIGINS`. To seed the offline
+dataset instead, run
 `DB_MODE=sqlite SEED_EMAIL=... SEED_PASSWORD=... make seed`. Local SQLite
 accounts are separate from PostgreSQL accounts until sync exists.
 
@@ -111,6 +118,11 @@ Never ship a `.env` file, a DSN, or a secret in the installer. The first-run
 screen or a documented pre-seed step supplies the DSN. A wrong DSN produces a
 readable error and does not open the main window.
 
+Inside the app, configuration precedence is environment > OS config file
+(`<OS config dir>/inventory-desktop/config.env`) > built-in defaults, and
+empty values are ignored. The `Makefile` targets source `.env` first, so for
+them the order is `.env` > process environment > built-in default.
+
 ## Migrations
 
 - Migrations run at startup when `AUTO_MIGRATE=true`.
@@ -136,8 +148,10 @@ Publish SHA-256 checksums with every artifact.
 ## CI
 
 `.github/workflows/ci.yml` is the source of truth. It runs `make verify`, one
-`go test -race ./... -count=1`, and `govulncheck` via `go run`. A red step
-blocks the release; do not skip tests to ship.
+`go test -race ./... -count=1`, and `govulncheck` via `go run`. The PostgreSQL
+integration suites read `INVENTORY_TEST_DATABASE_URL` and skip when it is
+unset; CI points it at its own container. A red step blocks the release; do
+not skip tests to ship.
 
 Wails platform builds and the FastAPI-vs-Go contract parity suite when
 `LEGACY_API_URL` is available remain release-time steps, not part of CI.
