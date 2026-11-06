@@ -26,6 +26,63 @@ func TestLookupRawTreatsBlankAsUnset(t *testing.T) {
 	}
 }
 
+func TestLoadTrimsConfiguredValues(t *testing.T) {
+	isolateConfig(t)
+	t.Setenv("SECRET_KEY", strings.Repeat("a", 32))
+	t.Setenv("DATABASE_URL", "   ")
+	t.Setenv("ACCESS_TOKEN_MINUTES", " 45 ")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DatabaseURL != defaultDatabaseURL {
+		t.Fatalf("DatabaseURL = %q, want the default %q", cfg.DatabaseURL, defaultDatabaseURL)
+	}
+	if cfg.AccessTokenMinutes != 45 {
+		t.Fatalf("AccessTokenMinutes = %d, want 45", cfg.AccessTokenMinutes)
+	}
+}
+
+func TestLoadRejectsBlankSQLitePath(t *testing.T) {
+	isolateConfig(t)
+	t.Setenv("SECRET_KEY", strings.Repeat("a", 32))
+	t.Setenv("SQLITE_PATH", "   ")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load accepted a whitespace-only SQLITE_PATH")
+	}
+}
+
+func TestLoadUsesDefaultSQLitePathWhenUnset(t *testing.T) {
+	isolateConfig(t)
+	t.Setenv("SECRET_KEY", strings.Repeat("a", 32))
+	t.Setenv("SQLITE_PATH", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "inventory-desktop", "data", "inventory.sqlite")
+	if cfg.SQLitePath != want {
+		t.Fatalf("SQLitePath = %q, want %q", cfg.SQLitePath, want)
+	}
+}
+
+func TestLoadKeepsConfiguredSQLitePath(t *testing.T) {
+	isolateConfig(t)
+	t.Setenv("SECRET_KEY", strings.Repeat("a", 32))
+	t.Setenv("SQLITE_PATH", "  "+filepath.Join(t.TempDir(), "inventory.sqlite")+"  ")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(cfg.SQLitePath, " ") {
+		t.Fatalf("SQLitePath = %q, want a trimmed path", cfg.SQLitePath)
+	}
+}
+
 func TestLoadRejectsInvalidSecrets(t *testing.T) {
 	tests := []struct {
 		name   string

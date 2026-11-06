@@ -213,6 +213,7 @@ func run() error {
 		return fmt.Errorf("database startup failed: %w", err)
 	}
 	defer stores.Closer()
+	bootstrap.AnnounceSeedTarget(os.Stdout, cfg, stores.Backend)
 
 	steps := []struct {
 		label string

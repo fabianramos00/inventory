@@ -59,12 +59,12 @@ func Load() (*Config, error) {
 
 	lookup := func(keys ...string) string {
 		for _, key := range keys {
-			if value, ok := os.LookupEnv(key); ok && value != "" {
+			if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 				return value
 			}
 		}
 		for _, key := range keys {
-			if value := fileValues[key]; value != "" {
+			if value := strings.TrimSpace(fileValues[key]); value != "" {
 				return value
 			}
 		}
@@ -118,7 +118,7 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ALLOW_DEV_ORIGINS: %w", err)
 	}
-	devMode := allowDevOrigins || strings.EqualFold(strings.TrimSpace(lookup("APP_ENV")), "development")
+	devMode := allowDevOrigins || strings.EqualFold(lookup("APP_ENV"), "development")
 
 	level := slog.LevelInfo
 	if raw := lookup("LOG_LEVEL"); raw != "" {
@@ -132,7 +132,7 @@ func Load() (*Config, error) {
 		databaseURL = defaultDatabaseURL
 	}
 
-	dbMode := strings.ToLower(strings.TrimSpace(lookup("DB_MODE")))
+	dbMode := strings.ToLower(lookup("DB_MODE"))
 	if dbMode == "" {
 		dbMode = "auto"
 	}
@@ -142,12 +142,9 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("DB_MODE must be auto, postgres, or sqlite, got %q", dbMode)
 	}
 
-	sqlitePath := lookup("SQLITE_PATH")
-	if sqlitePath == "" {
-		sqlitePath, err = defaultSQLitePath()
-		if err != nil {
-			return nil, err
-		}
+	sqlitePath, err := resolveSQLitePath(fileValues)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Config{
@@ -172,6 +169,24 @@ func lookupRaw(values map[string]string, key string) (string, bool) {
 		return value, true
 	}
 	return "", false
+}
+
+// resolveSQLitePath returns the configured SQLite path. A blank value is
+// rejected instead of falling back to the default: an empty path resolves to
+// the working directory, which the open helper would chmod and turn into a
+// stray database file.
+func resolveSQLitePath(fileValues map[string]string) (string, error) {
+	for _, raw := range []string{os.Getenv("SQLITE_PATH"), fileValues["SQLITE_PATH"]} {
+		if raw == "" {
+			continue
+		}
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			return "", errors.New("SQLITE_PATH must not be blank")
+		}
+		return trimmed, nil
+	}
+	return defaultSQLitePath()
 }
 
 func validateSecret(secret string) error {

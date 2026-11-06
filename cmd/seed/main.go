@@ -47,6 +47,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer stores.Closer()
+	bootstrap.AnnounceSeedTarget(os.Stdout, cfg, stores.Backend)
 
 	passwords := security.NewPasswordHasher(cfg.BcryptRounds)
 	users := application.NewUserService(stores.Users, stores.RefreshTokens, passwords)

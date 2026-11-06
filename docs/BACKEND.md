@@ -440,6 +440,28 @@ Load from environment, then the OS config file, then defaults. See
 timeout and SQLite is opened on failure. Validate the DSN at startup when it
 is used. Generate and persist `SECRET_KEY` when missing.
 
+Every value read through the config lookup is trimmed, so a blank value
+(`DATABASE_URL="  "`) counts as unset and falls through to the next source
+instead of becoming a broken DSN. `SQLITE_PATH` is the exception: a blank
+value is rejected with an error, because an empty path resolves to the
+working directory, which the SQLite open helper would chmod to `0700` and
+turn into a stray database file.
+
+`DATABASE_URL` defaults to the DSN in `internal/config/config.go`
+(`defaultDatabaseURL`). That literal lives only in that file; every other
+component reads the resolved value from the config.
+
+The resolved database target is logged at startup. `database ready` carries
+the backend plus the PostgreSQL host, port, and database name, and the `auto`
+fallback warning carries the same target plus the hint `set DB_MODE=postgres
+to fail hard`. Targets are parsed from the DSN with `net/url` and never
+include the user or the password; a DSN that is not a URI logs the generic
+`target=unknown` marker.
+
+In `postgres` mode the connection attempt is bounded by a 10-second ping
+timeout, so a black-holed host fails fast instead of hanging until the OS
+TCP timeout. The `auto` probe keeps its 3-second timeout.
+
 ## Migrations
 
 - SQL files live under `migrations/postgres/` and `migrations/sqlite/`, each
@@ -501,6 +523,21 @@ gofmt -w .
 make dev
 make build
 ```
+
+### Seed commands
+
+`go run ./cmd/seed` and `go run ./cmd/seed-catalogs` print the resolved
+backend and target before writing, so seeding the wrong database is
+self-evident:
+
+```text
+seeding backend=postgres host=127.0.0.1:5432 database=inventory_desktop
+seeding backend=sqlite path=/home/user/.config/inventory-desktop/data/inventory.sqlite
+```
+
+When the resolved backend is SQLite, both commands also print a warning that
+they seed the local offline database; the app may still be running on
+PostgreSQL. No credentials are printed.
 
 ## Boundaries
 
