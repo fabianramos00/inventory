@@ -3,7 +3,15 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SaleForm from './SaleForm'
+import saleStyles from './SaleForm.module.css'
+import formStyles from '../formPage.module.css'
 import { formatDateTime } from '@/lib/utils'
+
+const saleFormCss = import.meta.glob('./SaleForm.module.css', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+})['./SaleForm.module.css']
 
 const mocks = vi.hoisted(() => ({
   useSale: vi.fn(),
@@ -123,7 +131,7 @@ function product(overrides: Record<string, unknown> = {}) {
 
 function renderSale(path = '/sales/1') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
+  return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
@@ -138,6 +146,32 @@ function renderSale(path = '/sales/1') {
 
 function editButtons() {
   return screen.getAllByRole('button', { name: 'Editar' })
+}
+
+async function addProduct() {
+  fireEvent.change(
+    screen.getByPlaceholderText('Buscar producto por nombre o SKU...'),
+    { target: { value: 'tal' } },
+  )
+  await waitFor(
+    () => expect(mocks.getProducts).toHaveBeenCalledWith({ search: 'tal', skip: 0, limit: 8 }),
+    { timeout: 2000 },
+  )
+  fireEvent.click(await screen.findByText('Taladro'))
+}
+
+function cssBlock(css: string, marker: string): string {
+  const start = css.indexOf(marker)
+  if (start < 0) return ''
+  let depth = 0
+  for (let i = start; i < css.length; i++) {
+    if (css[i] === '{') depth++
+    else if (css[i] === '}') {
+      depth--
+      if (depth === 0) return css.slice(start, i + 1)
+    }
+  }
+  return ''
 }
 
 describe('SaleForm payload wiring', () => {
@@ -420,72 +454,181 @@ describe('SaleForm create payload', () => {
     })
   })
 
-  it('shows the payment method only when amount paid is greater than zero', () => {
+  it('always shows the payment method and keeps the payload null at amount zero', async () => {
     mocks.useSale.mockReturnValue({ sale: null, saleItems: [], isLoading: false, error: null })
+    mocks.createSale.mockReset().mockResolvedValue({ data: sale() })
     renderSale('/sales/create')
-
-    expect(screen.queryByText('Método de pago')).toBeNull()
-
-    fireEvent.change(document.getElementById('create-amount-paid')!, { target: { value: '10' } })
 
     expect(screen.getByText('Método de pago')).toBeTruthy()
-    expect((screen.getByRole('button', { name: /Guardar Venta/ }) as HTMLButtonElement).disabled).toBe(true)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Método de pago' }))
-    fireEvent.click(screen.getByRole('option', { name: 'Débito' }))
-
+    expect((screen.getByRole('button', { name: 'Método de pago' }) as HTMLButtonElement).disabled).toBe(false)
     expect((screen.getByRole('button', { name: /Guardar Venta/ }) as HTMLButtonElement).disabled).toBe(false)
+
+    await addProduct()
+
+    fireEvent.click(screen.getByRole('button', { name: /Guardar Venta/ }))
+
+    await waitFor(() => expect(mocks.createSale).toHaveBeenCalledTimes(1))
+    const payload = mocks.createSale.mock.calls[0][0] as Record<string, unknown>
+    expect(payload.payment_method).toBeNull()
+    expect(payload.amount_paid).toBe(0)
   })
 
-
-  it('shows the server-derived payment status with no manual dropdown', async () => {
+  it('shows the amount paid before the payment method', () => {
     mocks.useSale.mockReturnValue({ sale: null, saleItems: [], isLoading: false, error: null })
     renderSale('/sales/create')
 
-    expect(screen.getByText(/Calculado por el servidor/)).toBeTruthy()
+    const amount = screen.getByText('Monto pagado')
+    const method = screen.getByText('Método de pago')
+    expect(amount.compareDocumentPosition(method) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('shows the local payment status with no manual dropdown', async () => {
+    mocks.useSale.mockReturnValue({ sale: null, saleItems: [], isLoading: false, error: null })
+    renderSale('/sales/create')
+
+    expect(screen.getByText(/Se calcula al guardar\./)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Pendiente' })).toBeNull()
 
-    fireEvent.change(
-      screen.getByPlaceholderText('Buscar producto por nombre o SKU...'),
-      { target: { value: 'tal' } },
-    )
-    await waitFor(
-      () => expect(mocks.getProducts).toHaveBeenCalledWith({ search: 'tal', skip: 0, limit: 8 }),
-      { timeout: 2000 },
-    )
-    fireEvent.click(await screen.findByText('Taladro'))
+    await addProduct()
     fireEvent.change(document.getElementById('create-amount-paid')!, { target: { value: '50' } })
 
     await waitFor(() => expect(screen.getByText('Pagado')).toBeTruthy())
   })
 
-  it('shows the delivered-over-quantity error and disables create submit', async () => {
+  it('shows the delivered-over-quantity error next to the field', async () => {
     mocks.useSale.mockReturnValue({ sale: null, saleItems: [], isLoading: false, error: null })
     renderSale('/sales/create')
 
-    fireEvent.change(
-      screen.getByPlaceholderText('Buscar producto por nombre o SKU...'),
-      { target: { value: 'tal' } },
-    )
-    await waitFor(
-      () => expect(mocks.getProducts).toHaveBeenCalledWith({ search: 'tal', skip: 0, limit: 8 }),
-      { timeout: 2000 },
-    )
-    fireEvent.click(await screen.findByText('Taladro'))
+    await addProduct()
 
     fireEvent.change(document.getElementById('create-item-5-delivered')!, { target: { value: '2' } })
 
     expect(screen.getByText('máx. 1')).toBeTruthy()
-    expect((screen.getByRole('button', { name: /Guardar Venta/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /Guardar Venta/ }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('announces the empty-sale validation error with role="alert"', () => {
+  it('shows the empty-sale error inline and moves focus to the product search', () => {
     mocks.useSale.mockReturnValue({ sale: null, saleItems: [], isLoading: false, error: null })
     renderSale('/sales/create')
 
     fireEvent.click(screen.getByRole('button', { name: /Guardar Venta/ }))
 
-    expect(screen.getByText('Agrega al menos un producto a la venta.')).toBeTruthy()
-    expect(screen.queryByRole('alert')).not.toBeNull()
+    const error = screen.getByText('Agrega al menos un producto a la venta.')
+    expect(error).toBeTruthy()
+    expect(document.getElementById('sale-product-search')).toBe(document.activeElement)
+    expect(mocks.createSale).not.toHaveBeenCalled()
+  })
+})
+
+describe('SaleForm create validation focus', () => {
+  beforeEach(() => {
+    mocks.useSale.mockReturnValue({ sale: null, saleItems: [], isLoading: false, error: null })
+    mocks.createSale.mockReset().mockResolvedValue({ data: sale() })
+  })
+
+  it('focuses the delivered quantity of the offending item', async () => {
+    renderSale('/sales/create')
+    await addProduct()
+
+    fireEvent.change(document.getElementById('create-item-5-delivered')!, { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: /Guardar Venta/ }))
+
+    expect(document.getElementById('create-item-5-delivered')).toBe(document.activeElement)
+    expect(screen.getByText('máx. 1')).toBeTruthy()
+    expect(mocks.createSale).not.toHaveBeenCalled()
+  })
+
+  it('focuses the amount paid when it exceeds the total', async () => {
+    renderSale('/sales/create')
+    await addProduct()
+
+    fireEvent.change(document.getElementById('create-amount-paid')!, { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: /Guardar Venta/ }))
+
+    expect(document.getElementById('create-amount-paid')).toBe(document.activeElement)
+    expect(screen.getByText('máx. $ 50.00')).toBeTruthy()
+    expect(mocks.createSale).not.toHaveBeenCalled()
+  })
+
+  it('focuses the payment method when the amount is positive and no method is chosen', async () => {
+    renderSale('/sales/create')
+    await addProduct()
+
+    fireEvent.change(document.getElementById('create-amount-paid')!, { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('button', { name: /Guardar Venta/ }))
+
+    expect(screen.getByRole('button', { name: 'Método de pago' })).toBe(document.activeElement)
+    expect(screen.getByText('Selecciona un método de pago.')).toBeTruthy()
+    expect(mocks.createSale).not.toHaveBeenCalled()
+  })
+})
+
+describe('SaleForm create layout', () => {
+  beforeEach(() => {
+    mocks.useSale.mockReturnValue({ sale: null, saleItems: [], isLoading: false, error: null })
+  })
+
+  it('renders a single save button in the rail', () => {
+    const { container } = renderSale('/sales/create')
+
+    expect(screen.getAllByRole('button', { name: /Guardar Venta/ })).toHaveLength(1)
+    const save = screen.getByRole('button', { name: /Guardar Venta/ })
+    expect(container.querySelector(`.${saleStyles.saleGrid}`)).toBeTruthy()
+    expect(save.closest(`.${formStyles.rightColumn}`)).toBeTruthy()
+  })
+
+  it('announces the receipt total through a live region', () => {
+    const { container } = renderSale('/sales/create')
+
+    const total = container.querySelector('[aria-live="polite"]')
+    expect(total).toBeTruthy()
+    expect(total!.textContent).toBe('$ 0,00')
+    expect(total!.parentElement!.className).toContain(saleStyles.receiptTotal)
+  })
+
+  it('keeps the rail at least 320px wide and stacks the receipt total', () => {
+    expect(cssBlock(saleFormCss, '@media (min-width: 1024px)')).toContain(
+      'grid-template-columns: minmax(0, 1fr) 320px;',
+    )
+    expect(cssBlock(saleFormCss, '@media (min-width: 1280px)')).toContain(
+      'grid-template-columns: minmax(0, 1fr) 360px;',
+    )
+
+    const total = cssBlock(saleFormCss, '.receiptTotal {')
+    expect(total).toContain('flex-direction: column;')
+    expect(total).toContain('align-items: flex-end;')
+  })
+})
+
+describe('SaleForm edit layout', () => {
+  beforeEach(() => {
+    mocks.useSale.mockReturnValue({
+      sale: sale(),
+      saleItems: [saleItem()],
+      payments: [],
+      paymentsHasNext: false,
+      paymentsLoading: false,
+      paymentsFetching: false,
+      paymentsError: null,
+      loadMorePayments: vi.fn(),
+      retryPayments: vi.fn(),
+      isLoading: false,
+      error: null,
+    })
+  })
+
+  it('drops the duplicated payment status and amount rows from the details card', () => {
+    renderSale()
+
+    expect(screen.queryByText('Estado pago')).toBeNull()
+    expect(screen.queryByText('Monto pagado')).toBeNull()
+  })
+
+  it('shows the paid amount and the balance in the receipt', () => {
+    renderSale()
+
+    expect(screen.getByText('Pagado')).toBeTruthy()
+    expect(screen.getByText('Saldo')).toBeTruthy()
+    expect(screen.queryByText('Deuda')).toBeNull()
   })
 })

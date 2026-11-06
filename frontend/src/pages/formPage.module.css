@@ -676,7 +676,9 @@
   left: 0;
   right: 0;
   z-index: 30;
-  overflow: hidden;
+  max-height: var(--floating-menu-max-height, none);
+  overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid var(--glass-popover-border);
   border-radius: var(--radius-control);
   background: var(--glass-popover-bg);

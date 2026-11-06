@@ -11,6 +11,8 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    css: true, // required by the SaleForm stylesheet-contract test
+
     globals: true,
     exclude: [...configDefaults.exclude, 'e2e/**'],
   },

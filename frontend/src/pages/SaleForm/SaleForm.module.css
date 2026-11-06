@@ -1,0 +1,74 @@
+/* Sale page layout. The shared formPage.module.css keeps the 3fr/2fr grid
+   used by ProductForm and OrderForm; the sale page needs a fixed rail so the
+   receipt total never overflows. */
+
+/* The page never grows past 1360px, so the products card does not become a
+   wide strip on large windows. */
+.salePage {
+  max-width: 1360px;
+  margin-inline: auto;
+}
+
+.saleGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+/* 320px is the narrowest rail that keeps a 252px total on one line. */
+@media (min-width: 1024px) {
+  .saleGrid {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 16px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .saleGrid {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 20px;
+  }
+}
+
+.leftColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The total stacks over its label so it cannot overflow the rail. */
+.receiptTotal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 14px var(--card-pad) 18px;
+  border-top: 1px solid var(--dark-border);
+}
+
+@media (max-width: 1023px) {
+  .receiptTotal {
+    padding: 12px var(--card-pad);
+    background: var(--glass-dark-bg);
+    border-top: 1px solid var(--glass-dark-border);
+  }
+}
+
+.productSearchLabel {
+  margin-bottom: 6px;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.saveButton {
+  width: 100%;
+}

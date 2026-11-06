@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, Search, X, Loader, Package, Plus, Pencil, Check, Trash2, Wallet } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import styles from '../formPage.module.css'
+import saleStyles from './SaleForm.module.css'
 import { salesApi } from '@/lib/api/sales'
 import { getAPIErrorMessage } from '@/lib/apiError'
 import { clientsApi } from '@/lib/api/clients'
@@ -19,6 +21,7 @@ import { invalidateSaleData } from '@/lib/saleCache'
 import { useSale, type SaleItemView } from '@/hooks/useSale'
 import { useDebouncedFetch } from '@/hooks/useDebouncedFetch'
 import { useClickOutside } from '@/hooks/useClickOutside'
+import { useFloatingMenu } from '@/hooks/useFloatingMenu'
 import { CLIENT_FIELDS, buildClientCreatePayload } from '@/lib/formFields'
 import { buildCreateSalePayload } from './salePayload'
 import type { Product, FilterOption, PaymentStatus, Sale, SalePayment } from '@/types'
@@ -46,6 +49,16 @@ const PAYMENT_METHOD_OPTIONS = [
 
 function paymentMethodName(method: string | null): string {
   return (method && paymentMethodLabel[method]) || 'Sin especificar'
+}
+
+function itemFieldPrefix(isCreateMode: boolean, item: SaleItemDraft): string {
+  if (isCreateMode) return `create-item-${item.product_id}`
+  return item.id ? `item-${item.id}` : `pending-${item.product_id}`
+}
+
+function itemSubtotal(item: SaleItemDraft): number {
+  const price = item.unit_price !== '' ? parseFloat(item.unit_price) || 0 : item.product_default_price
+  return price * Number(item.quantity)
 }
 
 export default function SaleForm() {
@@ -82,6 +95,8 @@ export default function SaleForm() {
   const [paymentAnnouncement, setPaymentAnnouncement] = useState<string | null>(null)
   const payButtonRef = useRef<HTMLButtonElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
+  const amountPaidRef = useRef<HTMLInputElement>(null)
+  const paymentMethodFieldRef = useRef<HTMLDivElement>(null)
 
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending')
   const [paymentMethod, setPaymentMethod] = useState<string>('')
@@ -93,10 +108,12 @@ export default function SaleForm() {
   const [productSearch, setProductSearch] = useState('')
   const [productSearchOpen, setProductSearchOpen] = useState(false)
   const productSearchRef = useRef<HTMLDivElement>(null)
+  const productSearchInputRef = useRef<HTMLInputElement>(null)
+  const productResultsRef = useRef<HTMLDivElement>(null)
   const productResultsFocusedIndex = useRef<number>(-1)
 
   const [apiError, setApiError] = useState<string | null>(null)
-  const [validationError, setValidationError] = useState<string | null>(null)
+  const [itemsError, setItemsError] = useState<string | null>(null)
 
   const { data: productResults, loading: productLoading } = useDebouncedFetch(
     () => inventoryApi.getProducts({ search: productSearch, skip: 0, limit: 8 }).then(res => res.data.items || []),
@@ -105,7 +122,14 @@ export default function SaleForm() {
     itemsEditable && productSearch.trim() !== '',
   )
 
-  useClickOutside(productSearchRef, () => setProductSearchOpen(false), productSearchOpen)
+  useClickOutside(productSearchRef, () => setProductSearchOpen(false), productSearchOpen, productResultsRef)
+
+  const { panelProps: productResultsPanelProps } = useFloatingMenu({
+    open: productSearchOpen,
+    anchor: productSearchInputRef,
+    panel: productResultsRef,
+    width: 'trigger',
+  })
 
   useEffect(() => {
     if (!isCreateMode) return
@@ -298,7 +322,6 @@ export default function SaleForm() {
           unit_price: item.unit_price !== '' ? parseFloat(item.unit_price) || null : null,
         })
         invalidateSaleData(queryClient, sale.id)
-        setValidationError(null)
         setItemError(null)
       } catch (err) {
         setItemError({ productId, message: stockErrorMessage(err, 'Error al actualizar el artículo') })
@@ -342,10 +365,7 @@ export default function SaleForm() {
     }
   }
 
-  const draftTotal = items.reduce((acc, item) => {
-    const price = item.unit_price !== '' ? parseFloat(item.unit_price) || 0 : item.product_default_price
-    return acc + price * Number(item.quantity)
-  }, 0)
+  const draftTotal = items.reduce((acc, item) => acc + itemSubtotal(item), 0)
 
   useEffect(() => {
     if (!isCreateMode) return
@@ -365,39 +385,39 @@ export default function SaleForm() {
   const amountPaidError = (() => {
     if (!isCreateMode) return null
     const paid = parseFloat(amountPaid)
-    if (!isNaN(paid) && displayTotal > 0 && paid > displayTotal) return `máx. $ ${displayTotal.toFixed(2)}`
+    if (!isNaN(paid) && paid > displayTotal) return `máx. $ ${displayTotal.toFixed(2)}`
     return null
   })()
   const missingPaymentMethod = isCreateMode && (parseFloat(amountPaid) || 0) > 0 && !paymentMethod
-  const hasLiveErrors = isCreateMode && (!!amountPaidError || missingPaymentMethod || items.some(item => Number(item.delivered_quantity) > Number(item.quantity)))
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!isCreateMode) return
-    setValidationError(null)
     setApiError(null)
+    setItemsError(null)
 
     if (items.length === 0) {
-      setValidationError('Agrega al menos un producto a la venta.')
+      setItemsError('Agrega al menos un producto a la venta.')
+      productSearchInputRef.current?.focus()
       return
     }
     for (const item of items) {
       if (!item.quantity || Number(item.quantity) < 1) {
-        setValidationError('Todos los ítems deben tener una cantidad mayor a 0.')
+        document.getElementById(`${itemFieldPrefix(isCreateMode, item)}-quantity`)?.focus()
         return
       }
       if (Number(item.delivered_quantity) > Number(item.quantity)) {
-        setValidationError(`La cantidad entregada de "${item.product_name}" no puede superar la cantidad (${item.quantity}).`)
+        document.getElementById(`${itemFieldPrefix(isCreateMode, item)}-delivered`)?.focus()
         return
       }
     }
     const paid = parseFloat(amountPaid) || 0
     if (paid > draftTotal) {
-      setValidationError(`El monto pagado ($${paid.toFixed(2)}) no puede superar el total estimado ($${draftTotal.toFixed(2)}).`)
+      amountPaidRef.current?.focus()
       return
     }
     if (paid > 0 && !paymentMethod) {
-      setValidationError('Selecciona un método de pago.')
+      paymentMethodFieldRef.current?.querySelector('button')?.focus()
       return
     }
 
@@ -449,6 +469,8 @@ export default function SaleForm() {
       }
     } else if (e.key === 'Escape') {
       e.preventDefault()
+      // The menu may live inside a modal: only the menu closes.
+      e.stopPropagation()
       onClose()
     }
   }
@@ -467,7 +489,7 @@ export default function SaleForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className={styles.pageContainer}>
+    <form onSubmit={handleSubmit} className={`${styles.pageContainer} ${saleStyles.salePage}`}>
       <div className={styles.pageHeader}>
         <div className={styles.headerLeft}>
           <button
@@ -503,13 +525,6 @@ export default function SaleForm() {
             <button type="button" onClick={handleCancelCreate} className="btn-ghost">
               Cancelar
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || hasLiveErrors}
-              className={`btn-primary ${styles.btnDisabled}`}
-            >
-              {isSubmitting ? <><Loader size={15} className={styles.spinnerDark} /> Guardando...</> : 'Guardar Venta'}
-            </button>
           </div>
         )}
         {canPay && (
@@ -530,141 +545,265 @@ export default function SaleForm() {
       {paymentAnnouncement && <div className={styles.statusAnnouncement} role="status">{paymentAnnouncement}</div>}
 
       {apiError && <div className={styles.errorBox} role="alert">{apiError}</div>}
-      {validationError && <div className={styles.errorBox} role="alert">{validationError}</div>}
 
-      <div className={styles.sectionsGrid}>
-        <section className={styles.card}>
-          {isCreateMode ? (
-            <h2 className={styles.cardTitle}>Productos</h2>
-          ) : (
-            <div className={styles.cardHeader}>
+      <div className={saleStyles.saleGrid}>
+        <div className={saleStyles.leftColumn}>
+          <section className={styles.card}>
+            {isCreateMode ? (
               <h2 className={styles.cardTitle}>Productos</h2>
-              <div className={styles.cardActions}>
-                {isEditingItems ? (
-                  <button type="button" onClick={handleCancelEditItems} className="btn-ghost">
-                    <X size={15} />
-                    Cancelar
-                  </button>
-                ) : (
-                  <button type="button" onClick={handleStartEditItems} className="btn-ghost">
-                    <Pencil size={15} />
-                    Editar
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {itemsEditable && (
-            <div className={styles.productSearchWrapper} ref={productSearchRef}>
-              <div className={styles.productSearchField}>
-                <Search size={14} className={styles.searchIcon} />
-                <input
-                  type="text"
-                  className={styles.productSearchInput}
-                  placeholder={isCreateMode ? 'Buscar producto por nombre o SKU...' : 'Agregar producto por nombre o SKU...'}
-                  value={productSearch}
-                  onChange={e => {
-                    setProductSearch(e.target.value)
-                    setProductSearchOpen(e.target.value.trim() !== '')
-                    productResultsFocusedIndex.current = -1
-                  }}
-                  autoComplete="off"
-                  aria-expanded={productSearchOpen}
-                  aria-controls={isCreateMode ? 'product-search-listbox' : 'product-results-list'}
-                  aria-autocomplete="list"
-                  role="combobox"
-                />
-                {productLoading && <Loader size={13} className={styles.searchSpinner} />}
-              </div>
-              {productSearchOpen && (
-                <div
-                  className={styles.productResults}
-                  id={isCreateMode ? 'product-search-listbox' : 'product-results-list'}
-                  role="listbox"
-                  onKeyDown={e => handleDropdownKeyDown(
-                    e,
-                    productResults.length,
-                    productResultsFocusedIndex,
-                    (idx) => {
-                      const product = productResults[idx]
-                      if (product) handleAddItem(product)
-                    },
-                    () => setProductSearchOpen(false)
-                  )}
-                >
-                  {productLoading ? (
-                    <div className={`${styles.productOption} ${styles.optionLoading}`}>
-                      <Loader size={14} className={styles.spinner} />
-                    </div>
-                  ) : productResults.length === 0 ? (
-                    <div className={`${styles.productOption} ${styles.productOptionEmpty}`}>Sin resultados</div>
+            ) : (
+              <div className={styles.cardHeader}>
+                <h2 className={styles.cardTitle}>Productos</h2>
+                <div className={styles.cardActions}>
+                  {isEditingItems ? (
+                    <button type="button" onClick={handleCancelEditItems} className="btn-ghost">
+                      <X size={15} />
+                      Cancelar
+                    </button>
                   ) : (
-                    productResults.map((product, idx) => {
-                      const isAdded = items.some(i => i.product_id === product.id)
-                      const hasNoStock = (product.stock_quantity ?? 0) === 0
-                      return (
-                        <button
-                          key={product.id}
-                          type="button"
-                          disabled={hasNoStock}
-                          role="option"
-                          aria-selected={isAdded}
-                          className={`${styles.productOption} ${isAdded ? styles.productOptionAdded : ''} ${hasNoStock ? styles.productOptionDisabled : ''}`}
-                          onClick={() => handleAddItem(product)}
-                          title={hasNoStock ? 'Sin stock disponible' : ''}
-                          data-index={idx}
-                        >
-                          <div className={styles.productOptionInfo}>
-                            <span className={styles.productOptionName}>{product.name}</span>
-                            {product.size_value && <span className={styles.productOptionSize}>{product.size_value} {product.measurement_unit?.abbreviation}</span>}
-                            <div className={styles.productOptionTags}>
-                              {product.category?.name && <span className={styles.productOptionTag}>{product.category.name}</span>}
-                              {product.brand?.name && <span className={styles.productOptionTag}>{product.brand.name}</span>}
-                              {product.material?.name && <span className={styles.productOptionTag}>{product.material.name}</span>}
-                            </div>
-                          </div>
-                          <div className={styles.productOptionMeta}>
-                            <span className={styles.productOptionSku}>{product.sku}</span>
-                            <div className={styles.productOptionPriceRow}>
-                              <span className={styles.productOptionPrice}>$ {(product.sale_price ?? product.price ?? 0).toFixed(2)}</span>
-                              <span className={hasNoStock ? styles.stockInfoWarning : styles.stockInfo}>
-                                Stock: <span className={hasNoStock ? styles.stockInfoWarning : styles.stockInfoValue}>{product.stock_quantity ?? 0}</span>
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-                      )
-                    })
+                    <button type="button" onClick={handleStartEditItems} className="btn-ghost">
+                      <Pencil size={15} />
+                      Editar
+                    </button>
                   )}
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {(isCreateMode ? items.length === 0 : saleItems.length === 0 && items.length === 0) ? (
-            <div className={styles.emptyItems}>
-              <Package size={28} className={styles.emptyIcon} />
-              <p>{isCreateMode ? 'Busca y selecciona productos para agregar a la venta' : 'Sin productos registrados'}</p>
-            </div>
-          ) : (
-            <div className={styles.itemsList}>
-              {itemsEditable ? items.map(item => {
-                const deliveredError = (isCreateMode || item.id) && Number(item.delivered_quantity) > Number(item.quantity)
-                  ? `máx. ${item.quantity}`
-                  : null
-                const isPending = !isCreateMode && !item.id
-                const fieldPrefix = isCreateMode
-                  ? `create-item-${item.product_id}`
-                  : item.id ? `item-${item.id}` : `pending-${item.product_id}`
-                return (
-                  <div
-                    key={item.product_id}
-                    className={`${styles.itemCard} ${isPending ? styles.itemCardPending : ''} ${itemError?.productId === item.product_id ? styles.itemCardError : ''}`}
-                  >
-                    {itemError?.productId === item.product_id && (
-                      <div className={styles.errorBanner} role="alert">{itemError.message}</div>
+            {itemsEditable && (
+              <div className={styles.productSearchWrapper} ref={productSearchRef}>
+                <label className={saleStyles.productSearchLabel} htmlFor="sale-product-search">
+                  Buscar producto
+                </label>
+                <div className={styles.productSearchField}>
+                  <Search size={14} className={styles.searchIcon} />
+                  <input
+                    id="sale-product-search"
+                    ref={productSearchInputRef}
+                    type="text"
+                    className={`${styles.productSearchInput} ${itemsError ? styles.inputError : ''}`}
+                    placeholder={isCreateMode ? 'Buscar producto por nombre o SKU...' : 'Agregar producto por nombre o SKU...'}
+                    aria-label="Buscar producto"
+                    aria-invalid={itemsError ? true : undefined}
+                    aria-describedby={itemsError ? 'sale-items-error' : undefined}
+                    value={productSearch}
+                    onChange={e => {
+                      setProductSearch(e.target.value)
+                      setProductSearchOpen(e.target.value.trim() !== '')
+                      productResultsFocusedIndex.current = -1
+                    }}
+                    onKeyDown={e => handleDropdownKeyDown(
+                      e,
+                      productResults.length,
+                      productResultsFocusedIndex,
+                      (idx) => {
+                        const product = productResults[idx]
+                        if (product) handleAddItem(product)
+                      },
+                      () => setProductSearchOpen(false)
                     )}
+                    autoComplete="off"
+                    aria-expanded={productSearchOpen}
+                    aria-controls={isCreateMode ? 'product-search-listbox' : 'product-results-list'}
+                    aria-autocomplete="list"
+                    role="combobox"
+                  />
+                  {productLoading && <Loader size={13} className={styles.searchSpinner} />}
+                </div>
+                {itemsError && (
+                  <span className={styles.fieldError} id="sale-items-error">{itemsError}</span>
+                )}
+                {productSearchOpen && createPortal(
+                  <div
+                    {...productResultsPanelProps}
+                    ref={productResultsRef}
+                    className={styles.productResults}
+                    id={isCreateMode ? 'product-search-listbox' : 'product-results-list'}
+                    role="listbox"
+                    onKeyDown={e => handleDropdownKeyDown(
+                      e,
+                      productResults.length,
+                      productResultsFocusedIndex,
+                      (idx) => {
+                        const product = productResults[idx]
+                        if (product) handleAddItem(product)
+                      },
+                      () => setProductSearchOpen(false)
+                    )}
+                  >
+                    {productLoading ? (
+                      <div className={`${styles.productOption} ${styles.optionLoading}`}>
+                        <Loader size={14} className={styles.spinner} />
+                      </div>
+                    ) : productResults.length === 0 ? (
+                      <div className={`${styles.productOption} ${styles.productOptionEmpty}`}>Sin resultados</div>
+                    ) : (
+                      productResults.map((product, idx) => {
+                        const isAdded = items.some(i => i.product_id === product.id)
+                        const hasNoStock = (product.stock_quantity ?? 0) === 0
+                        return (
+                          <button
+                            key={product.id}
+                            type="button"
+                            disabled={hasNoStock}
+                            role="option"
+                            aria-selected={isAdded}
+                            className={`${styles.productOption} ${isAdded ? styles.productOptionAdded : ''} ${hasNoStock ? styles.productOptionDisabled : ''}`}
+                            onClick={() => handleAddItem(product)}
+                            title={hasNoStock ? 'Sin stock disponible' : ''}
+                            data-index={idx}
+                          >
+                            <div className={styles.productOptionInfo}>
+                              <span className={styles.productOptionName}>{product.name}</span>
+                              {product.size_value && <span className={styles.productOptionSize}>{product.size_value} {product.measurement_unit?.abbreviation}</span>}
+                              <div className={styles.productOptionTags}>
+                                {product.category?.name && <span className={styles.productOptionTag}>{product.category.name}</span>}
+                                {product.brand?.name && <span className={styles.productOptionTag}>{product.brand.name}</span>}
+                                {product.material?.name && <span className={styles.productOptionTag}>{product.material.name}</span>}
+                              </div>
+                            </div>
+                            <div className={styles.productOptionMeta}>
+                              <span className={styles.productOptionSku}>{product.sku}</span>
+                              <div className={styles.productOptionPriceRow}>
+                                <span className={styles.productOptionPrice}>$ {(product.sale_price ?? product.price ?? 0).toFixed(2)}</span>
+                                <span className={hasNoStock ? styles.stockInfoWarning : styles.stockInfo}>
+                                  Stock: <span className={hasNoStock ? styles.stockInfoWarning : styles.stockInfoValue}>{product.stock_quantity ?? 0}</span>
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>,
+                  document.body,
+                )}
+              </div>
+            )}
+
+            {(isCreateMode ? items.length === 0 : saleItems.length === 0 && items.length === 0) ? (
+              <div className={styles.emptyItems}>
+                <Package size={28} className={styles.emptyIcon} />
+                <p>{isCreateMode ? 'Busca y selecciona productos para agregar a la venta' : 'Sin productos registrados'}</p>
+              </div>
+            ) : (
+              <div className={styles.itemsList}>
+                {itemsEditable ? items.map(item => {
+                  const deliveredError = (isCreateMode || item.id) && Number(item.delivered_quantity) > Number(item.quantity)
+                    ? `máx. ${item.quantity}`
+                    : null
+                  const quantityError = isCreateMode && Number(item.quantity) < 1 ? 'mín. 1' : null
+                  const isPending = !isCreateMode && !item.id
+                  const fieldPrefix = itemFieldPrefix(isCreateMode, item)
+                  return (
+                    <div
+                      key={item.product_id}
+                      className={`${styles.itemCard} ${isPending ? styles.itemCardPending : ''} ${itemError?.productId === item.product_id ? styles.itemCardError : ''}`}
+                    >
+                      {itemError?.productId === item.product_id && (
+                        <div className={styles.errorBanner} role="alert">{itemError.message}</div>
+                      )}
+                      <div className={styles.itemHeader}>
+                        <div className={styles.itemIdentity}>
+                          <div className={styles.itemNameRow}>
+                            <span className={styles.itemName}>{item.product_name}</span>
+                            {item.product_sku && <span className={styles.itemSku}>{item.product_sku}</span>}
+                          </div>
+                          <div className={styles.itemTags}>
+                            {item.product_category && <span className={styles.itemTag}>{item.product_category}</span>}
+                            {item.product_brand && <span className={styles.itemTag}>{item.product_brand}</span>}
+                            {item.product_material && <span className={styles.itemTag}>{item.product_material}</span>}
+                          </div>
+                          {(isCreateMode || isPending) && (
+                            <div className={styles.stockInfo}>
+                              Stock disponible: <span className={styles.stockInfoValue}>{item.product_stock}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className={styles.itemEditActions}>
+                          {!isCreateMode && (
+                            <button
+                              type="button"
+                              className={styles.itemSaveBtn}
+                              onClick={() => handleSaveItem(item.product_id)}
+                              disabled={savingItemId === item.id || deletingItemId === item.id}
+                              title="Guardar cambios"
+                            >
+                              {savingItemId === item.id
+                                ? <Loader size={13} className={styles.spinner} />
+                                : <Check size={13} />}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className={styles.removeBtn}
+                            onClick={() => handleRemoveItem(item.product_id)}
+                            disabled={deletingItemId === item.id || savingItemId === item.id}
+                            title={isCreateMode ? 'Quitar producto' : item.id ? 'Eliminar ítem' : 'Descartar'}
+                          >
+                            {deletingItemId === item.id
+                              ? <Loader size={13} className={styles.spinner} />
+                              : <X size={14} />}
+                          </button>
+                        </div>
+                      </div>
+                      <div className={styles.itemFieldsRowFour}>
+                        <div className={styles.itemField}>
+                          <label className={styles.itemFieldLabel} htmlFor={`${fieldPrefix}-quantity`}>Cantidad</label>
+                          <input
+                            id={`${fieldPrefix}-quantity`}
+                            type="number"
+                            className={`form-input ${styles.mono} ${quantityError ? styles.inputError : ''}`}
+                            min={1}
+                            aria-invalid={quantityError ? true : undefined}
+                            aria-describedby={quantityError ? `${fieldPrefix}-quantity-error` : undefined}
+                            value={item.quantity}
+                            onChange={e => updateItem(item.product_id, 'quantity', e.target.value)}
+                          />
+                          {quantityError && (
+                            <span className={styles.fieldError} id={`${fieldPrefix}-quantity-error`}>{quantityError}</span>
+                          )}
+                        </div>
+                        <div className={styles.itemField}>
+                          <label className={styles.itemFieldLabel} htmlFor={`${fieldPrefix}-delivered`}>Cant. entregada</label>
+                          <input
+                            id={`${fieldPrefix}-delivered`}
+                            type="number"
+                            className={`form-input ${styles.mono} ${deliveredError ? styles.inputError : ''}`}
+                            min={0}
+                            aria-invalid={deliveredError ? true : undefined}
+                            aria-describedby={deliveredError ? `${fieldPrefix}-delivered-error` : undefined}
+                            value={item.delivered_quantity}
+                            onChange={e => updateItem(item.product_id, 'delivered_quantity', e.target.value)}
+                          />
+                          {deliveredError && (
+                            <span className={styles.fieldError} id={`${fieldPrefix}-delivered-error`}>{deliveredError}</span>
+                          )}
+                        </div>
+                        <div className={styles.itemField}>
+                          <label className={styles.itemFieldLabel} htmlFor={`${fieldPrefix}-price`}>Precio unit.</label>
+                          <input
+                            id={`${fieldPrefix}-price`}
+                            type="number"
+                            className={`form-input ${styles.mono}`}
+                            min={0}
+                            step="0.01"
+                            placeholder={isCreateMode
+                              ? item.product_default_price.toFixed(2)
+                              : isPending ? (item.product_default_price > 0 ? String(item.product_default_price) : '0.00') : undefined}
+                            value={item.unit_price}
+                            onChange={e => updateItem(item.product_id, 'unit_price', e.target.value)}
+                          />
+                        </div>
+                        <div className={styles.itemField}>
+                          <span className={styles.itemFieldLabel}>Subtotal</span>
+                          <span className={styles.mono}>{formatCurrency(itemSubtotal(item))}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }) : saleItems.map(item => (
+                  <div key={item.id} className={styles.itemCard}>
                     <div className={styles.itemHeader}>
                       <div className={styles.itemIdentity}>
                         <div className={styles.itemNameRow}>
@@ -676,119 +815,108 @@ export default function SaleForm() {
                           {item.product_brand && <span className={styles.itemTag}>{item.product_brand}</span>}
                           {item.product_material && <span className={styles.itemTag}>{item.product_material}</span>}
                         </div>
-                        {(isCreateMode || isPending) && (
-                          <div className={styles.stockInfo}>
-                            Stock disponible: <span className={styles.stockInfoValue}>{item.product_stock}</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className={styles.itemEditActions}>
-                        {!isCreateMode && (
-                          <button
-                            type="button"
-                            className={styles.itemSaveBtn}
-                            onClick={() => handleSaveItem(item.product_id)}
-                            disabled={savingItemId === item.id || deletingItemId === item.id}
-                            title="Guardar cambios"
-                          >
-                            {savingItemId === item.id
-                              ? <Loader size={13} className={styles.spinner} />
-                              : <Check size={13} />}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className={styles.removeBtn}
-                          onClick={() => handleRemoveItem(item.product_id)}
-                          disabled={deletingItemId === item.id || savingItemId === item.id}
-                          title={isCreateMode ? 'Quitar producto' : item.id ? 'Eliminar ítem' : 'Descartar'}
-                        >
-                          {deletingItemId === item.id
-                            ? <Loader size={13} className={styles.spinner} />
-                            : <X size={14} />}
-                        </button>
                       </div>
                     </div>
-                    <div className={styles.itemFieldsRow}>
+                    <div className={styles.itemFieldsRowFour}>
                       <div className={styles.itemField}>
-                        <label className={styles.itemFieldLabel} htmlFor={`${fieldPrefix}-quantity`}>Cantidad</label>
-                        <input
-                          id={`${fieldPrefix}-quantity`}
-                          type="number"
-                          className={`form-input ${styles.mono}`}
-                          min={1}
-                          value={item.quantity}
-                          onChange={e => updateItem(item.product_id, 'quantity', e.target.value)}
-                        />
+                        <span className={styles.itemFieldLabel}>Cantidad</span>
+                        <span className={styles.mono}>{item.quantity}</span>
                       </div>
                       <div className={styles.itemField}>
-                        <label className={styles.itemFieldLabel} htmlFor={`${fieldPrefix}-delivered`}>Cant. entregada</label>
-                        <input
-                          id={`${fieldPrefix}-delivered`}
-                          type="number"
-                          className={`form-input ${styles.mono} ${deliveredError ? styles.inputError : ''}`}
-                          min={0}
-                          value={item.delivered_quantity}
-                          onChange={e => updateItem(item.product_id, 'delivered_quantity', e.target.value)}
-                        />
-                        {deliveredError && <span className={styles.fieldError}>{deliveredError}</span>}
+                        <span className={styles.itemFieldLabel}>Entregado</span>
+                        <span className={styles.mono}>{item.delivered_quantity}</span>
                       </div>
                       <div className={styles.itemField}>
-                        <label className={styles.itemFieldLabel} htmlFor={`${fieldPrefix}-price`}>Precio unit.</label>
-                        <input
-                          id={`${fieldPrefix}-price`}
-                          type="number"
-                          className={`form-input ${styles.mono}`}
-                          min={0}
-                          step="0.01"
-                          placeholder={isCreateMode
-                            ? item.product_default_price.toFixed(2)
-                            : isPending ? (item.product_default_price > 0 ? String(item.product_default_price) : '0.00') : undefined}
-                          value={item.unit_price}
-                          onChange={e => updateItem(item.product_id, 'unit_price', e.target.value)}
-                        />
+                        <span className={styles.itemFieldLabel}>P. unit.</span>
+                        <span className={styles.mono}>{formatCurrency(item.unit_price)}</span>
+                      </div>
+                      <div className={styles.itemField}>
+                        <span className={styles.itemFieldLabel}>Subtotal</span>
+                        <span className={styles.mono}>{formatCurrency(item.subtotal)}</span>
                       </div>
                     </div>
                   </div>
-                )
-              }) : saleItems.map(item => (
-                <div key={item.id} className={styles.itemCard}>
-                  <div className={styles.itemHeader}>
-                    <div className={styles.itemIdentity}>
-                      <div className={styles.itemNameRow}>
-                        <span className={styles.itemName}>{item.product_name}</span>
-                        {item.product_sku && <span className={styles.itemSku}>{item.product_sku}</span>}
-                      </div>
-                      <div className={styles.itemTags}>
-                        {item.product_category && <span className={styles.itemTag}>{item.product_category}</span>}
-                        {item.product_brand && <span className={styles.itemTag}>{item.product_brand}</span>}
-                        {item.product_material && <span className={styles.itemTag}>{item.product_material}</span>}
-                      </div>
-                    </div>
-                  </div>
-                  <div className={styles.itemFieldsRowFour}>
-                    <div className={styles.itemField}>
-                      <span className={styles.itemFieldLabel}>Cantidad</span>
-                      <span className={styles.mono}>{item.quantity}</span>
-                    </div>
-                    <div className={styles.itemField}>
-                      <span className={styles.itemFieldLabel}>Entregado</span>
-                      <span className={styles.mono}>{item.delivered_quantity}</span>
-                    </div>
-                    <div className={styles.itemField}>
-                      <span className={styles.itemFieldLabel}>P. unit.</span>
-                      <span className={styles.mono}>$ {item.unit_price.toFixed(2)}</span>
-                    </div>
-                    <div className={styles.itemField}>
-                      <span className={styles.itemFieldLabel}>Subtotal</span>
-                      <span className={styles.mono}>$ {item.subtotal.toFixed(2)}</span>
-                    </div>
-                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+          {!isCreateMode && sale && (
+            <section className={styles.card}>
+              <div className={styles.historyHeader}>
+                <h2 className={styles.cardTitle}>Historial de pagos</h2>
+              </div>
+              {paymentsLoading ? (
+                <div className={styles.historySkeleton} aria-label="Cargando pagos">
+                  <div className={styles.historySkeletonRow} />
+                  <div className={styles.historySkeletonRow} />
+                  <div className={styles.historySkeletonRow} />
                 </div>
-              ))}
-            </div>
+              ) : paymentsError ? (
+                <div className={styles.historyError}>
+                  <p className={styles.historyErrorMessage}>No se pudieron cargar los pagos.</p>
+                  <button type="button" className="btn-ghost" onClick={() => { void retryPayments() }}>
+                    Reintentar
+                  </button>
+                </div>
+              ) : payments.length === 0 ? (
+                <div>
+                  <p className={styles.historyEmpty}>Sin pagos registrados</p>
+                  {sale.debt_amount > 0 && (
+                    <p className={styles.historyEmptyHint}>Registra el primer pago con «Pagar».</p>
+                  )}
+                </div>
+              ) : (
+                <div className={styles.historyTableWrapper}>
+                  <table className={styles.historyTable}>
+                    <thead>
+                      <tr>
+                        <th scope="col">Fecha y hora</th>
+                        <th scope="col">Método</th>
+                        <th scope="col">Registrado por</th>
+                        <th scope="col" className={styles.historyAmount}>Monto</th>
+                        <th scope="col">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payments.map(payment => (
+                        <tr key={payment.id}>
+                          <td data-label="Fecha y hora" className={styles.historyDate}>
+                            {formatDateTime(payment.created_at)}
+                          </td>
+                          <td data-label="Método">{paymentMethodName(payment.payment_method)}</td>
+                          <td data-label="Registrado por">{payment.created_by?.full_name ?? 'Sin usuario'}</td>
+                          <td data-label="Monto" className={styles.historyAmount}>{formatCurrency(payment.amount)}</td>
+                          <td data-label="Acciones">
+                            <button
+                              type="button"
+                              className={styles.historyDelete}
+                              onClick={() => { setApiError(null); setPaymentToDelete(payment) }}
+                              disabled={deletingPaymentId === payment.id}
+                              title="Eliminar pago"
+                              aria-label={`Eliminar pago de ${formatCurrency(payment.amount)}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {paymentsHasNext && !paymentsLoading && !paymentsError && (
+                <button
+                  type="button"
+                  className={`btn-ghost ${styles.historyLoadMore}`}
+                  onClick={() => { void loadMorePayments() }}
+                  disabled={paymentsFetching}
+                >
+                  {paymentsFetching ? 'Cargando…' : 'Ver más'}
+                </button>
+              )}
+            </section>
           )}
-        </section>
+        </div>
 
         <div className={styles.rightColumn}>
           <section className={styles.receipt}>
@@ -797,37 +925,39 @@ export default function SaleForm() {
               <span className={styles.receiptMeta}>{isCreateMode ? 'Borrador' : `Venta #${sale?.id}`}</span>
             </div>
             <dl className={styles.receiptRows}>
-              <div className={styles.receiptRow}>
-                <dt className={styles.receiptLabel}>Ítems</dt>
-                <dd className={styles.receiptValue}>
-                  {isCreateMode && items.length === 0 ? '—' : (isCreateMode ? items.length : saleItems.length)}
-                </dd>
-              </div>
-              <div className={styles.receiptRow}>
-                <dt className={styles.receiptLabel}>{isCreateMode ? 'Deuda estimada' : 'Deuda'}</dt>
-                <dd className={`${styles.receiptValue} ${displayDebt > 0 ? styles.receiptDebtPositive : styles.receiptDebtSettled}`}>
-                  {formatCurrency(displayDebt)}
-                </dd>
-              </div>
+              {(!isCreateMode || items.length > 0) && (
+                <div className={styles.receiptRow}>
+                  <dt className={styles.receiptLabel}>Ítems</dt>
+                  <dd className={styles.receiptValue}>
+                    {isCreateMode ? items.length : saleItems.length}
+                  </dd>
+                </div>
+              )}
               {!isCreateMode && sale && (
                 <div className={styles.receiptRow}>
                   <dt className={styles.receiptLabel}>Pagado</dt>
                   <dd className={styles.receiptValue}>{formatCurrency(sale.amount_paid)}</dd>
                 </div>
               )}
+              <div className={styles.receiptRow}>
+                <dt className={styles.receiptLabel}>{isCreateMode ? 'Saldo por cobrar' : 'Saldo'}</dt>
+                <dd className={`${styles.receiptValue} ${displayDebt > 0 ? styles.receiptDebtPositive : styles.receiptDebtSettled}`}>
+                  {formatCurrency(displayDebt)}
+                </dd>
+              </div>
             </dl>
             {isCreateMode && items.length === 0 && (
               <p className={styles.receiptHint}>Agrega productos para ver el resumen</p>
             )}
-            <div className={styles.receiptTotalRow}>
+            <div className={saleStyles.receiptTotal}>
               <span className={styles.receiptTotalLabel}>{isCreateMode ? 'Total estimado' : 'Total'}</span>
-              <span className={styles.receiptTotalValue}>{formatCurrency(displayTotal)}</span>
+              <span className={styles.receiptTotalValue} aria-live="polite">{formatCurrency(displayTotal)}</span>
             </div>
           </section>
 
           <section className={styles.card}>
             {isCreateMode ? (
-              <h2 className={styles.cardTitle}>Detalles de venta</h2>
+              <h2 className={styles.cardTitle}>Pago y detalles</h2>
             ) : (
               <div className={styles.cardHeader}>
                 <h2 className={styles.cardTitle}>Detalles de venta</h2>
@@ -841,7 +971,7 @@ export default function SaleForm() {
                       <button
                         type="button"
                         onClick={handleSaveDetails}
-                        disabled={isSaving || safeNumber(amountPaid, 0) > displayTotal}
+                        disabled={isSaving}
                         className={`btn-ghost ${styles.btnDisabled}`}
                       >
                         {isSaving ? <><Loader size={15} className={styles.spinner} /> Guardando...</> : <><Check size={15} /> Guardar</>}
@@ -860,29 +990,84 @@ export default function SaleForm() {
               <p className={styles.cardHint}>Los pagos se registran con «Pagar».</p>
             )}
             <dl className={styles.fieldList}>
-              <div className={detailsEditable ? styles.fieldRowEditing : styles.fieldRow}>
-                <dt className={styles.fieldLabel}>Cliente</dt>
-                {detailsEditable ? (
-                  <dd className={styles.fieldValueFull}>
-                    <div className={styles.selectWithAction}>
-                      <SearchSelect
-                        label="Cliente"
-                        placeholder="Sin cliente"
-                        emptyLabel="Sin cliente"
-                        className={styles.formSelect}
-                        value={clientId}
-                        onChange={(value, option) => {
-                          setClientId(value)
-                          setSelectedClient(option ?? null)
+              {isCreateMode ? (
+                <>
+                  <div className={styles.fieldRowEditing}>
+                    <dt className={styles.fieldLabel}>Monto pagado</dt>
+                    <dd className={styles.fieldValueFull}>
+                      <input
+                        id="create-amount-paid"
+                        ref={amountPaidRef}
+                        type="number"
+                        className={`form-input ${styles.mono} ${amountPaidError ? styles.inputError : ''}`}
+                        min={0}
+                        step="0.01"
+                        placeholder="0.00"
+                        aria-invalid={amountPaidError ? true : undefined}
+                        aria-describedby={amountPaidError ? 'create-amount-paid-error' : undefined}
+                        value={amountPaid}
+                        onChange={e => {
+                          setAmountPaid(e.target.value)
+                          if ((parseFloat(e.target.value) || 0) === 0) setPaymentMethod('')
                         }}
-                        fetchOptions={search =>
-                          clientsApi.getClients({ search: search || undefined, skip: 0, limit: 10 })
-                            .then(res => res.data.items || [])
-                        }
-                        selectedOption={selectedClient ?? undefined}
-                        ariaLabel={`Cliente: ${selectedClient?.name ?? 'Sin cliente'}`}
                       />
-                      {isCreateMode && (
+                      {amountPaidError && (
+                        <span className={styles.fieldError} id="create-amount-paid-error">{amountPaidError}</span>
+                      )}
+                    </dd>
+                  </div>
+
+                  <div className={styles.fieldRowEditing}>
+                    <dt className={styles.fieldLabel}>Método de pago</dt>
+                    <dd className={styles.fieldValueFull}>
+                      <div ref={paymentMethodFieldRef}>
+                        <Dropdown
+                          value={paymentMethod}
+                          options={PAYMENT_METHOD_OPTIONS}
+                          onChange={setPaymentMethod}
+                          placeholder="Selecciona un método"
+                          ariaLabel="Método de pago"
+                        />
+                      </div>
+                      {missingPaymentMethod && (
+                        <span className={styles.fieldError} id="create-payment-method-error">Selecciona un método de pago.</span>
+                      )}
+                    </dd>
+                  </div>
+
+                  <div className={styles.fieldRowEditing}>
+                    <dt className={styles.fieldLabel}>Estado pago</dt>
+                    <dd className={styles.fieldValueFull}>
+                      <div className={saleStyles.statusRow}>
+                        <span className={`badge ${paymentStatusBadge[paymentStatus]}`}>
+                          {paymentStatusLabel[paymentStatus]}
+                        </span>
+                        <span className={styles.summaryMuted}>Se calcula al guardar.</span>
+                      </div>
+                    </dd>
+                  </div>
+
+                  <div className={styles.fieldRowEditing}>
+                    <dt className={styles.fieldLabel}>Cliente</dt>
+                    <dd className={styles.fieldValueFull}>
+                      <div className={styles.selectWithAction}>
+                        <SearchSelect
+                          label="Cliente"
+                          placeholder="Sin cliente"
+                          emptyLabel="Sin cliente"
+                          className={styles.formSelect}
+                          value={clientId}
+                          onChange={(value, option) => {
+                            setClientId(value)
+                            setSelectedClient(option ?? null)
+                          }}
+                          fetchOptions={search =>
+                            clientsApi.getClients({ search: search || undefined, skip: 0, limit: 10 })
+                              .then(res => res.data.items || [])
+                          }
+                          selectedOption={selectedClient ?? undefined}
+                          ariaLabel={`Cliente: ${selectedClient?.name ?? 'Sin cliente'}`}
+                        />
                         <button
                           type="button"
                           className={styles.addClientBtn}
@@ -891,34 +1076,41 @@ export default function SaleForm() {
                         >
                           <Plus size={14} />
                         </button>
-                      )}
-                    </div>
-                  </dd>
-                ) : (
-                  <dd className={styles.fieldValue}>{sale?.client?.name ?? <span className={styles.summaryMuted}>Sin cliente</span>}</dd>
-                )}
-              </div>
-
-              {isCreateMode ? (
-                <div className={styles.fieldRow}>
-                  <dt className={styles.fieldLabel}>Estado pago</dt>
-                  <dd className={styles.fieldValue}>
-                    <span className={`badge ${paymentStatusBadge[paymentStatus]}`}>
-                      {paymentStatusLabel[paymentStatus]}
-                    </span>
-                    <span className={styles.summaryMuted}> Calculado por el servidor</span>
-                  </dd>
-                </div>
-              ) : (
-                <>
-                  <div className={styles.fieldRow}>
-                    <dt className={styles.fieldLabel}>Estado pago</dt>
-                    <dd className={styles.fieldValue}>
-                      <span className={`badge ${paymentStatusBadge[sale?.payment_status ?? 'pending'] ?? 'badge--warning'}`}>
-                        {paymentStatusLabel[sale?.payment_status ?? 'pending'] ?? sale?.payment_status}
-                      </span>
+                      </div>
                     </dd>
                   </div>
+                </>
+              ) : (
+                <>
+                  <div className={detailsEditable ? styles.fieldRowEditing : styles.fieldRow}>
+                    <dt className={styles.fieldLabel}>Cliente</dt>
+                    {detailsEditable ? (
+                      <dd className={styles.fieldValueFull}>
+                        <div className={styles.selectWithAction}>
+                          <SearchSelect
+                            label="Cliente"
+                            placeholder="Sin cliente"
+                            emptyLabel="Sin cliente"
+                            className={styles.formSelect}
+                            value={clientId}
+                            onChange={(value, option) => {
+                              setClientId(value)
+                              setSelectedClient(option ?? null)
+                            }}
+                            fetchOptions={search =>
+                              clientsApi.getClients({ search: search || undefined, skip: 0, limit: 10 })
+                                .then(res => res.data.items || [])
+                            }
+                            selectedOption={selectedClient ?? undefined}
+                            ariaLabel={`Cliente: ${selectedClient?.name ?? 'Sin cliente'}`}
+                          />
+                        </div>
+                      </dd>
+                    ) : (
+                      <dd className={styles.fieldValue}>{sale?.client?.name ?? <span className={styles.summaryMuted}>Sin cliente</span>}</dd>
+                    )}
+                  </div>
+
                   <div className={styles.fieldRow}>
                     <dt className={styles.fieldLabel}>Estado entrega</dt>
                     <dd className={styles.fieldValue}>
@@ -927,145 +1119,34 @@ export default function SaleForm() {
                       </span>
                     </dd>
                   </div>
-                </>
-              )}
 
-              {isCreateMode && (parseFloat(amountPaid) || 0) > 0 && (
-                <div className={styles.fieldRowEditing}>
-                  <dt className={styles.fieldLabel}>Método de pago</dt>
-                  <dd className={styles.fieldValueFull}>
-                    <Dropdown
-                      value={paymentMethod}
-                      options={PAYMENT_METHOD_OPTIONS}
-                      onChange={setPaymentMethod}
-                      placeholder="Selecciona un método"
-                      ariaLabel="Método de pago"
-                    />
-                    {missingPaymentMethod && <span className={styles.fieldError}>Selecciona un método de pago.</span>}
-                  </dd>
-                </div>
-              )}
-
-              {isCreateMode ? (
-                <div className={styles.fieldRowEditing}>
-                  <dt className={styles.fieldLabel}>Monto pagado</dt>
-                  <dd className={styles.fieldValueFull}>
-                    <input
-                      id="create-amount-paid"
-                      type="number"
-                      className={`form-input ${styles.mono} ${amountPaidError ? styles.inputError : ''}`}
-                      min={0}
-                      step="0.01"
-                      placeholder="0.00"
-                      value={amountPaid}
-                      onChange={e => {
-                        setAmountPaid(e.target.value)
-                        if ((parseFloat(e.target.value) || 0) === 0) setPaymentMethod('')
-                      }}
-                    />
-                    {amountPaidError && <span className={styles.fieldError}>{amountPaidError}</span>}
-                  </dd>
-                </div>
-              ) : (
-                <div className={styles.fieldRow}>
-                  <dt className={styles.fieldLabel}>Monto pagado</dt>
-                  <dd className={`${styles.fieldValue} ${styles.mono}`}>$ {(sale?.amount_paid ?? 0).toFixed(2)}</dd>
-                </div>
-              )}
-
-              {!isCreateMode && sale && (
-                <>
-                  <div className={styles.fieldRow}>
-                    <dt className={styles.fieldLabel}>Registrado por</dt>
-                    <dd className={styles.fieldValue}>{sale.created_by.full_name}</dd>
-                  </div>
-                  <div className={styles.fieldRow}>
-                    <dt className={styles.fieldLabel}>Fecha</dt>
-                    <dd className={`${styles.fieldValue} ${styles.mono}`}>{formatDate(sale.created_at)}</dd>
-                  </div>
+                  {sale && (
+                    <>
+                      <div className={styles.fieldRow}>
+                        <dt className={styles.fieldLabel}>Registrado por</dt>
+                        <dd className={styles.fieldValue}>{sale.created_by.full_name}</dd>
+                      </div>
+                      <div className={styles.fieldRow}>
+                        <dt className={styles.fieldLabel}>Fecha</dt>
+                        <dd className={`${styles.fieldValue} ${styles.mono}`}>{formatDate(sale.created_at)}</dd>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </dl>
+            {isCreateMode && (
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className={`btn-primary ${saleStyles.saveButton}`}
+              >
+                {isSubmitting ? <><Loader size={15} className={styles.spinnerDark} /> Guardando...</> : 'Guardar Venta'}
+              </button>
+            )}
           </section>
         </div>
       </div>
-
-      {!isCreateMode && sale && (
-        <section className={styles.card}>
-          <div className={styles.historyHeader}>
-            <h2 className={styles.cardTitle}>Historial de pagos</h2>
-          </div>
-          {paymentsLoading ? (
-            <div className={styles.historySkeleton} aria-label="Cargando pagos">
-              <div className={styles.historySkeletonRow} />
-              <div className={styles.historySkeletonRow} />
-              <div className={styles.historySkeletonRow} />
-            </div>
-          ) : paymentsError ? (
-            <div className={styles.historyError}>
-              <p className={styles.historyErrorMessage}>No se pudieron cargar los pagos.</p>
-              <button type="button" className="btn-ghost" onClick={() => { void retryPayments() }}>
-                Reintentar
-              </button>
-            </div>
-          ) : payments.length === 0 ? (
-            <div>
-              <p className={styles.historyEmpty}>Sin pagos registrados</p>
-              {sale.debt_amount > 0 && (
-                <p className={styles.historyEmptyHint}>Registra el primer pago con «Pagar».</p>
-              )}
-            </div>
-          ) : (
-            <div className={styles.historyTableWrapper}>
-              <table className={styles.historyTable}>
-                <thead>
-                  <tr>
-                    <th scope="col">Fecha y hora</th>
-                    <th scope="col">Método</th>
-                    <th scope="col">Registrado por</th>
-                    <th scope="col" className={styles.historyAmount}>Monto</th>
-                    <th scope="col">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map(payment => (
-                    <tr key={payment.id}>
-                      <td data-label="Fecha y hora" className={styles.historyDate}>
-                        {formatDateTime(payment.created_at)}
-                      </td>
-                      <td data-label="Método">{paymentMethodName(payment.payment_method)}</td>
-                      <td data-label="Registrado por">{payment.created_by?.full_name ?? 'Sin usuario'}</td>
-                      <td data-label="Monto" className={styles.historyAmount}>{formatCurrency(payment.amount)}</td>
-                      <td data-label="Acciones">
-                        <button
-                          type="button"
-                          className={styles.historyDelete}
-                          onClick={() => { setApiError(null); setPaymentToDelete(payment) }}
-                          disabled={deletingPaymentId === payment.id}
-                          title="Eliminar pago"
-                          aria-label={`Eliminar pago de ${formatCurrency(payment.amount)}`}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {paymentsHasNext && !paymentsLoading && !paymentsError && (
-            <button
-              type="button"
-              className={`btn-ghost ${styles.historyLoadMore}`}
-              onClick={() => { void loadMorePayments() }}
-              disabled={paymentsFetching}
-            >
-              {paymentsFetching ? 'Cargando…' : 'Ver más'}
-            </button>
-          )}
-        </section>
-      )}
 
       {!isCreateMode && (
         <section className={styles.dangerZone}>

@@ -127,6 +127,113 @@ they must offset themselves instead of assuming the top of the viewport:
   or non-sqlite. The visual overlap itself is covered by Playwright, where
   geometry and stacking are observable.
 
+### Floating menus
+
+Every menu that can open near the bottom of a page is portaled to
+`document.body` and positioned with `position: fixed`, so it never extends the
+scrollable overflow of the document.
+
+- `src/hooks/useFloatingMenu.ts` owns the placement. It measures the trigger
+  with `getBoundingClientRect()`, compares the space above and below with
+  `window.innerHeight`, and opens the menu downward when there is room below,
+  upward when there is not, and clamped to the roomier side when neither side
+  fits. The placement math is the pure function `computeFloatingPlacement`,
+  which is unit-tested with a table.
+- The hook returns inline styles only (`position`, `top`, `left`, width and the
+  `--floating-menu-max-height` custom property). It carries no CSS class names:
+  each component keeps its own CSS Module for the visual design.
+- The height available on the chosen side is published as
+  `--floating-menu-max-height`. A menu with its own design cap declares it as
+  `--floating-menu-cap` and uses
+  `max-height: min(var(--floating-menu-cap), var(--floating-menu-max-height, var(--floating-menu-cap)))`.
+  The list inside the menu scrolls when the space is not enough.
+- The menu is repositioned while it is open on scroll and on resize.
+- The portal breaks the DOM relation between the trigger and the menu, so:
+  - `useClickOutside` takes the portaled panel as an extra "inside" node,
+    otherwise the `mousedown` that opens the menu would close it again and the
+    selection would be lost.
+  - `useDialogFocus` skips the focus trap while the focus is inside a portaled
+    menu that belongs to the dialog, so the trap does not pull the focus back.
+  - `useListbox` returns the focus to the trigger on `Tab`, because the menu is
+    no longer a DOM sibling of the trigger.
+  - Focus on open uses `focus({ preventScroll: true })` and the focused option
+    is scrolled into view with `scrollIntoView({ block: 'nearest' })`, so
+    opening a menu never scrolls the page.
+- `Escape` inside a menu calls `stopPropagation()`, so it closes only the menu.
+  The document-level `Escape` listener of `useDialogFocus` must not close the
+  dialog that owns the menu.
+- Portaled menus are direct children of `document.body` and carry the
+  `data-floating-menu` attribute. Tests and E2E specs must look them up from
+  the page, not from the dialog that opened them.
+- Menus that use the hook: `Dropdown`, `ProductDropdown`, `FilterSelect`,
+  `SearchSelect`, `CalendarDropdown` and the product search results of
+  `SaleForm`.
+
+### Sale page layout
+
+The sale page does not use the shared `3fr 2fr` form grid. It renders a
+fixed rail, because the receipt total has a hard minimum width:
+
+```css
+/* base (narrow band) */
+.saleGrid { grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+
+/* 1024–1279 */
+@media (min-width: 1024px) {
+  .saleGrid { grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; }
+}
+
+/* ≥1280 */
+@media (min-width: 1280px) {
+  .saleGrid { grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; }
+}
+```
+
+- The rail width is fixed, not a ratio: the total needs 252px plus 40px of
+  padding, so 320px is the narrowest rail that keeps it on one line.
+- The page container is capped at `max-width: 1360px` and centered, so the
+  products card does not become a wide strip on large windows.
+- Page-specific classes live in
+  [`src/pages/SaleForm/SaleForm.module.css`](../frontend/src/pages/SaleForm/SaleForm.module.css).
+  [`src/pages/formPage.module.css`](../frontend/src/pages/formPage.module.css)
+  keeps the shared `3fr 2fr` grid and the sticky `.rightColumn` used by
+  `ProductForm` and `OrderForm`; it is not changed by the sale page.
+
+Cells:
+
+- Left column: the `Productos` card, plus the `Historial de pagos` card
+  directly below it in edit mode. `Zona de riesgo` stays full width under
+  the grid.
+- Right rail (sticky from 1024px, `top: var(--page-gutter)`):
+  1. `Resumen` receipt. Create: `Ítems` (row hidden while the count is 0) ·
+     `Saldo por cobrar` (red only while it is above zero) · `Total estimado`.
+     Edit: `Ítems` · `Pagado` · `Saldo` · `Total`.
+     The total row stacks — label above, 30px value below, right-aligned —
+     so it cannot overflow the 320–360px rail.
+  2. `Pago y detalles` (create) or `Detalles de venta` (edit).
+- `Guardar Venta` sits at the end of the rail, next to the money, so it
+  stays reachable while the rail is sticky. There is exactly one save
+  button in the DOM; `Cancelar` stays in the page header.
+
+### Create-sale field order
+
+In create mode the payment fields are rendered in this order: `Monto pagado`
+first, `Método de pago` second. The method field is always rendered and
+enabled; it is required only when `amount_paid > 0`. The order does not
+change the payload, the validation or the derived `payment_status` badge.
+
+### Create-sale validation
+
+- The submit button is disabled only while saving. A failed submit focuses
+  the first invalid control and shows the error next to it; the top-of-page
+  error box carries API errors only.
+- The invalid controls are: no items → the product search
+  (`Agrega al menos un producto a la venta.`), `delivered_quantity >
+  quantity` → that item's `Cant. entregada`, amount above the total →
+  `Monto pagado`, amount above zero without a method → `Método de pago`.
+- The receipt total is a live region (`aria-live="polite"`), so a total
+  change is announced.
+
 ### Browser assumptions to review
 
 | Assumption | Desktop action |
@@ -175,9 +282,10 @@ they must offset themselves instead of assuming the top of the viewport:
 - The create-sale payload is `payment_method`, `amount_paid`, `client_id`,
   and `items[{ product_id, quantity, delivered_quantity, unit_price }]`. It
   does not send `payment_status`; the server derives it from `amount_paid`.
-  `payment_method` is only shown and required when `amount_paid > 0`, and the
-  payload sends `null` when `amount_paid` is 0. The create form shows the
-  derived status as a read-only badge and does not offer a manual override.
+  The method field is always rendered and enabled; it is required only when
+  `amount_paid > 0`, and the payload sends `payment_method: null` when
+  `amount_paid` is 0. The create form shows the derived status as a
+  read-only badge and does not offer a manual override.
 - Sale detail hides `Pagar` when `debt_amount` is 0 or the sale is paid. The
   payment history renders date/time (`DD/MM/YYYY`, 24h), method, registering
   user, and amount. Legacy payments may have `payment_method` or
@@ -185,8 +293,10 @@ they must offset themselves instead of assuming the top of the viewport:
   `Sin especificar` and `Sin usuario`, never the raw value. Payment delete
   errors keep the confirmation open and surface through the modal's error
   box. Sale edit sends only `client_id` (explicit `null` when cleared); it
-  never sends `amount_paid` or `payment_method`. `Monto pagado` stays
-  read-only in the detail view and the sale-level method is not shown.
+  never sends `amount_paid` or `payment_method`. The edit details card
+  shows `Cliente`, `Estado entrega`, `Registrado por` and `Fecha`; the
+  payment status stays in the page title badge and the amounts stay in the
+  receipt, so nothing is duplicated.
 - Sales date inputs emit `YYYY-MM-DD`; `useSales` converts `start_date` to
   the Bogota start of day and `end_date` to the inclusive Bogota end of day
   as RFC 3339 instants before calling the API. `useOrders` applies the same
@@ -226,7 +336,7 @@ they must offset themselves instead of assuming the top of the viewport:
   `['dashboardLowStock']` (`stock_status: 'low_stock'`) and the exact
   `low_stock_count` from `['inventoryStats']`, falling back to the returned
   page length when stats fail.
-- KPI cards: `Ventas de hoy` = `total_sales_today`, `Ventas sin pagar` =
+- KPI cards: `Ventas de hoy` = `total_sales_today`, `Saldo por cobrar` =
   `pending_payment_sales`, `Pedidos pendientes` = `pending_orders`, and
   `Stock bajo` = inventory stats. Money fields are COP currency
   (`$ 1.234,56`); `pending_payment_sales` is the outstanding balance, never a

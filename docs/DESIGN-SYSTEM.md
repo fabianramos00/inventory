@@ -109,18 +109,25 @@ Pending is never red. Debt money is red only when greater than zero.
 ## Forms
 
 - Grid: one column below 1024px; `3fr 2fr` above (content left, sticky rail).
+- The sale page is the exception: it uses a fixed rail — 320px between
+  1024 and 1279px, 360px from 1280px — because the receipt total has a hard
+  minimum width. The rail width is a fixed value, never a ratio.
 - Section cards: light glass, 12px radius, rim + shadow.
 - Labels: 14px / 500.
 - Controls: 36–44px tall, opaque white, 1px border, 8px radius.
 - Focus: 2px ink ring plus the yellow halo.
 - One filled near-black primary action per view.
+- One anchor per view: the primary action appears once in the DOM, next to
+  the content it commits. On the sale page `Guardar Venta` is the last
+  element of the sticky rail and `Cancelar` stays in the page header.
 - Section saves/cancels are ghost.
 - Destructive actions live in a bottom **Zona de riesgo** card, never beside
   Save.
 - Item cards: solid white, 1px border, 8px radius, no shadow, no accent edge.
 - Pending item: dashed neutral. Error item: red border and red text.
 - Receipt: navy glass on desktop; light glass with a navy total band below
-  1024px. Total is 30px yellow.
+  1024px. Total is 30px yellow and stacks over its label — label above,
+  value below, right-aligned — so it cannot overflow a narrow rail.
 
 ## Data tables
 
@@ -133,6 +140,34 @@ Pending is never red. Debt money is red only when greater than zero.
 - Stock: 3px `StockMeter` above the minimum line.
 - Loading: static grey skeleton bars, no pulse.
 - Empty/error: keep the frame; show a message and a retry action.
+
+## KPI strip
+
+- Columns are shape-driven: every card declares its unit (`money` or `count`),
+  and the strip maps the unit sequence to a weighted template.
+- Templates use `minmax(0, …)`: a px minimum could push the grid past its
+  container and cause page-level horizontal scroll.
+- `money-money-count-count` (Dashboard): `1.45fr 1.3fr 0.65fr 0.65fr`.
+- `money-money-money-count` (Sales): `1.25fr 1.25fr 1.25fr 0.75fr`.
+- `count-count-count-money` (Inventory): `0.75fr 0.75fr 0.75fr 1.25fr`.
+- Money cells need about 190–210px of text width for a 15-character amount;
+  count cells do not. Money always gets the wider track.
+- Values never wrap: `white-space: nowrap`, and an overflow is clipped with an
+  ellipsis inside the cell instead of widening the grid.
+- The full formatted amount stays in the DOM (screen readers announce it) and
+  the value carries a `title` with the same amount for pointer users. There is
+  no `aria-label` and no compact money format.
+- Value sizes are fluid: secondary `clamp(18px, …, 22px)`, lead
+  `clamp(22px, …, 30px)`, always `tabular-nums` with `-0.01em` tracking.
+- Cards are `justify-content: space-between`, so the four values share one
+  baseline even when a label wraps to two lines. Labels are never shortened
+  to avoid wrapping.
+- Debt money is red (`--destructive-ink`) only while it is greater than zero,
+  never for a count.
+- Below 1024px the strip drops to two columns; a lead card spans the first
+  row and the other three sit in a three-column row.
+- The loading skeleton uses the same shape and the same template, so the
+  layout does not jump when the data lands.
 
 ## Components
 
