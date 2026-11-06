@@ -6,6 +6,7 @@ import (
 )
 
 func TestValidateTestDSN(t *testing.T) {
+	// Inert fixtures: no connection is opened, ValidateTestDSN only parses the DSN.
 	tests := []struct {
 		name    string
 		dsn     string
@@ -13,12 +14,17 @@ func TestValidateTestDSN(t *testing.T) {
 	}{
 		{
 			name: "test database is accepted",
-			dsn:  "postgresql://inventory:inventory@localhost:5433/inventory_desktop_test",
+			dsn:  "postgresql://inventory:inventory@localhost/inventory_desktop_test",
 		},
 		{
 			name:    "development database is rejected",
-			dsn:     "postgresql://inventory:inventory@localhost:5433/inventory_desktop",
+			dsn:     "postgresql://inventory:inventory@localhost/inventory_desktop",
 			wantErr: "inventory_desktop",
+		},
+		{
+			name:    "database without the _test suffix is rejected",
+			dsn:     "postgresql://inventory:inventory@localhost/postgres",
+			wantErr: "postgres",
 		},
 		{
 			name:    "malformed DSN is rejected",

@@ -24,7 +24,8 @@ test('creates, searches, edits, toggles, and deletes a user against the real API
   await createDialog.getByLabel('Correo Electrónico').fill(email)
   await createDialog.getByLabel('Contraseña', { exact: true }).fill('password123')
   await createDialog.getByRole('button', { name: 'Rol' }).click()
-  await createDialog.getByRole('option', { name: 'Usuario', exact: true }).click()
+  // The menu is portaled to the body, so the option is outside the dialog.
+  await page.getByRole('option', { name: 'Usuario', exact: true }).click()
   await createDialog.getByRole('button', { name: 'Guardar' }).click()
   await expect(createDialog).toBeHidden()
 

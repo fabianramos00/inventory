@@ -14,7 +14,7 @@ async function selectProductOption(page: Page, field: string, option: string) {
   const row = page.locator('dt').filter({ hasText: new RegExp(`^${field}$`) }).first().locator('..')
   await row.getByRole('button', { name: 'Seleccionar' }).click()
   await page.getByPlaceholder(`Buscar ${field.toLowerCase()}...`).fill(option)
-  await page.getByRole('button', { name: option, exact: true }).click()
+  await page.getByRole('option', { name: option, exact: true }).click()
 }
 
 async function fillNumberField(page: Page, index: number, value: string) {

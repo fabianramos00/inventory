@@ -11,6 +11,8 @@ export default defineConfig({
     'sales.spec.ts',
     'orders.spec.ts',
     'dashboard.spec.ts',
+    'floating-menu.spec.ts',
+    'kpi-strip.spec.ts',
   ],
   globalSetup: './e2e/global-setup.ts',
   timeout: 60_000,
@@ -36,7 +38,9 @@ export default defineConfig({
       timeout: 120_000,
       env: {
         PORT: '8787',
-        DATABASE_URL: process.env.DATABASE_URL ?? 'postgresql://inventory:inventory@localhost:5433/inventory_desktop_test',
+        DATABASE_URL: process.env.DATABASE_URL
+          ?? process.env.INVENTORY_TEST_DATABASE_URL
+          ?? 'postgresql://inventory:inventory@127.0.0.1:5432/inventory_desktop_test',
         DB_MODE: process.env.DB_MODE ?? 'postgres',
         SECRET_KEY: 'e2e-test-secret-0123456789abcdef',
         BCRYPT_ROUNDS: '4',

@@ -98,7 +98,8 @@ test('registra, lista y elimina pagos desde el detalle de la venta', async ({ pa
     await expect(dialog).toBeVisible()
     await dialog.getByLabel('Monto del pago').fill('20')
     await dialog.getByRole('button', { name: 'Método de pago' }).click()
-    await dialog.getByRole('option', { name: 'Efectivo' }).click()
+    // The menu is portaled to the body, so the option is outside the dialog.
+    await page.getByRole('option', { name: 'Efectivo' }).click()
     await dialog.getByRole('button', { name: 'Registrar pago' }).click()
     await expect(dialog).toBeHidden()
 

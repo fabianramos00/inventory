@@ -14,7 +14,7 @@ behavior. They are not optional polish.
 | Go migration | `testing` + SQLite | Schema rebuild and sale-payment backfill |
 | Go bootstrap | `testing` | `DB_MODE` selection and SQLite fallback |
 | Frontend unit | Vitest | Hooks, formatters, utilities, components |
-| Frontend E2E | Playwright | Auth, users, inventory, sales, purchase orders, dashboard aggregates |
+| Frontend E2E | Playwright | Auth, users, inventory, sales, purchase orders, dashboard aggregates, floating menus, KPI strip |
 | Contract parity | Go test | Same fixtures against FastAPI and Go (67 legacy endpoints) |
 
 ## Commands
@@ -26,13 +26,15 @@ go test -race ./...
 go vet ./...
 gofmt -l .
 
+# One DSN for every PostgreSQL suite. The database name must end in "_test";
+# testdb.ValidateTestDSN refuses anything else before opening a connection.
+export INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@127.0.0.1:5432/inventory_desktop_test'
+
 # Go integration (auth flow, real PostgreSQL 17)
-INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
-  go test -v ./internal/adapters/inbound/httpapi
+go test -v ./internal/adapters/inbound/httpapi
 
 # Go repository contract (PostgreSQL case skips when the env var is unset)
-INVENTORY_TEST_DATABASE_URL='postgresql://inventory:inventory@localhost:5433/inventory_desktop_test' \
-  go test -v ./internal/adapters/outbound/persistence
+go test -v ./internal/adapters/outbound/persistence
 go test -v ./internal/adapters/outbound/persistence   # SQLite contract only
 
 # Go bootstrap and DB_MODE fallback
@@ -49,6 +51,10 @@ pnpm test:e2e
 Run the checks that cover the changed area before committing. Run the full
 suite before release. CI runs `make verify` plus one
 `go test -race ./... -count=1`.
+
+`scripts/verify.sh` is the only entry point that runs the Go suite **both
+ways**: once with `INVENTORY_TEST_DATABASE_URL=` (SQLite and unit tests
+only) and once with the variable set (PostgreSQL suites included).
 
 ## Go unit tests
 
@@ -76,17 +82,56 @@ Use `httptest.NewServer` with a real router and fake services.
 - Money fields are JSON numbers with two decimals.
 - Response field names match [API-CONTRACT.md](API-CONTRACT.md).
 
+## PostgreSQL test database
+
+All PostgreSQL suites read one variable, the one exported in
+[Commands](#commands). Nothing else is configurable per suite.
+
+Rules:
+
+- **The database name must end in `_test`.** `tests/testdb.ValidateTestDSN`
+  parses the DSN and refuses anything else *before* a connection is opened,
+  because the suites truncate every business table. A DSN pointing at
+  `inventory_desktop` or `postgres` fails with
+  `the test database name must end in "_test"`.
+- **The suites skip when the variable is unset.** `go test ./...` without
+  `INVENTORY_TEST_DATABASE_URL` is green even when the PostgreSQL suites
+  never ran. A skipped suite is not coverage. Use `scripts/verify.sh`
+  (`make verify`), which runs the suite twice: with the variable cleared
+  (SQLite plus unit tests) and with it set (PostgreSQL included).
+- Never point the variable at the development or production database.
+
+Creating the test database depends on who owns the role:
+
+- **Locally** the `inventory` role is not a superuser, so it cannot create a
+  database. Use the admin role:
+
+  ```bash
+  PGPASSWORD=postgres psql -h 127.0.0.1 -p 5432 -U postgres -d postgres \
+    -c 'CREATE DATABASE inventory_desktop_test OWNER inventory'
+  ```
+
+- **In CI** the service sets `POSTGRES_USER=inventory`, which is the
+  container superuser, so the documented command works as-is:
+
+  ```bash
+  PGPASSWORD=inventory psql -h localhost -p 5433 -U inventory -d inventory \
+    -c 'CREATE DATABASE inventory_desktop_test'
+  ```
+
+  Port `5433` is the CI-only container port. The local development database
+  is PostgreSQL 17 on `127.0.0.1:5432`; the compose database on `5433` is
+  optional.
+
 ## Go integration tests
-
-Use a dedicated PostgreSQL 17 database from `docker compose`:
-
-```bash
-export INVENTORY_TEST_DATABASE_URL="postgresql://inventory:inventory@localhost:5433/inventory_desktop_test"
-go test -v ./internal/adapters/inbound/httpapi
-```
 
 The integration test is gated by the environment variable; without it the
 test skips instead of failing.
+
+```bash
+# INVENTORY_TEST_DATABASE_URL is exported above.
+go test -v ./internal/adapters/inbound/httpapi
+```
 
 Rules:
 
@@ -156,6 +201,40 @@ version 6, seeds legacy sales, then runs `00007_sale_payments`. It must prove:
   preserving ids, rows, STRICT mode, remaining constraints, and indexes.
 - Deleting a sale cascades its payment rows; `PRAGMA foreign_key_check` is
   clean and new payments enforce positive amounts and valid methods.
+
+## Playwright specs
+
+`frontend/e2e` runs the real React app against the real Go API: the API is
+started on `127.0.0.1:8787` and the Vite app on `127.0.0.1:4173`. The API
+uses `DATABASE_URL`, then `INVENTORY_TEST_DATABASE_URL`, and finally the
+local `inventory_desktop_test` on `127.0.0.1:5432`, so the suite never
+writes to the development database.
+
+`frontend/playwright.config.ts` lists the full-stack specs in `testMatch`. A
+new spec file that is not listed is never executed, so register it there.
+
+Layout regressions are covered by two specs:
+
+- `e2e/floating-menu.spec.ts` — at 1280×720 the last attribute dropdown of
+  `/#/inventory/create` opens without growing the document
+  (`document.scrollingElement.scrollHeight` is unchanged), stays fully inside
+  the viewport, and is portaled to `body`. The second case covers the sale
+  product search: the results list of `/#/sales/create` is a floating menu
+  too, so it does not grow the page either.
+- `e2e/kpi-strip.spec.ts` — on `/#/` the four KPI cards share one row, the
+  lead amount stays on a single line with the ellipsis contract
+  (`data-overflow="ellipsis"`, `white-space: nowrap`,
+  `text-overflow: ellipsis`) and its text is intact, and the two count
+  columns are narrower than the two money columns.
+
+Sale-create layout expectations:
+
+- The product search results are a floating menu portaled to the body
+  (`#product-search-listbox`), anchored to the search input and as wide as
+  it. They never take part in the form flow.
+- The payment method dropdown is a portaled floating menu as well, so its
+  options live outside the form (a click on an option is not a click inside
+  the form).
 
 ## Contract parity
 
@@ -278,6 +357,9 @@ their own `payment_method`.
 - The PostgreSQL `00007_sale_payments` backfill and `sales.payment_method`
   drop are not automated. Only the SQLite migration is exercised; validate the
   PostgreSQL path on a disposable database copy before release.
+- A plain `go test ./...` skips every PostgreSQL suite when
+  `INVENTORY_TEST_DATABASE_URL` is unset and still reports success. Run
+  `scripts/verify.sh` (or export the variable) before trusting a green run.
 
 ## Accessibility checks
 
@@ -294,5 +376,7 @@ their own `payment_method`.
 - The changed behavior has at least one test.
 - A bug fix has a regression test that fails before the fix.
 - Contract parity is updated when an endpoint changes.
+- A PostgreSQL suite that skipped because `INVENTORY_TEST_DATABASE_URL` was
+  unset is not coverage: run it with the variable set.
 - New tests are deterministic and do not depend on wall-clock time or remote
   services.

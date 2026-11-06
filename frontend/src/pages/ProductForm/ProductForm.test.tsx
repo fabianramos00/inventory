@@ -91,7 +91,7 @@ function dropdownTrigger(label: string) {
 
 async function selectDropdown(label: string, option: string) {
   fireEvent.click(dropdownTrigger(label))
-  fireEvent.click(await screen.findByRole('button', { name: option }, { timeout: 2000 }))
+  fireEvent.click(await screen.findByRole('option', { name: option }, { timeout: 2000 }))
 }
 
 function fillCreateProduct() {
@@ -242,7 +242,7 @@ describe('ProductForm', () => {
     mocks.getProduct.mockResolvedValue({ data: { ...plainProduct, category_id: 2 } })
     fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
     fireEvent.click(dropdownTrigger('categoría'))
-    fireEvent.click(await screen.findByRole('button', { name: 'Fijaciones' }, { timeout: 2000 }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Fijaciones' }, { timeout: 2000 }))
     expect(dropdownTrigger('categoría').textContent).toContain('Fijaciones')
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))

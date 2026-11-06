@@ -154,7 +154,7 @@ test('renderiza los KPIs y gráficos del dashboard en /#/', async ({ page }) => 
   await page.goto('/#/')
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
   await expect(page.getByText('Ventas de hoy', { exact: true })).toBeVisible()
-  await expect(page.getByText('Ventas sin pagar', { exact: true })).toBeVisible()
+  await expect(page.getByText('Saldo por cobrar', { exact: true })).toBeVisible()
   await expect(page.getByText('Pedidos pendientes', { exact: true })).toBeVisible()
   await expect(page.getByText('Ventas de los últimos 7 días')).toBeVisible()
   await expect(page.getByText('Top productos')).toBeVisible()
