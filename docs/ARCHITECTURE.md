@@ -207,3 +207,13 @@ imports pgx, SQLite, concrete adapters, or security implementations.
 
 Architecture decisions and their rationale live in
 [DECISIONS.md](DECISIONS.md).
+
+## Agent workflow
+
+Reviews of project code are delegated to the agent that owns the file:
+`frontend`, `backend`, `devops`, `qa`, or `ux-designer`. Each owner inspects
+the code in its scope, runs the checks for that scope, and reports its findings.
+
+The manager does not run project-code inspection commands (grep, cat, tests, or
+builds) to investigate. It collects the agent findings, resolves scope
+overlaps, and decides what ships.
