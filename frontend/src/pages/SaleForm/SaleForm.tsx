@@ -648,24 +648,24 @@ export default function SaleForm() {
                             disabled={hasNoStock}
                             role="option"
                             aria-selected={isAdded}
-                            className={`${styles.productOption} ${isAdded ? styles.productOptionAdded : ''} ${hasNoStock ? styles.productOptionDisabled : ''}`}
+                            className={`${styles.productOption} ${styles.productOptionStacked} ${isAdded ? styles.productOptionAdded : ''} ${hasNoStock ? styles.productOptionDisabled : ''}`}
                             onClick={() => handleAddItem(product)}
                             title={hasNoStock ? 'Sin stock disponible' : ''}
                             data-index={idx}
                           >
-                            <div className={styles.productOptionInfo}>
-                              <span className={styles.productOptionName}>{product.name}</span>
-                              {product.size_value && <span className={styles.productOptionSize}>{product.size_value} {product.measurement_unit?.abbreviation}</span>}
-                              <div className={styles.productOptionTags}>
-                                {product.category?.name && <span className={styles.productOptionTag}>{product.category.name}</span>}
-                                {product.brand?.name && <span className={styles.productOptionTag}>{product.brand.name}</span>}
-                                {product.material?.name && <span className={styles.productOptionTag}>{product.material.name}</span>}
+                            <div className={styles.productOptionName} title={product.name}>{product.name}</div>
+                            <div className={styles.productOptionRow}>
+                              <div className={styles.productOptionInfo}>
+                                <span className={styles.productOptionSku}>{product.sku}</span>
+                                {product.size_value && <span className={styles.productOptionSize}>{product.size_value} {product.measurement_unit?.abbreviation}</span>}
+                                <div className={styles.productOptionTags}>
+                                  {product.category?.name && <span className={styles.productOptionTag}>{product.category.name}</span>}
+                                  {product.brand?.name && <span className={styles.productOptionTag}>{product.brand.name}</span>}
+                                  {product.material?.name && <span className={styles.productOptionTag}>{product.material.name}</span>}
+                                </div>
                               </div>
-                            </div>
-                            <div className={styles.productOptionMeta}>
-                              <span className={styles.productOptionSku}>{product.sku}</span>
-                              <div className={styles.productOptionPriceRow}>
-                                <span className={styles.productOptionPrice}>$ {(product.sale_price ?? product.price ?? 0).toFixed(2)}</span>
+                              <div className={styles.productOptionMeta}>
+                                <span className={styles.productOptionPrice}>{formatCurrency(product.sale_price ?? product.price ?? 0)}</span>
                                 <span className={hasNoStock ? styles.stockInfoWarning : styles.stockInfo}>
                                   Stock: <span className={hasNoStock ? styles.stockInfoWarning : styles.stockInfoValue}>{product.stock_quantity ?? 0}</span>
                                 </span>
@@ -1124,7 +1124,7 @@ export default function SaleForm() {
                     <>
                       <div className={styles.fieldRow}>
                         <dt className={styles.fieldLabel}>Registrado por</dt>
-                        <dd className={styles.fieldValue}>{sale.created_by.full_name}</dd>
+                        <dd className={styles.fieldValue}>{sale.created_by?.full_name ?? 'Sin usuario'}</dd>
                       </div>
                       <div className={styles.fieldRow}>
                         <dt className={styles.fieldLabel}>Fecha</dt>

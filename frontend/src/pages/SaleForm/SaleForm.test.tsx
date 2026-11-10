@@ -205,6 +205,27 @@ describe('SaleForm payload wiring', () => {
     mocks.createClient.mockReset()
   })
 
+  it('renders the detail view when the sale creator is null', () => {
+    mocks.useSale.mockReturnValue({
+      sale: sale({ created_by: null }),
+      saleItems: [saleItem()],
+      payments: [],
+      paymentsHasNext: false,
+      paymentsLoading: false,
+      paymentsFetching: false,
+      paymentsError: null,
+      loadMorePayments: vi.fn(),
+      retryPayments: vi.fn(),
+      isLoading: false,
+      error: null,
+    })
+    renderSale()
+
+    expect(screen.getByText('Registrado por')).toBeTruthy()
+    expect(screen.getAllByText('Sin usuario').length).toBeGreaterThan(0)
+    expect(screen.getByText('Martillo')).toBeTruthy()
+  })
+
   it('sends only client_id when saving sale details', async () => {
     renderSale()
     fireEvent.click(editButtons()[1])

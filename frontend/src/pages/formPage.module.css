@@ -702,6 +702,16 @@
   transition: background-color var(--motion-fast) var(--ease-standard);
 }
 
+/* Two-line sale result: name on its own row, meta row underneath. */
+.productOptionStacked {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 60px;
+  gap: 4px;
+  padding: 10px 12px;
+}
+
 .productOption:last-child {
   border-bottom: none;
 }
@@ -741,11 +751,24 @@
   justify-content: center;
 }
 
+.productOptionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  gap: 12px;
+}
+
 .productOptionInfo {
   display: flex;
   align-items: center;
-  gap: 8px;
   min-width: 0;
+  gap: 8px;
+}
+
+.productOptionRow .productOptionInfo {
+  flex: 1;
 }
 
 .productOptionName {
@@ -786,6 +809,7 @@
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .productOptionSku {
@@ -799,12 +823,6 @@
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
-}
-
-.productOptionPriceRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 /* ── Selects used by the forms ──────────────────────────────────────── */
