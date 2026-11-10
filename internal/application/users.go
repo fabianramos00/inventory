@@ -32,6 +32,14 @@ func (s *UserService) List(ctx context.Context, skip, limit int, search string) 
 	return &inbound.UserList{Items: items, HasNext: hasNext, Skip: skip, Limit: limit}, nil
 }
 
+func (s *UserService) ListOptions(ctx context.Context, skip, limit int, search string) (*inbound.UserOptionList, error) {
+	items, hasNext, err := s.users.ListOptions(ctx, skip, limit, strings.TrimSpace(search))
+	if err != nil {
+		return nil, err
+	}
+	return &inbound.UserOptionList{Items: items, HasNext: hasNext, Skip: skip, Limit: limit}, nil
+}
+
 func (s *UserService) Get(ctx context.Context, id int64) (*domain.User, error) {
 	return s.users.GetByID(ctx, id)
 }

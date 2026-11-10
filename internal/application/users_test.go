@@ -21,6 +21,13 @@ type fakeUserStore struct {
 	listLimit   int
 	listSearch  string
 
+	optionItems   []*domain.UserOption
+	optionHasNext bool
+	optionErr     error
+	optionSkip    int
+	optionLimit   int
+	optionSearch  string
+
 	getErr    error
 	createErr error
 	updateErr error
@@ -59,6 +66,16 @@ func (f *fakeUserStore) List(_ context.Context, skip, limit int, search string) 
 		return nil, false, f.listErr
 	}
 	return f.listItems, f.listHasNext, nil
+}
+
+func (f *fakeUserStore) ListOptions(_ context.Context, skip, limit int, search string) ([]*domain.UserOption, bool, error) {
+	f.optionSkip = skip
+	f.optionLimit = limit
+	f.optionSearch = search
+	if f.optionErr != nil {
+		return nil, false, f.optionErr
+	}
+	return f.optionItems, f.optionHasNext, nil
 }
 
 func (f *fakeUserStore) Create(_ context.Context, user *domain.User) error {
@@ -181,6 +198,39 @@ func TestUserListPropagatesRepositoryError(t *testing.T) {
 
 	if _, err := h.service.List(context.Background(), 0, 10, ""); err == nil {
 		t.Fatal("List() error = nil, want the repository error")
+	}
+}
+
+func TestUserListOptionsPassesPaginationAndSearch(t *testing.T) {
+	h := newUserHarness()
+	option := &domain.UserOption{ID: 7, FullName: "Ada Lovelace"}
+	h.store.optionItems = []*domain.UserOption{option}
+	h.store.optionHasNext = true
+
+	result, err := h.service.ListOptions(context.Background(), 5, 10, "  ada  ")
+	if err != nil {
+		t.Fatalf("ListOptions() error = %v", err)
+	}
+	if h.store.optionSkip != 5 || h.store.optionLimit != 10 {
+		t.Errorf("repository received skip=%d limit=%d, want 5 and 10", h.store.optionSkip, h.store.optionLimit)
+	}
+	if h.store.optionSearch != "ada" {
+		t.Errorf("repository search = %q, want trimmed %q", h.store.optionSearch, "ada")
+	}
+	if result.Skip != 5 || result.Limit != 10 || !result.HasNext {
+		t.Errorf("result = skip:%d limit:%d has_next:%v, want 5/10/true", result.Skip, result.Limit, result.HasNext)
+	}
+	if len(result.Items) != 1 || result.Items[0] != option {
+		t.Errorf("result items = %v, want the repository options", result.Items)
+	}
+}
+
+func TestUserListOptionsPropagatesRepositoryError(t *testing.T) {
+	h := newUserHarness()
+	h.store.optionErr = errors.New("boom")
+
+	if _, err := h.service.ListOptions(context.Background(), 0, 10, ""); err == nil {
+		t.Fatal("ListOptions() error = nil, want the repository error")
 	}
 }
 

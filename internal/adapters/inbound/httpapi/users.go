@@ -61,6 +61,24 @@ func (h *UsersHandler) List(w http.ResponseWriter, r *http.Request) {
 	writePage(w, items, result.HasNext, result.Skip, result.Limit)
 }
 
+func (h *UsersHandler) ListOptions(w http.ResponseWriter, r *http.Request) {
+	skip, limit, search, err := parseListQuery(r)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "Invalid query parameters", "VALIDATION_ERROR")
+		return
+	}
+	result, err := h.service.ListOptions(r.Context(), skip, limit, search)
+	if err != nil {
+		h.writeUserError(w, r, err)
+		return
+	}
+	items := make([]*userOptionResponse, len(result.Items))
+	for i, option := range result.Items {
+		items[i] = newUserOptionResponse(option)
+	}
+	writePage(w, items, result.HasNext, result.Skip, result.Limit)
+}
+
 func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var body createUserRequest
 	if err := decodeJSON(w, r, &body); err != nil {

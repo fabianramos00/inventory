@@ -54,6 +54,7 @@ func TestRepositoryContract(t *testing.T) {
 			t.Run("users", func(t *testing.T) {
 				testUsers(t, repos)
 				testUserListAndDelete(t, repos)
+				testUserOptions(t, repos)
 			})
 			t.Run("refresh tokens", func(t *testing.T) { testRefreshTokens(t, repos) })
 			t.Run("catalog", func(t *testing.T) { testCatalog(t, repos, searchIDs, backend.name) })
@@ -952,6 +953,56 @@ func testUserListAndDelete(t *testing.T, repos *repositories) {
 	}
 	if _, err := repos.users.Delete(ctx, grace.ID+1000); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("delete missing row error = %v, want ErrNotFound", err)
+	}
+}
+
+func testUserOptions(t *testing.T, repos *repositories) {
+	t.Helper()
+	ctx := context.Background()
+
+	alpha := &domain.User{FullName: "Picker Alpha", Email: "picker-alpha@contract.test", HashedPassword: "hash", IsActive: true}
+	beta := &domain.User{FullName: "Picker Beta", Email: "picker-beta@contract.test", HashedPassword: "hash", IsActive: true}
+	delta := &domain.User{FullName: "Picker Delta", Email: "hidden@contract.test", HashedPassword: "hash", IsActive: true}
+	gamma := &domain.User{FullName: "Picker Gamma", Email: "picker-gamma@contract.test", HashedPassword: "hash", IsActive: false}
+	for _, user := range []*domain.User{alpha, beta, delta, gamma} {
+		if err := repos.users.Create(ctx, user); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	items, hasNext, err := repos.users.ListOptions(ctx, 0, 2, "  PICKER  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasNext || len(items) != 2 {
+		t.Fatalf("first options page = %d items has_next=%v, want 2 and true", len(items), hasNext)
+	}
+	for _, item := range items {
+		if item.ID == gamma.ID {
+			t.Fatalf("options include inactive user %d", gamma.ID)
+		}
+		if item.FullName == "" {
+			t.Fatalf("option %d has an empty full_name", item.ID)
+		}
+	}
+
+	items, hasNext, err = repos.users.ListOptions(ctx, 2, 2, "picker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasNext || len(items) != 1 {
+		t.Fatalf("second options page = %d items has_next=%v, want 1 and false", len(items), hasNext)
+	}
+	if items[0].ID == gamma.ID {
+		t.Fatal("second options page includes the inactive user")
+	}
+
+	emailMatch, hasNext, err := repos.users.ListOptions(ctx, 0, 10, "hidden@contract")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasNext || len(emailMatch) != 0 {
+		t.Fatalf("email search = %d items has_next=%v, want 0 and false", len(emailMatch), hasNext)
 	}
 }
 

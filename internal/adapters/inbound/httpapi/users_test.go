@@ -40,21 +40,26 @@ type usersErrorJSON struct {
 
 // stubUserService records the inbound call and returns configured values.
 type stubUserService struct {
-	listResult  *inbound.UserList
-	listErr     error
-	listSkip    int
-	listLimit   int
-	listSearch  string
-	getID       int64
-	getResult   *domain.User
-	getErr      error
-	createInput inbound.CreateUserInput
-	createErr   error
-	updateID    int64
-	updateInput inbound.UpdateUserInput
-	updateErr   error
-	deleteID    int64
-	deleteErr   error
+	listResult   *inbound.UserList
+	listErr      error
+	listSkip     int
+	listLimit    int
+	listSearch   string
+	optionResult *inbound.UserOptionList
+	optionErr    error
+	optionSkip   int
+	optionLimit  int
+	optionSearch string
+	getID        int64
+	getResult    *domain.User
+	getErr       error
+	createInput  inbound.CreateUserInput
+	createErr    error
+	updateID     int64
+	updateInput  inbound.UpdateUserInput
+	updateErr    error
+	deleteID     int64
+	deleteErr    error
 }
 
 func (s *stubUserService) List(_ context.Context, skip, limit int, search string) (*inbound.UserList, error) {
@@ -66,6 +71,17 @@ func (s *stubUserService) List(_ context.Context, skip, limit int, search string
 		return &inbound.UserList{Skip: skip, Limit: limit}, nil
 	}
 	return s.listResult, nil
+}
+
+func (s *stubUserService) ListOptions(_ context.Context, skip, limit int, search string) (*inbound.UserOptionList, error) {
+	s.optionSkip, s.optionLimit, s.optionSearch = skip, limit, search
+	if s.optionErr != nil {
+		return nil, s.optionErr
+	}
+	if s.optionResult == nil {
+		return &inbound.UserOptionList{Skip: skip, Limit: limit}, nil
+	}
+	return s.optionResult, nil
 }
 
 func (s *stubUserService) Get(_ context.Context, id int64) (*domain.User, error) {
@@ -233,6 +249,66 @@ func TestUsersSuperuserList(t *testing.T) {
 		if _, ok := fields[key]; !ok {
 			t.Errorf("response is missing %q", key)
 		}
+	}
+}
+
+func TestUsersOptionsAccessibleToRegularUser(t *testing.T) {
+	service := &stubUserService{optionResult: &inbound.UserOptionList{
+		Items: []*domain.UserOption{
+			{ID: 3, FullName: "Ana Torres"},
+			{ID: 4, FullName: "Ana Pérez"},
+		},
+		HasNext: true,
+		Skip:    10,
+		Limit:   1,
+	}}
+	server := newUsersTestServer(t, service)
+
+	status, raw := userRequest(t, http.MethodGet, server.URL+"/api/v1/users/options?skip=10&limit=1&search=%20ana%20", "regular", nil)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d body = %s, want 200", status, raw)
+	}
+	var body struct {
+		Items   []map[string]json.RawMessage `json:"items"`
+		HasNext bool                         `json:"has_next"`
+		Skip    int                          `json:"skip"`
+		Limit   int                          `json:"limit"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Items) != 2 {
+		t.Fatalf("items = %d, want 2", len(body.Items))
+	}
+	for _, item := range body.Items {
+		if len(item) != 2 {
+			t.Errorf("option keys = %v, want only id and full_name", item)
+		}
+		for _, key := range []string{"id", "full_name"} {
+			if _, ok := item[key]; !ok {
+				t.Errorf("option is missing %q: %v", key, item)
+			}
+		}
+	}
+	if !body.HasNext || body.Skip != 10 || body.Limit != 1 {
+		t.Errorf("pagination = has_next:%v skip:%d limit:%d, want true/10/1", body.HasNext, body.Skip, body.Limit)
+	}
+	if service.optionSkip != 10 || service.optionLimit != 1 || service.optionSearch != "ana" {
+		t.Errorf("service received skip=%d limit=%d search=%q, want 10/1/ana", service.optionSkip, service.optionLimit, service.optionSearch)
+	}
+
+	status, raw = userRequest(t, http.MethodGet, server.URL+"/api/v1/users/options", "", nil)
+	if status != http.StatusUnauthorized {
+		t.Fatalf("no token: status = %d body = %s, want 401", status, raw)
+	}
+}
+
+func TestUsersRemainSuperuserOnly(t *testing.T) {
+	server := newUsersTestServer(t, &stubUserService{})
+
+	status, raw := userRequest(t, http.MethodGet, server.URL+"/api/v1/users", "regular", nil)
+	if status != http.StatusForbidden {
+		t.Fatalf("status = %d body = %s, want 403", status, raw)
 	}
 }
 

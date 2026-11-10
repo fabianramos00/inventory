@@ -56,6 +56,36 @@ func (r *UserStore) List(ctx context.Context, skip, limit int, search string) ([
 	return users, hasNext, nil
 }
 
+type userOptionRow struct {
+	ID       int64
+	FullName *string
+}
+
+func (r *UserStore) ListOptions(ctx context.Context, skip, limit int, search string) ([]*domain.UserOption, bool, error) {
+	query := r.db.WithContext(ctx).Model(&userModel{}).
+		Where("is_active IS NULL OR is_active = ?", true)
+	if search = strings.ToLower(strings.TrimSpace(search)); search != "" {
+		query = query.Where("LOWER(full_name) LIKE ?", "%"+search+"%")
+	}
+	var rows []userOptionRow
+	if err := query.Select("id, full_name").Order("id").Offset(skip).Limit(limit + 1).Scan(&rows).Error; err != nil {
+		return nil, false, storeError(r.db, "list user options", err)
+	}
+	hasNext := len(rows) > limit
+	if hasNext {
+		rows = rows[:limit]
+	}
+	options := make([]*domain.UserOption, len(rows))
+	for i, row := range rows {
+		fullName := ""
+		if row.FullName != nil {
+			fullName = *row.FullName
+		}
+		options[i] = &domain.UserOption{ID: row.ID, FullName: fullName}
+	}
+	return options, hasNext, nil
+}
+
 func (r *UserStore) Create(ctx context.Context, user *domain.User) error {
 	isActive := user.IsActive
 	isSuperuser := user.IsSuperuser

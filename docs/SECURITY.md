@@ -68,7 +68,10 @@ WebView (React) ── HTTP loopback ── Go API ── PostgreSQL
 - bcrypt cost 12 in production; 4 only in tests.
 - Login rate limit: 5 attempts per minute per client.
 - Reject inactive users on login and on every authenticated request.
-- All `/users` routes require `is_superuser`.
+- All `/users` routes require `is_superuser`. The exception is
+  `GET /users/options`, which any active authenticated user may call; it
+  exposes only `id` and `full_name` for active users, never email or
+  permission flags.
 - `SECRET_KEY` is generated per install or supplied explicitly. It must be at
   least 32 bytes; known placeholders are rejected. It is never hardcoded and
   never committed.

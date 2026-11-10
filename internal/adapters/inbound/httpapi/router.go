@@ -55,6 +55,7 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
 	mux.HandleFunc("POST /api/v1/auth/refresh", authHandler.Refresh)
 	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.Logout)
+	mux.HandleFunc("GET /api/v1/users/options", usersHandler.ListOptions)
 	mux.HandleFunc("GET /api/v1/users", requireSuperuser(usersHandler.List))
 	mux.HandleFunc("POST /api/v1/users", requireSuperuser(usersHandler.Create))
 	mux.HandleFunc("GET /api/v1/users/{id}", requireSuperuser(usersHandler.Get))

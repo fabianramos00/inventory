@@ -66,17 +66,33 @@ Revokes the refresh token and returns `{"detail": "Logged out"}`.
 
 ### Users
 
-All user endpoints require a superuser.
+All `/users` routes require a superuser. `GET /users/options` is a
+read-only picker endpoint available to any active authenticated user.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/users` | `skip`, `limit`, `search`; paginated |
-| POST | `/users` | `email`, `password` (8–128 characters, max 72 bytes), `full_name`, `is_active`, `is_superuser` |
-| GET | `/users/{id}` | |
-| PUT | `/users/{id}` | Partial update; optional password |
-| DELETE | `/users/{id}` | |
+| GET | `/users` | Superuser only. `skip`, `limit`, `search`; paginated |
+| POST | `/users` | Superuser only. `email`, `password` (8–128 characters, max 72 bytes), `full_name`, `is_active`, `is_superuser` |
+| GET | `/users/options` | Any active user. Active users only; `skip`, `limit`, `search`; paginated |
+| GET | `/users/{id}` | Superuser only |
+| PUT | `/users/{id}` | Superuser only. Partial update; optional password |
+| DELETE | `/users/{id}` | Superuser only |
 
 Duplicate email: `400` with a readable `detail`.
+
+`GET /users/options` returns only `id` and `full_name`, never email or
+permission flags. `search` matches `full_name` only, case-insensitively.
+`limit` defaults to 100 and is capped at 200; `has_next` is derived from the
+active-only result set.
+
+```json
+{
+  "items": [{ "id": 7, "full_name": "Ana Pérez" }],
+  "has_next": false,
+  "skip": 0,
+  "limit": 100
+}
+```
 
 ## Conventions
 
