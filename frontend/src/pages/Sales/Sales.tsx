@@ -20,7 +20,7 @@ import { useDeleteConfirm } from '@/hooks/useDeleteConfirm'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteModal'
 
 const fetchUsers = (search: string) =>
-  usersApi.getUsers({ search: search || undefined, skip: 0, limit: PAGE_LIMIT }).then(r => (r.data.items || []).map(u => ({ id: u.id, name: u.full_name })))
+  usersApi.getUserOptions({ search: search || undefined, skip: 0, limit: PAGE_LIMIT }).then(r => (r.data.items || []).map(u => ({ id: u.id, name: u.full_name })))
 
 const fetchClients = (search: string) =>
   clientsApi.getClients({ search: search || undefined, skip: 0, limit: PAGE_LIMIT }).then(r => r.data.items || [])
@@ -224,7 +224,7 @@ export default function Sales() {
                       {deliveryStatusLabel[s.delivery_status] ?? s.delivery_status}
                     </span>
                   </td>
-                  <td className={styles.colUser}><span className={styles.userCell}>{s.created_by.full_name}</span></td>
+                  <td className={styles.colUser}><span className={styles.userCell}>{s.created_by?.full_name ?? 'Sin usuario'}</span></td>
                   <td className={`${styles.colActions} num`}>
                     <div className={styles.rowActions}>
                       <button

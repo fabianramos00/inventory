@@ -19,9 +19,17 @@ export interface UsersParams {
   limit?: number
 }
 
+export interface UserOption {
+  id: number
+  full_name: string
+}
+
 export const usersApi = {
   getUsers: (params?: UsersParams) =>
     api.get<CursorPaginatedResponse<User>>('/users', { params }),
+
+  getUserOptions: (params?: UsersParams) =>
+    api.get<CursorPaginatedResponse<UserOption>>('/users/options', { params }),
 
   createUser: (data: CreateUserInput) =>
     api.post<User>('/users', data),

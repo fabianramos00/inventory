@@ -272,6 +272,9 @@ change the payload, the validation or the derived `payment_status` badge.
   `['dashboardTrend']`, `['dashboardTopProducts']`, and
   `['dashboardLowStock']`. Item mutations also invalidate `['sale', id]` and
   `['saleItems', id]`. Clients changes invalidate `['clients']`.
+- The Sales `Usuario` filter reads `GET /users/options` through
+  `getUserOptions`, which any authenticated user may call. The Users admin
+  page keeps `GET /users`, which is superuser-only.
 - Sale payments use `GET /sales/{id}/payments?skip=0&limit=5` (cursor via
   `has_next`, newest first) and `POST`/`DELETE /sales/{id}/payments` returning
   the updated sale. Payment writes invalidate `['sale', id]`,

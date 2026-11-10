@@ -5,6 +5,8 @@ import Sales from './Sales'
 
 const mocks = vi.hoisted(() => ({
   useSales: vi.fn(),
+  getUserOptions: vi.fn(),
+  getUsers: vi.fn(),
 }))
 
 vi.mock('@/hooks/useSales', () => ({
@@ -12,7 +14,10 @@ vi.mock('@/hooks/useSales', () => ({
 }))
 
 vi.mock('@/lib/api/users', () => ({
-  usersApi: { getUsers: vi.fn().mockResolvedValue({ data: { items: [], has_next: false } }) },
+  usersApi: {
+    getUserOptions: mocks.getUserOptions,
+    getUsers: mocks.getUsers,
+  },
 }))
 
 vi.mock('@/lib/api/clients', () => ({
@@ -62,6 +67,8 @@ function renderSales() {
 describe('Sales list', () => {
   beforeEach(() => {
     mocks.useSales.mockReset().mockImplementation(() => baseResult())
+    mocks.getUserOptions.mockReset().mockResolvedValue({ data: { items: [], has_next: false } })
+    mocks.getUsers.mockReset()
   })
 
   it('renders the stats strip and the debt amount returned by the API', () => {
@@ -117,6 +124,27 @@ describe('Sales list', () => {
     renderSales()
 
     expect(screen.queryByRole('button', { name: 'Ir a página siguiente' })).toBeNull()
+
     expect(screen.queryByRole('button', { name: 'Ir a página anterior' })).toBeNull()
+  })
+
+  it('loads the Usuario filter from /users/options instead of /users', async () => {
+    renderSales()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Usuario' }))
+
+    await waitFor(() => expect(mocks.getUserOptions).toHaveBeenCalledWith(expect.objectContaining({ skip: 0 })))
+    expect(mocks.getUsers).not.toHaveBeenCalled()
+  })
+
+  it('renders a sale whose creator is null without crashing', () => {
+    mocks.useSales.mockImplementation(() => baseResult({
+      sales: [sale({ created_by: null })],
+    }))
+    renderSales()
+
+    expect(screen.getByText('Sin usuario')).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Usuario' })).toBeTruthy()
+    expect(screen.getByText('Carlos Ruiz')).toBeTruthy()
   })
 })

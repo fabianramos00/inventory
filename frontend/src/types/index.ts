@@ -149,7 +149,7 @@ export interface Sale {
   created_at: string
   updated_at: string | null
   created_by_id: number
-  created_by: Pick<User, 'id' | 'full_name' | 'email' | 'is_active' | 'is_superuser'>
+  created_by: Pick<User, 'id' | 'full_name' | 'email' | 'is_active' | 'is_superuser'> | null
   client: { id: number; name: string } | null
 }
 
