@@ -32,7 +32,7 @@
 }
 
 .filterActive .labelText,
-.filterActive .dateInput {
+.filterActive .segments {
   color: var(--ink-1);
 }
 
@@ -42,28 +42,52 @@
   color: var(--ink-1);
 }
 
-.dateInput {
+.dateFilterInput:focus-within {
+  border-color: var(--ink-1);
+  outline: 2px solid var(--ink-1);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--accent-ring);
+}
+
+.segments {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.segmentInput {
   border: none;
   background: transparent;
-  color: var(--ink-2);
-  cursor: pointer;
-  font-size: 12px;
-  font-family: var(--font-sans);
-  font-weight: 500;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
   padding: 0;
-  width: 82px;
-  flex-shrink: 0;
+  width: 2ch;
+  text-align: center;
 }
 
-.dateInput::-webkit-calendar-picker-indicator {
-  display: none;
+.segmentYear {
+  width: 4ch;
 }
 
-.dateInput:focus-visible {
-  background: var(--surface-hover);
-  border-radius: var(--radius-chip);
+.segmentInput::placeholder {
+  color: var(--ink-meta);
 }
 
+.segmentInput:focus,
+.segmentInput:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.separator {
+  color: inherit;
+  user-select: none;
+}
 .calendarButton {
   display: inline-flex;
   align-items: center;

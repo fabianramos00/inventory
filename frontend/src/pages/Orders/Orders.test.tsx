@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { bogotaDayBounds } from '@/lib/dateBounds'
 import Orders from './Orders'
 
 const mocks = vi.hoisted(() => ({
@@ -39,6 +40,16 @@ function orderPage() {
       limit: 10,
     },
   }
+}
+
+function todayIso() {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function pickDay(label: string, iso: string) {
+  fireEvent.click(screen.getByRole('button', { name: `Seleccionar ${label.toLowerCase()}` }))
+  fireEvent.click(document.querySelector(`[data-day="${iso}"] button`)!)
 }
 
 function renderOrders() {
@@ -116,12 +127,13 @@ describe('Orders list', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ir a página siguiente' }))
     await waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith({ skip: 10, limit: 10 }))
 
-    fireEvent.change(screen.getByTitle('Fecha inicio'), { target: { value: '2026-10-24' } })
+    const day = todayIso()
+    pickDay('Fecha inicio', day)
 
     await waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith({
       skip: 0,
       limit: 10,
-      min_date: '2026-10-24T05:00:00.000Z',
+      min_date: bogotaDayBounds(day).start_date,
     }))
   })
 
@@ -129,12 +141,13 @@ describe('Orders list', () => {
     renderOrders()
     await screen.findByText('Ferretería Central')
 
-    fireEvent.change(screen.getByTitle('Fecha fin'), { target: { value: '2026-10-25' } })
+    const day = todayIso()
+    pickDay('Fecha fin', day)
 
     await waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith({
       skip: 0,
       limit: 10,
-      max_date: '2026-10-26T04:59:59.999Z',
+      max_date: bogotaDayBounds(undefined, day).end_date,
     }))
   })
 
