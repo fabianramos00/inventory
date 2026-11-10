@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
-  // ponytail: full-stack specs only; the legacy mocked suite still runs manually.
+  // ponytail: explicit allowlist; new specs are invisible until registered here.
   testMatch: [
     'auth.spec.ts',
     'users.spec.ts',
@@ -13,6 +13,8 @@ export default defineConfig({
     'dashboard.spec.ts',
     'floating-menu.spec.ts',
     'kpi-strip.spec.ts',
+    'filters.spec.ts',
+    'keyboard.spec.ts',
   ],
   globalSetup: './e2e/global-setup.ts',
   timeout: 60_000,

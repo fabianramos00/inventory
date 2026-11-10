@@ -227,6 +227,20 @@ Layout regressions are covered by two specs:
   `text-overflow: ellipsis`) and its text is intact, and the two count
   columns are narrower than the two money columns.
 
+Date filter expectations (`e2e/filters.spec.ts`):
+
+- The date field is an editable `DD/MM/YYYY` text input; clicking or focusing
+  it does not open the calendar.
+- Only the calendar button (ARIA name starting with `Seleccionar fecha`) opens
+  the popover.
+- Typing `DD/MM/YYYY` applies the filter immediately and sends the Bogotá day
+  bounds; clearing the field clears the filter.
+- Choosing a day closes the popover, writes `DD/MM/YYYY` into the field, and
+  sends the Bogotá day bounds (`start_date`/`end_date` or
+  `min_date`/`max_date`) on the next request.
+- `e2e/keyboard.spec.ts` keeps the month/year dropdown Escape behavior and
+  focus restore for the same popover.
+
 Sale-create layout expectations:
 
 - The product search results are a floating menu portaled to the body
@@ -351,6 +365,14 @@ handler, integration, and repository tests instead.
 The legacy sale-level `payment_method` is normalized away on the legacy side
 of sale comparisons because the Go sale response omits it; payment rows keep
 their own `payment_method`.
+
+### User options (Go-only)
+
+`GET /api/v1/users/options` is an approved additive divergence. The legacy API
+has no equivalent, so it stays outside the 67-endpoint matrix. It is covered
+by Go handler tests, the repository contract (PostgreSQL and SQLite), and an
+HTTP integration test: regular-user access, `id`/`full_name`-only payload,
+active-only results, name-only search, and the superuser-only `/users` list.
 
 ## Remaining risks
 

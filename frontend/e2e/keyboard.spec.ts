@@ -13,7 +13,7 @@ function salesRoutes(): Routes {
   return {
     'GET /api/v1/sales/stats': { body: salesStats },
     'GET /api/v1/sales': { body: { items: [sale(1)], has_next: false } },
-    'GET /api/v1/users': { body: { items: [user(2, 'Ana Torres')], total: 1, page: 1, size: 10, pages: 1 } },
+    'GET /api/v1/users/options': { body: { items: [user(2, 'Ana Torres')], has_next: false, skip: 0, limit: 20 } },
     'GET /api/v1/sales/clients': { body: { items: [client(3, 'Cliente Uno')], has_next: false } },
   }
 }
@@ -21,7 +21,7 @@ function salesRoutes(): Routes {
 test('FilterSelect: ArrowDown abre, las flechas recorren y acotan, Escape cierra y restaura el foco', async ({ page }) => {
   await bootstrap(page)
   await mockApi(page, salesRoutes())
-  await page.goto('/sales')
+  await page.goto('/#/sales')
 
   const trigger = page.getByRole('button', { name: 'Método pago' })
   await trigger.focus()
@@ -50,7 +50,7 @@ test('FilterSelect: ArrowDown abre, las flechas recorren y acotan, Escape cierra
 test('FilterSelect: click fuera cierra sin devolver el foco al trigger', async ({ page }) => {
   await bootstrap(page)
   await mockApi(page, salesRoutes())
-  await page.goto('/sales')
+  await page.goto('/#/sales')
 
   await page.getByRole('button', { name: 'Método pago' }).click()
   await expect(page.getByRole('listbox')).toBeVisible()
@@ -62,7 +62,7 @@ test('FilterSelect: click fuera cierra sin devolver el foco al trigger', async (
 test('SearchSelect: ArrowDown abre y enfoca la búsqueda, flechas recorren, Escape restaura el trigger', async ({ page }) => {
   await bootstrap(page)
   await mockApi(page, salesRoutes())
-  await page.goto('/sales')
+  await page.goto('/#/sales')
 
   const trigger = page.getByRole('button', { name: 'Cliente' })
   await trigger.focus()
@@ -85,20 +85,25 @@ test('SearchSelect: ArrowDown abre y enfoca la búsqueda, flechas recorren, Esca
 test('CalendarDropdown: Escape dentro de la lista de meses cierra todo el popover del filtro', async ({ page }) => {
   await bootstrap(page)
   await mockApi(page, salesRoutes())
-  await page.goto('/sales')
+  await page.goto('/#/sales')
 
   const calendarButton = page.getByRole('button', { name: 'Seleccionar fecha inicio' })
-  await page.getByTitle('Fecha inicio').fill('2026-03-15')
   await calendarButton.click()
   await expect(page.getByRole('dialog', { name: 'Fecha inicio' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Elegir el mes' }).click()
+  const monthTrigger = page.getByRole('button', { name: 'Elegir el mes' })
+  await monthTrigger.click()
   await expect(page.getByRole('listbox')).toBeVisible()
   await page.keyboard.press('ArrowDown')
   await expect(page.getByRole('option').first()).toBeFocused()
 
+  // The list stops Escape so a parent dialog is not closed on the first press.
   await page.keyboard.press('Escape')
   await expect(page.getByRole('listbox')).toBeHidden()
+  await expect(page.getByRole('dialog', { name: 'Fecha inicio' })).toBeVisible()
+  await expect(monthTrigger).toBeFocused()
+
+  await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog', { name: 'Fecha inicio' })).toBeHidden()
   await expect(calendarButton).toBeFocused()
 })
@@ -106,20 +111,25 @@ test('CalendarDropdown: Escape dentro de la lista de meses cierra todo el popove
 test('CalendarDropdown: Escape dentro de la lista de años cierra todo el popover del filtro', async ({ page }) => {
   await bootstrap(page)
   await mockApi(page, salesRoutes())
-  await page.goto('/sales')
+  await page.goto('/#/sales')
 
   const calendarButton = page.getByRole('button', { name: 'Seleccionar fecha inicio' })
-  await page.getByTitle('Fecha inicio').fill('2026-03-15')
   await calendarButton.click()
   await expect(page.getByRole('dialog', { name: 'Fecha inicio' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Elegir el año' }).click()
+  const yearTrigger = page.getByRole('button', { name: 'Elegir el año' })
+  await yearTrigger.click()
   await expect(page.getByRole('listbox')).toBeVisible()
   await page.keyboard.press('ArrowDown')
   await expect(page.getByRole('option').first()).toBeFocused()
 
+  // The list stops Escape so a parent dialog is not closed on the first press.
   await page.keyboard.press('Escape')
   await expect(page.getByRole('listbox')).toBeHidden()
+  await expect(page.getByRole('dialog', { name: 'Fecha inicio' })).toBeVisible()
+  await expect(yearTrigger).toBeFocused()
+
+  await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog', { name: 'Fecha inicio' })).toBeHidden()
   await expect(calendarButton).toBeFocused()
 })
@@ -127,7 +137,7 @@ test('CalendarDropdown: Escape dentro de la lista de años cierra todo el popove
 test('OrderForm: Estado se abre con teclado, las flechas recorren, Enter selecciona y Escape restaura el foco', async ({ page }) => {
   await bootstrap(page)
   await mockApi(page, {})
-  await page.goto('/orders/create')
+  await page.goto('/#/orders/create')
 
   const trigger = page.getByRole('button', { name: /^Estado: / })
   await trigger.focus()

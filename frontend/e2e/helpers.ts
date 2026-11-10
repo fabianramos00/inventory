@@ -163,7 +163,8 @@ export async function seedCatalog(api: ApiClient, suffix = uniqueSuffix()): Prom
   const material = await api.post<Named>('/inventory/materials', { name: `Material E2E ${suffix}` })
   const unit = await api.post<Named & { abbreviation: string }>('/inventory/measurement-units', {
     name: `Unidad E2E ${suffix}`,
-    abbreviation: `u${suffix.slice(-2)}`,
+    // Abbreviation is unique and capped at 5 chars; two chars collided across runs.
+    abbreviation: `U${suffix.slice(-4).toUpperCase()}`,
   })
   return { suffix, category, brand, material, unit }
 }
