@@ -221,14 +221,17 @@ func TestSaleUpdateClientAndTimestamp(t *testing.T) {
 	}
 	requireSaleTime(t, *updated.UpdatedAt)
 
-	cleared, err := service.Update(ctx, sale.ID, inbound.UpdateSaleInput{
+	if _, err := service.Update(ctx, sale.ID, inbound.UpdateSaleInput{
 		ClientID: inbound.Optional[int64]{Set: true, Value: nil},
-	})
+	}); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("clear indebted client error = %v, want ErrValidation", err)
+	}
+	stillLinked, err := service.Get(ctx, sale.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cleared.ClientID != nil || cleared.Client != nil {
-		t.Fatalf("cleared sale = %+v", cleared)
+	if stillLinked.ClientID == nil || *stillLinked.ClientID != 2 {
+		t.Fatalf("sale client after rejected clear = %v, want 2", stillLinked.ClientID)
 	}
 }
 
@@ -236,9 +239,11 @@ func TestSaleEmptyUpdateLeavesTimestamp(t *testing.T) {
 	ctx := context.Background()
 	env := newFakeSaleEnv()
 	env.addProduct(1, "SKU-1", "10", 5)
+	env.addClient(2, "Ana")
 	service := env.service()
 
 	sale, err := service.Create(ctx, inbound.CreateSaleInput{
+		ClientID:    ptrInt64(2),
 		CreatedByID: 1,
 		Items:       []inbound.CreateSaleItemInput{{ProductID: 1, Quantity: 2}},
 	})
@@ -266,9 +271,11 @@ func TestSaleItemAddUpdateDeleteStock(t *testing.T) {
 	env := newFakeSaleEnv()
 	env.addProduct(1, "SKU-1", "10", 10)
 	env.addProduct(2, "SKU-2", "5", 10)
+	env.addClient(2, "Ana")
 	service := env.service()
 
 	sale, err := service.Create(ctx, inbound.CreateSaleInput{
+		ClientID:    ptrInt64(2),
 		CreatedByID: 1,
 		Items:       []inbound.CreateSaleItemInput{{ProductID: 1, Quantity: 1}},
 	})
@@ -345,9 +352,11 @@ func TestSaleDeleteRestoresStock(t *testing.T) {
 	env := newFakeSaleEnv()
 	env.addProduct(1, "SKU-1", "10", 5)
 	env.addProduct(2, "SKU-2", "5", 5)
+	env.addClient(9, "Ana")
 	service := env.service()
 
 	sale, err := service.Create(ctx, inbound.CreateSaleInput{
+		ClientID:    ptrInt64(9),
 		CreatedByID: 1,
 		Items: []inbound.CreateSaleItemInput{
 			{ProductID: 1, Quantity: 2},
@@ -408,11 +417,13 @@ func TestSalePaymentsLifecycle(t *testing.T) {
 	env := newFakeSaleEnv()
 	env.addProduct(1, "SKU-1", "10", 5)
 	env.addUser(7, "seller@example.com")
+	env.addClient(9, "Ana")
 	service := env.service()
 
 	sale, err := service.Create(ctx, inbound.CreateSaleInput{
 		PaymentMethod: ptrString(domain.PaymentMethodCash),
 		AmountPaid:    decimal.RequireFromString("5"),
+		ClientID:      ptrInt64(9),
 		CreatedByID:   7,
 		Items:         []inbound.CreateSaleItemInput{{ProductID: 1, Quantity: 2}},
 	})
@@ -535,11 +546,13 @@ func TestSaleDeleteCascadesPayments(t *testing.T) {
 	ctx := context.Background()
 	env := newFakeSaleEnv()
 	env.addProduct(1, "SKU-1", "10", 5)
+	env.addClient(9, "Ana")
 	service := env.service()
 
 	sale, err := service.Create(ctx, inbound.CreateSaleInput{
 		PaymentMethod: ptrString(domain.PaymentMethodCash),
 		AmountPaid:    decimal.RequireFromString("5"),
+		ClientID:      ptrInt64(9),
 		CreatedByID:   1,
 		Items:         []inbound.CreateSaleItemInput{{ProductID: 1, Quantity: 1}},
 	})

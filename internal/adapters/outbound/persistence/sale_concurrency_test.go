@@ -94,6 +94,7 @@ func TestPostgresSalesCannotOversell(t *testing.T) {
 	}
 
 	service := application.NewSaleService(gormstore.NewSaleStore(gormDB), gormstore.NewUnitOfWork(gormDB))
+	method := domain.PaymentMethodCash
 	start := make(chan struct{})
 	results := make(chan error, 2)
 	var wg sync.WaitGroup
@@ -103,7 +104,9 @@ func TestPostgresSalesCannotOversell(t *testing.T) {
 			defer wg.Done()
 			<-start
 			_, err := service.Create(ctx, inbound.CreateSaleInput{
-				CreatedByID: user.ID,
+				CreatedByID:   user.ID,
+				PaymentMethod: &method,
+				AmountPaid:    decimal.RequireFromString("10.00"),
 				Items: []inbound.CreateSaleItemInput{{
 					ProductID: product.ID,
 					Quantity:  1,

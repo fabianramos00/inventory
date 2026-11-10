@@ -68,7 +68,7 @@ function inventoryRoutes(): Routes {
 const cases = [
   {
     name: 'Clientes',
-    path: '/clients',
+    path: '/#/clients',
     listPath: '/api/v1/sales/clients',
     placeholder: 'Buscar cliente por nombre, cédula o contacto...',
     firstRow: 'Cliente 1',
@@ -79,9 +79,9 @@ const cases = [
   },
   {
     name: 'Proveedores',
-    path: '/providers',
+    path: '/#/providers',
     listPath: '/api/v1/supply-chain/providers',
-    placeholder: 'Buscar proveedor por nombre o contacto...',
+    placeholder: 'Buscar proveedor por nombre, correo o teléfono...',
     firstRow: 'Proveedor 1',
     secondRow: 'Proveedor 11',
     pageTwo: 'Página 2',
@@ -90,7 +90,7 @@ const cases = [
   },
   {
     name: 'Usuarios',
-    path: '/users',
+    path: '/#/users',
     listPath: '/api/v1/users',
     placeholder: 'Buscar usuario...',
     firstRow: 'Usuario 1',
@@ -151,7 +151,7 @@ test('Paginación: cada página pide skip = 10 * (página - 1) y actualiza las f
   await bootstrap(page)
   const calls = await mockApi(page, clientRoutes())
 
-  await page.goto('/clients')
+  await page.goto('/#/clients')
   await expect(page.getByText('Cliente 1', { exact: true })).toBeVisible()
   expect(getCalls(calls, '/api/v1/sales/clients').at(-1)!.url.searchParams.get('skip')).toBe('0')
 

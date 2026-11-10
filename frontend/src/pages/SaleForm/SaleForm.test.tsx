@@ -160,6 +160,14 @@ async function addProduct() {
   fireEvent.click(await screen.findByText('Taladro'))
 }
 
+async function selectClient() {
+  mocks.getClients.mockResolvedValue({
+    data: { items: [{ id: 7, name: 'Ana Cliente' }], has_next: false, skip: 0, limit: 10 },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Cliente: Sin cliente' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Ana Cliente' }))
+}
+
 function cssBlock(css: string, marker: string): string {
   const start = css.indexOf(marker)
   if (start < 0) return ''
@@ -226,7 +234,20 @@ describe('SaleForm payload wiring', () => {
     expect(screen.getByText('Martillo')).toBeTruthy()
   })
 
-  it('sends only client_id when saving sale details', async () => {
+  it('sends only client_id when saving a fully paid anonymous sale', async () => {
+    mocks.useSale.mockReturnValue({
+      sale: sale({ debt_amount: 0, amount_paid: 20, payment_status: 'paid', client_id: null, client: null }),
+      saleItems: [saleItem()],
+      payments: [],
+      paymentsHasNext: false,
+      paymentsLoading: false,
+      paymentsFetching: false,
+      paymentsError: null,
+      loadMorePayments: vi.fn(),
+      retryPayments: vi.fn(),
+      isLoading: false,
+      error: null,
+    })
     renderSale()
     fireEvent.click(editButtons()[1])
 
@@ -235,6 +256,16 @@ describe('SaleForm payload wiring', () => {
     await waitFor(() => expect(mocks.updateSale).toHaveBeenCalledWith(1, {
       client_id: null,
     }))
+  })
+
+  it('rejects clearing the client on an indebted sale inline', async () => {
+    renderSale()
+    fireEvent.click(editButtons()[1])
+
+    fireEvent.click(screen.getByRole('button', { name: /Guardar/ }))
+
+    expect(await screen.findByText('Una venta con saldo pendiente requiere un cliente.')).toBeTruthy()
+    expect(mocks.updateSale).not.toHaveBeenCalled()
   })
 
   it('does not expose amount paid or payment method in sale edit mode', () => {
@@ -461,6 +492,7 @@ describe('SaleForm create payload', () => {
       { timeout: 2000 },
     )
     fireEvent.click(await screen.findByText('Taladro'))
+    await selectClient()
     fireEvent.click(screen.getByRole('button', { name: /Guardar Venta/ }))
 
     await waitFor(() => expect(mocks.createSale).toHaveBeenCalledTimes(1))
@@ -470,7 +502,7 @@ describe('SaleForm create payload', () => {
     expect(payload).toEqual({
       payment_method: null,
       amount_paid: 0,
-      client_id: null,
+      client_id: 7,
       items: [{ product_id: 5, quantity: 1, delivered_quantity: 1, unit_price: 50 }],
     })
   })
@@ -485,6 +517,7 @@ describe('SaleForm create payload', () => {
     expect((screen.getByRole('button', { name: /Guardar Venta/ }) as HTMLButtonElement).disabled).toBe(false)
 
     await addProduct()
+    await selectClient()
 
     fireEvent.click(screen.getByRole('button', { name: /Guardar Venta/ }))
 
@@ -492,6 +525,7 @@ describe('SaleForm create payload', () => {
     const payload = mocks.createSale.mock.calls[0][0] as Record<string, unknown>
     expect(payload.payment_method).toBeNull()
     expect(payload.amount_paid).toBe(0)
+    expect(payload.client_id).toBe(7)
   })
 
   it('shows the amount paid before the payment method', () => {

@@ -2,12 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Clients from './Clients'
+import { formatCurrency } from '@/lib/utils'
 
 const mocks = vi.hoisted(() => ({
   getClients: vi.fn(),
   createClient: vi.fn(),
   updateClient: vi.fn(),
   deleteClient: vi.fn(),
+  addClientPayment: vi.fn(),
 }))
 
 vi.mock('@/lib/api/clients', () => ({
@@ -16,6 +18,7 @@ vi.mock('@/lib/api/clients', () => ({
     createClient: mocks.createClient,
     updateClient: mocks.updateClient,
     deleteClient: mocks.deleteClient,
+    addClientPayment: mocks.addClientPayment,
   },
 }))
 
@@ -28,6 +31,7 @@ function clientPage(skip: number) {
         identity_card: null,
         email: null,
         phone: null,
+        debt_amount: 0,
         created_at: '2026-01-01T00:00:00',
         updated_at: null,
       }],
@@ -61,13 +65,39 @@ function client(overrides: Record<string, unknown> = {}) {
     identity_card: '1020304050',
     email: 'ana@example.com',
     phone: '3001234567',
+    debt_amount: 0,
     created_at: '2026-01-01T00:00:00',
     updated_at: null,
     ...overrides,
   }
 }
 
-describe('Clients search and pagination', () => {
+function paymentResult(overrides: Record<string, unknown> = {}) {
+  return {
+    client_id: 1,
+    amount: 150,
+    remaining_debt: 0,
+    allocations: [],
+    ...overrides,
+  }
+}
+
+function pageOf(items: ReturnType<typeof client>[]) {
+  return { data: { items, has_next: false, skip: 0, limit: 10 } }
+}
+
+function payWithCash(amount?: string) {
+  const dialog = screen.getByRole('dialog', { name: 'Registrar pago' })
+  if (amount !== undefined) {
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Pago parcial' }))
+    fireEvent.change(within(dialog).getByLabelText('Monto'), { target: { value: amount } })
+  }
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Método de pago' }))
+  fireEvent.click(screen.getByRole('option', { name: 'Efectivo' }))
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar pago' }))
+}
+
+describe('Clients', () => {
   beforeEach(() => {
     mocks.getClients.mockReset()
     mocks.getClients.mockImplementation((params: { skip: number }) => Promise.resolve(clientPage(params.skip)))
@@ -75,6 +105,8 @@ describe('Clients search and pagination', () => {
     mocks.updateClient.mockReset()
     mocks.deleteClient.mockReset()
     mocks.deleteClient.mockResolvedValue({ data: client() })
+    mocks.addClientPayment.mockReset()
+    mocks.addClientPayment.mockResolvedValue({ data: paymentResult() })
   })
 
   it('resets to page 1 and only requests the debounced search', async () => {
@@ -107,6 +139,25 @@ describe('Clients search and pagination', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('shows debt in red and zero debt as Sin deuda', async () => {
+    mocks.getClients.mockResolvedValue({
+      data: {
+        items: [
+          client({ id: 1, name: 'Cliente con deuda', debt_amount: 150.5 }),
+          client({ id: 2, name: 'Cliente al día', debt_amount: 0 }),
+        ],
+        has_next: false,
+        skip: 0,
+        limit: 10,
+      },
+    })
+    renderClients()
+
+    await screen.findByText('Cliente con deuda')
+    expect(screen.getByText(formatCurrency(150.5)).className).toContain('debtAmount')
+    expect(screen.getByText('Sin deuda').className).toContain('debtSettled')
   })
 
   it('shows a retryable error instead of the empty state when the query fails', async () => {
@@ -201,5 +252,97 @@ describe('Clients search and pagination', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe('A client with this identity card already exists.')
+  })
+
+  it('shows Pagar only for clients with debt and names the action after the client', async () => {
+    mocks.getClients.mockResolvedValue(pageOf([
+      client({ id: 1, name: 'Cliente con deuda', debt_amount: 150.5 }),
+      client({ id: 2, name: 'Cliente al día', debt_amount: 0 }),
+    ]))
+    renderClients()
+
+    await screen.findByText('Cliente con deuda')
+    expect(screen.getByRole('button', { name: 'Pagar deuda de Cliente con deuda' })).toBeTruthy()
+    expect(screen.getByText('Sin deuda')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Pagar deuda de Cliente al día' })).toBeNull()
+  })
+
+  it('opens the payment modal for the clicked client', async () => {
+    mocks.getClients.mockResolvedValue(pageOf([
+      client({ id: 1, name: 'Cliente con deuda', debt_amount: 150.5 }),
+      client({ id: 2, name: 'Otro cliente con deuda', debt_amount: 80 }),
+    ]))
+    renderClients()
+    await screen.findByText('Otro cliente con deuda')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pagar deuda de Otro cliente con deuda' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Registrar pago' })
+    expect(within(dialog).getByText('Otro cliente con deuda')).toBeTruthy()
+    expect((within(dialog).getByLabelText('Monto') as HTMLInputElement).value).toBe('80.00')
+  })
+
+  it('records a payment and invalidates the client list and detail', async () => {
+    mocks.getClients.mockResolvedValue(pageOf([
+      client({ id: 7, name: 'Cliente con deuda', debt_amount: 150 }),
+    ]))
+    mocks.addClientPayment.mockResolvedValue({
+      data: paymentResult({ client_id: 7, amount: 150, remaining_debt: 0 }),
+    })
+    const queryClient = renderClients()
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    await screen.findByText('Cliente con deuda')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pagar deuda de Cliente con deuda' }))
+    payWithCash()
+
+    await waitFor(() => expect(mocks.addClientPayment).toHaveBeenCalledWith(7, {
+      amount: 150,
+      payment_method: 'cash',
+    }))
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['clients'] }))
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['client', 7] }))
+  })
+
+  it('keeps Pagar while the remaining debt is greater than zero', async () => {
+    let debt = 150
+    mocks.getClients.mockImplementation(() => Promise.resolve(pageOf([
+      client({ id: 3, name: 'Cliente con deuda', debt_amount: debt }),
+    ])))
+    mocks.addClientPayment.mockResolvedValue({
+      data: paymentResult({ client_id: 3, amount: 75, remaining_debt: 75 }),
+    })
+    renderClients()
+    await screen.findByText('Cliente con deuda')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pagar deuda de Cliente con deuda' }))
+    debt = 75
+    payWithCash('75')
+
+    await screen.findByText(`Pago registrado. Saldo pendiente: ${formatCurrency(75)}.`)
+    await screen.findByText(formatCurrency(75))
+    expect(screen.getByRole('button', { name: 'Pagar deuda de Cliente con deuda' })).toBeTruthy()
+  })
+
+  it('removes Pagar once the debt reaches zero', async () => {
+    let debt = 150
+    mocks.getClients.mockImplementation(() => Promise.resolve(pageOf([
+      client({ id: 4, name: 'Cliente con deuda', debt_amount: debt }),
+    ])))
+    mocks.addClientPayment.mockResolvedValue({
+      data: paymentResult({ client_id: 4, amount: 150, remaining_debt: 0 }),
+    })
+    renderClients()
+    await screen.findByText('Cliente con deuda')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pagar deuda de Cliente con deuda' }))
+    debt = 0
+    payWithCash()
+
+    await screen.findByText(`Pago registrado. Saldo pendiente: ${formatCurrency(0)}.`)
+    await waitFor(() => expect(
+      screen.queryByRole('button', { name: 'Pagar deuda de Cliente con deuda' }),
+    ).toBeNull())
+    expect(screen.getByText('Sin deuda')).toBeTruthy()
   })
 })

@@ -29,6 +29,7 @@ type repositories struct {
 	units            outbound.CatalogRepository[domain.MeasurementUnit]
 	products         outbound.ProductRepository
 	clients          outbound.ClientRepository
+	clientDebt       outbound.ClientDebtRepository
 	sales            outbound.SaleRepository
 	providers        outbound.ProviderRepository
 	supplierCatalogs outbound.SupplierCatalogRepository
@@ -60,6 +61,7 @@ func TestRepositoryContract(t *testing.T) {
 			t.Run("catalog", func(t *testing.T) { testCatalog(t, repos, searchIDs, backend.name) })
 			t.Run("products", func(t *testing.T) { testProducts(t, repos, backend.name) })
 			t.Run("clients", func(t *testing.T) { testClients(t, repos) })
+			t.Run("client debt", func(t *testing.T) { testClientDebt(t, repos) })
 			t.Run("sales", func(t *testing.T) { testSales(t, repos) })
 			t.Run("providers", func(t *testing.T) { testProviders(t, repos) })
 			t.Run("supplier catalogs", func(t *testing.T) { testSupplierCatalogs(t, repos) })
@@ -102,6 +104,7 @@ func newRepositories(gormDB *gorm.DB) *repositories {
 		units:            gormstore.NewMeasurementUnitStore(gormDB),
 		products:         gormstore.NewProductStore(gormDB),
 		clients:          gormstore.NewClientStore(gormDB),
+		clientDebt:       gormstore.NewClientDebtStore(gormDB),
 		sales:            gormstore.NewSaleStore(gormDB),
 		providers:        gormstore.NewProviderStore(gormDB),
 		supplierCatalogs: gormstore.NewSupplierCatalogStore(gormDB),

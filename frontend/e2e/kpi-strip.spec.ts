@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH_FILE, createApiClient, seedCatalog, seedProduct, uniqueSuffix } from './helpers'
+import { AUTH_FILE, createApiClient, seedCatalog, seedClient, seedProduct, uniqueSuffix } from './helpers'
 
 test.use({ storageState: AUTH_FILE })
 
@@ -17,6 +17,7 @@ test('los cuatro KPI caben en una línea y el monto grande no se parte', async (
   const suffix = uniqueSuffix()
   let productId: number | undefined
   let saleId: number | undefined
+  let clientId: number | undefined
 
   try {
     const catalog = await seedCatalog(api, suffix)
@@ -27,9 +28,12 @@ test('los cuatro KPI caben en una línea y el monto grande no se parte', async (
       stock_quantity: 5,
     })
     productId = product.id
+    const client = await seedClient(api, suffix)
+    clientId = client.id
 
     const sale = await api.post<{ id: number }>('/sales', {
       amount_paid: 0,
+      client_id: client.id,
       items: [{ product_id: product.id, quantity: 1, delivered_quantity: 1, unit_price: SEEDED_AMOUNT }],
     })
     saleId = sale.id
@@ -82,6 +86,7 @@ test('los cuatro KPI caben en una línea y el monto grande no se parte', async (
   } finally {
     if (saleId) await api.delete(`/sales/${saleId}`).catch(() => undefined)
     if (productId) await api.delete(`/inventory/products/${productId}`).catch(() => undefined)
+    if (clientId) await api.delete(`/sales/clients/${clientId}`).catch(() => undefined)
     await api.dispose()
   }
 })

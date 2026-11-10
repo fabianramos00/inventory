@@ -85,6 +85,7 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 		{http.MethodGet, "/api/v1/sales/clients/1", nil},
 		{http.MethodPut, "/api/v1/sales/clients/1", map[string]any{"name": "Ana"}},
 		{http.MethodDelete, "/api/v1/sales/clients/1", nil},
+		{http.MethodPost, "/api/v1/sales/clients/1/payments", map[string]any{"amount": 10.00, "payment_method": "cash"}},
 		// Providers and supplier catalogs.
 		{http.MethodGet, "/api/v1/supply-chain/providers", nil},
 		{http.MethodPost, "/api/v1/supply-chain/providers", map[string]any{"name": "Provider"}},

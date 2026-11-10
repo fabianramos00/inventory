@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -65,10 +66,11 @@ type fakeUnitOfWork struct {
 func (u *fakeUnitOfWork) WithinTx(ctx context.Context, fn func(context.Context, outbound.TxRepos) error) error {
 	snapshot := u.env.snapshot()
 	err := fn(ctx, outbound.TxRepos{
-		Sales:    &fakeSaleRepo{env: u.env},
-		Products: &fakeProductRepo{env: u.env},
-		Clients:  &fakeClientRepo{env: u.env},
-		Stock:    &fakeStockRepo{env: u.env},
+		Sales:      &fakeSaleRepo{env: u.env},
+		Products:   &fakeProductRepo{env: u.env},
+		Clients:    &fakeClientRepo{env: u.env},
+		ClientDebt: &fakeClientDebtRepo{env: u.env},
+		Stock:      &fakeStockRepo{env: u.env},
 		// Sale use cases never touch the purchase-order stores.
 		Orders:    nil,
 		Catalogs:  nil,
@@ -448,6 +450,62 @@ func (r *fakeClientRepo) Update(context.Context, int64, *domain.Client) error {
 
 func (r *fakeClientRepo) Delete(context.Context, int64) (*domain.Client, error) {
 	return nil, errors.New("not implemented")
+}
+
+type fakeClientDebtRepo struct {
+	env *fakeSaleEnv
+}
+
+func (r *fakeClientDebtRepo) Lock(_ context.Context, id int64) (*domain.Client, error) {
+	return (&fakeClientRepo{env: r.env}).Get(context.Background(), id)
+}
+
+func (r *fakeClientDebtRepo) SetClientDebt(_ context.Context, clientID int64) error {
+	client, ok := r.env.clients[clientID]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	client.DebtAmount, _ = r.DebtSum(context.Background(), clientID)
+	return nil
+}
+
+func (r *fakeClientDebtRepo) DebtSum(_ context.Context, clientID int64) (decimal.Decimal, error) {
+	sum := decimal.Zero
+	for _, sale := range r.env.sales {
+		if sale.ClientID == nil || *sale.ClientID != clientID {
+			continue
+		}
+		if debt := sale.TotalAmount.Sub(sale.AmountPaid); debt.IsPositive() {
+			sum = sum.Add(debt)
+		}
+	}
+	return sum, nil
+}
+
+func (r *fakeClientDebtRepo) DebtorSales(_ context.Context, clientID int64, limit int) ([]*domain.Sale, error) {
+	debtors := make([]*domain.Sale, 0)
+	for _, sale := range r.env.sales {
+		if sale.ClientID == nil || *sale.ClientID != clientID {
+			continue
+		}
+		debt := sale.TotalAmount.Sub(sale.AmountPaid)
+		if !debt.IsPositive() {
+			continue
+		}
+		copied := *sale
+		copied.DebtAmount = debt
+		debtors = append(debtors, &copied)
+	}
+	sort.Slice(debtors, func(i, j int) bool {
+		if !debtors[i].CreatedAt.Equal(debtors[j].CreatedAt) {
+			return debtors[i].CreatedAt.Before(debtors[j].CreatedAt)
+		}
+		return debtors[i].ID < debtors[j].ID
+	})
+	if len(debtors) > limit {
+		debtors = debtors[:limit]
+	}
+	return debtors, nil
 }
 
 type fakeStockRepo struct {

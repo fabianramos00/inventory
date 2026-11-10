@@ -15,6 +15,8 @@ export default defineConfig({
     'kpi-strip.spec.ts',
     'filters.spec.ts',
     'keyboard.spec.ts',
+    'client-debt.spec.ts',
+    'lists.spec.ts',
   ],
   globalSetup: './e2e/global-setup.ts',
   timeout: 60_000,

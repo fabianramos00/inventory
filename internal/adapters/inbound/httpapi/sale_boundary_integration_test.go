@@ -141,6 +141,7 @@ func TestSaleCreateValidationAndRollback(t *testing.T) {
 		beforeSecond := b.stock(t, b.productIDs[1])
 
 		status, raw = b.request(t, http.MethodPost, "/api/v1/sales", map[string]any{
+			"client_id": b.clientID,
 			"items": []map[string]any{
 				{"product_id": b.productIDs[2], "quantity": 2, "unit_price": 1.00},
 			},
@@ -168,6 +169,7 @@ func TestSaleCreateValidationAndRollback(t *testing.T) {
 		}
 
 		status, raw = b.request(t, http.MethodPost, "/api/v1/sales", map[string]any{
+			"client_id": b.clientID,
 			"items": []map[string]any{
 				{"product_id": b.productIDs[0], "quantity": 1},
 				{"product_id": b.productIDs[1], "quantity": 999},
@@ -198,7 +200,8 @@ func TestSaleCreateValidationAndRollback(t *testing.T) {
 func TestSaleStatusesFiltersAndUpdate(t *testing.T) {
 	forEachSaleBackend(t, func(t *testing.T, b *siBackend) {
 		status, raw := b.request(t, http.MethodPost, "/api/v1/sales", map[string]any{
-			"items": []map[string]any{{"product_id": b.productIDs[0], "quantity": 2}},
+			"client_id": b.clientID,
+			"items":     []map[string]any{{"product_id": b.productIDs[0], "quantity": 2}},
 		})
 		if status != http.StatusOK {
 			t.Fatalf("pending create status = %d body = %s", status, raw)
@@ -256,16 +259,16 @@ func TestSaleStatusesFiltersAndUpdate(t *testing.T) {
 		if status != http.StatusOK {
 			t.Fatalf("client filter status = %d body = %s", status, raw)
 		}
-		if byClient := siDecode[siList[siSale]](t, raw); len(byClient.Items) != 0 {
-			t.Fatalf("client filter returned %+v, want none", byClient.Items)
+		if byClient := siDecode[siList[siSale]](t, raw); len(byClient.Items) != 1 || byClient.Items[0].ID != pending.ID {
+			t.Fatalf("client filter returned %+v, want only %d", byClient.Items, pending.ID)
 		}
 
 		status, raw = b.request(t, http.MethodGet, "/api/v1/sales?no_client=true", nil)
 		if status != http.StatusOK {
 			t.Fatalf("no_client filter status = %d body = %s", status, raw)
 		}
-		if noClient := siDecode[siList[siSale]](t, raw); len(noClient.Items) != 2 {
-			t.Fatalf("no_client returned %d sales, want 2", len(noClient.Items))
+		if noClient := siDecode[siList[siSale]](t, raw); len(noClient.Items) != 1 || noClient.Items[0].ID != delivered.ID {
+			t.Fatalf("no_client returned %+v, want only %d", noClient.Items, delivered.ID)
 		}
 
 		status, raw = b.request(t, http.MethodPut, "/api/v1/sales/"+itoa(pending.ID), map[string]any{
@@ -292,12 +295,15 @@ func TestSaleStatusesFiltersAndUpdate(t *testing.T) {
 		status, raw = b.request(t, http.MethodPut, "/api/v1/sales/"+itoa(pending.ID), map[string]any{
 			"client_id": nil,
 		})
-		if status != http.StatusOK {
-			t.Fatalf("client clear status = %d body = %s", status, raw)
+		if status != http.StatusUnprocessableEntity || !contains(raw, "client_id is required") {
+			t.Fatalf("clear indebted client status = %d body = %s, want 422", status, raw)
 		}
-		cleared := siDecode[siSale](t, raw)
-		if cleared.Client != nil || cleared.ClientID != nil {
-			t.Fatalf("cleared client = %+v id %v", cleared.Client, cleared.ClientID)
+		status, raw = b.request(t, http.MethodGet, "/api/v1/sales/"+itoa(pending.ID), nil)
+		if status != http.StatusOK {
+			t.Fatalf("get after rejected clear status = %d body = %s", status, raw)
+		}
+		if got := siDecode[siSale](t, raw); got.ClientID == nil || *got.ClientID != b.clientID {
+			t.Fatalf("client after rejected clear = %v, want %d", got.ClientID, b.clientID)
 		}
 
 		status, raw = b.request(t, http.MethodPut, "/api/v1/sales/"+itoa(pending.ID), map[string]any{
@@ -339,6 +345,16 @@ func TestSaleStatusesFiltersAndUpdate(t *testing.T) {
 		}
 		assertNumber(t, paid.DebtAmount, "0")
 
+		status, raw = b.request(t, http.MethodPut, "/api/v1/sales/"+itoa(pending.ID), map[string]any{
+			"client_id": nil,
+		})
+		if status != http.StatusOK {
+			t.Fatalf("clear paid client status = %d body = %s", status, raw)
+		}
+		if cleared := siDecode[siSale](t, raw); cleared.ClientID != nil {
+			t.Fatalf("paid sale client after clear = %v, want nil", cleared.ClientID)
+		}
+
 		for _, path := range []string{"/api/v1/sales/999999", "/api/v1/sales/999999/items", "/api/v1/sales/999999/payments"} {
 			status, raw = b.request(t, http.MethodGet, path, nil)
 			if status != http.StatusNotFound {
@@ -367,7 +383,8 @@ func TestSaleItemMutationsStockAndStats(t *testing.T) {
 	forEachSaleBackend(t, func(t *testing.T, b *siBackend) {
 		beforeHistory := siScalarInt(t, b, "SELECT COUNT(*) FROM price_history")
 		status, raw := b.request(t, http.MethodPost, "/api/v1/sales", map[string]any{
-			"items": []map[string]any{{"product_id": b.productIDs[0], "quantity": 2}},
+			"client_id": b.clientID,
+			"items":     []map[string]any{{"product_id": b.productIDs[0], "quantity": 2}},
 		})
 		if status != http.StatusOK {
 			t.Fatalf("create status = %d body = %s", status, raw)

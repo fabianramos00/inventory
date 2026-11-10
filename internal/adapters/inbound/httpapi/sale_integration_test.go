@@ -469,12 +469,15 @@ func newSIBackend(t *testing.T, name string, gormDB *gorm.DB, conn *sql.DB) *siB
 		time.Hour,
 	)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	saleService := application.NewSaleService(b.sales, gormstore.NewUnitOfWork(gormDB))
 	b.server = httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
-		Auth:    authService,
-		Users:   application.NewUserService(users, gormstore.NewRefreshTokenStore(gormDB), hasher),
-		Sales:   application.NewSaleService(b.sales, gormstore.NewUnitOfWork(gormDB)),
-		Logger:  logger,
-		Backend: name,
+		Auth:           authService,
+		Users:          application.NewUserService(users, gormstore.NewRefreshTokenStore(gormDB), hasher),
+		Clients:        application.NewClientService(gormstore.NewClientStore(gormDB)),
+		ClientPayments: saleService,
+		Sales:          saleService,
+		Logger:         logger,
+		Backend:        name,
 	}))
 	t.Cleanup(b.server.Close)
 	return b

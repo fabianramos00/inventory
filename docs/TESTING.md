@@ -14,7 +14,7 @@ behavior. They are not optional polish.
 | Go migration | `testing` + SQLite | Schema rebuild and sale-payment backfill |
 | Go bootstrap | `testing` | `DB_MODE` selection and SQLite fallback |
 | Frontend unit | Vitest | Hooks, formatters, utilities, components |
-| Frontend E2E | Playwright | Auth, users, inventory, sales, purchase orders, dashboard aggregates, floating menus, KPI strip |
+| Frontend E2E | Playwright | Auth, users, inventory, lists, sales, client debt, purchase orders, dashboard aggregates, floating menus, KPI strip |
 | Contract parity | Go test | Same fixtures against FastAPI and Go (67 legacy endpoints) |
 
 ## Commands
@@ -225,7 +225,19 @@ Layout regressions are covered by two specs:
   lead amount stays on a single line with the ellipsis contract
   (`data-overflow="ellipsis"`, `white-space: nowrap`,
   `text-overflow: ellipsis`) and its text is intact, and the two count
-  columns are narrower than the two money columns.
+  columns are narrower than the two money columns. Its unpaid seed sale
+  carries a `client_id`, per the anonymous-debt invariant.
+- `e2e/client-debt.spec.ts` — on `/#/clients/:id` a seeded unpaid sale shows
+  `Saldo pendiente`; a partial client payment updates the header balance and
+  the sale to `Parcial`; paying the rest yields `Sin deuda` and `Pagado`.
+  Client payments allocate oldest sale first. A sale paid from
+  `/#/sales/:id` invalidates the cached client query, so browser-back to the
+  client detail refetches and shows the new `Saldo pendiente`. On `/#/clients`
+  the card action `Pagar deuda de <name>` opens the same modal, and a partial
+  payment updates the card `Saldo pendiente`.
+- `e2e/lists.spec.ts` — debounced search resets to page 1 with one request and
+  pagination sends `skip = 10 * (page - 1)` for clients, providers, users, and
+  inventory (mocked API, hash routes).
 
 Date filter expectations (`e2e/filters.spec.ts`):
 
@@ -366,6 +378,52 @@ The legacy sale-level `payment_method` is normalized away on the legacy side
 of sale comparisons because the Go sale response omits it; payment rows keep
 their own `payment_method`.
 
+
+### Client debt and client payments (Go-only)
+
+`POST /api/v1/sales/clients/{id}/payments` and `clients.debt_amount` are part
+of the same approved additive divergence, so they stay outside the 67-endpoint
+parity matrix. Coverage:
+
+- `internal/adapters/inbound/httpapi/client_payment_integration_test.go`
+  against SQLite and PostgreSQL:
+  - Cache reconciliation after sale create, item add/update/delete, sale
+    delete, client reassignment, and per-sale payment create/delete. Each step
+    asserts the cached `clients.debt_amount` equals `SUM(max(total - paid, 0))`
+    and, on SQLite, is stored as integer cents.
+  - Batch allocation oldest first (`created_at ASC, id ASC`), partial and full,
+    one method per batch, authenticated creator, `remaining_debt`, and the
+    response shape.
+  - `404` unknown client; `422` no debt, zero/negative, overpayment, invalid
+    method, more than two decimals, exponent/string/NaN/Inf/malformed amount,
+    amount over the money ceiling, and more than 1,000 open sales.
+  - No partial writes on every rejected payment.
+  - `clients.updated_at` and contact fields stay unchanged by a payment.
+  - A deliberately stale `clients.debt_amount` (too low or too high) never
+    drives validation: the full payment still succeeds against the derived
+    debt and an overpayment beyond the derived debt is rejected.
+- `internal/adapters/outbound/persistence/client_debt_contract_test.go` runs
+  `Lock`, `SetClientDebt`, `DebtSum`, and limited `DebtorSales` against both
+  adapters, including SQLite integer-cents storage, derived sums, debtor
+  ordering, and the debtor limit.
+- `internal/adapters/outbound/persistence/client_debt_concurrency_test.go`
+  (PostgreSQL only) proves two concurrent client payments cannot overpay, a
+  payment racing an item edit leaves the cache equal to the derived debt, and
+  a sale client reassignment racing a payment neither deadlocks nor loses a
+  cache update on either client.
+- `internal/db/client_debt_migration_test.go` migrates SQLite to version 7,
+  seeds legacy sales, then runs `00008_client_debt` and proves the integer-cent
+  backfill clamps overpaid sales, excludes anonymous sales, leaves
+  `updated_at` alone, defaults new clients to zero, and rejects negative debt.
+- `frontend/src/pages/Clients/Clients.test.tsx`,
+  `frontend/src/pages/ClientDetail/ClientDetail.test.tsx`,
+  `frontend/src/components/ClientPaymentModal/ClientPaymentModal.test.tsx`, and
+  `frontend/src/hooks/useClient.test.tsx` cover debt display, the clients-list
+  `Pagar` visibility and accessible name, modal opening for the clicked client,
+  client-list/detail invalidation after a payment, the client page
+  filters/pagination/navigation, the payment modal validation and pending
+  state, and the invalidation keys after a payment.
+
 ### User options (Go-only)
 
 `GET /api/v1/users/options` is an approved additive divergence. The legacy API
@@ -376,9 +434,10 @@ active-only results, name-only search, and the superuser-only `/users` list.
 
 ## Remaining risks
 
-- The PostgreSQL `00007_sale_payments` backfill and `sales.payment_method`
-  drop are not automated. Only the SQLite migration is exercised; validate the
-  PostgreSQL path on a disposable database copy before release.
+- The PostgreSQL `00007_sale_payments` backfill, `sales.payment_method` drop,
+  and `00008_client_debt` backfill are not automated. Only the SQLite
+  migrations are exercised; validate the PostgreSQL path on a disposable
+  database copy before release.
 - A plain `go test ./...` skips every PostgreSQL suite when
   `INVENTORY_TEST_DATABASE_URL` is unset and still reports success. Run
   `scripts/verify.sh` (or export the variable) before trusting a green run.
