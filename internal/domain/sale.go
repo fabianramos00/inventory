@@ -18,6 +18,9 @@ const (
 	PaymentMethodCash   = "cash"
 	PaymentMethodCredit = "credit"
 	PaymentMethodDebit  = "debit"
+
+	// MaxMoneyAmount is the numeric(12,2) ceiling, shared by request validation.
+	MaxMoneyAmount = "9999999999.99"
 )
 
 type Sale struct {

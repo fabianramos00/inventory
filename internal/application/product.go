@@ -24,7 +24,7 @@ const (
 	defaultLowStock     = 10
 )
 
-var maxProductMoney = decimal.RequireFromString("9999999999.99")
+var maxProductMoney = decimal.RequireFromString(domain.MaxMoneyAmount)
 
 type ProductService struct {
 	repository outbound.ProductRepository

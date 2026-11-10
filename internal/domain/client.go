@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/shopspring/decimal"
+)
 
 type Client struct {
 	ID           int64
@@ -8,6 +12,7 @@ type Client struct {
 	IdentityCard *string
 	Email        *string
 	Phone        *string
+	DebtAmount   decimal.Decimal
 	CreatedAt    time.Time
 	UpdatedAt    *time.Time
 }

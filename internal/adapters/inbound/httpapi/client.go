@@ -12,13 +12,14 @@ import (
 )
 
 type clientResponse struct {
-	ID           int64   `json:"id"`
-	Name         string  `json:"name"`
-	IdentityCard *string `json:"identity_card"`
-	Email        *string `json:"email"`
-	Phone        *string `json:"phone"`
-	CreatedAt    string  `json:"created_at"`
-	UpdatedAt    *string `json:"updated_at"`
+	ID           int64     `json:"id"`
+	Name         string    `json:"name"`
+	IdentityCard *string   `json:"identity_card"`
+	Email        *string   `json:"email"`
+	Phone        *string   `json:"phone"`
+	DebtAmount   moneyJSON `json:"debt_amount"`
+	CreatedAt    string    `json:"created_at"`
+	UpdatedAt    *string   `json:"updated_at"`
 }
 
 type createClientRequest struct {
@@ -157,6 +158,7 @@ func newClientResponse(client *domain.Client) clientResponse {
 		IdentityCard: client.IdentityCard,
 		Email:        client.Email,
 		Phone:        client.Phone,
+		DebtAmount:   moneyJSON(client.DebtAmount),
 		CreatedAt:    client.CreatedAt.UTC().Format(time.RFC3339),
 	}
 	if client.UpdatedAt != nil {

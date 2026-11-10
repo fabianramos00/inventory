@@ -231,9 +231,13 @@ Never log passwords, tokens, authorization headers, or full request bodies.
   default/cap (100/200) and search limit (256 runes) rules. Search matches
   `name`, `identity_card`, `email`, and `phone`, case-insensitively and
   literally.
-- Item shape: `{id, name, identity_card, email, phone, created_at,
-  updated_at}`. Timestamps are RFC 3339 UTC. `created_at` is set on create and
-  `updated_at` stays `null` until a field actually changes.
+- Item shape: `{id, name, identity_card, email, phone, debt_amount,
+  created_at, updated_at}`. Timestamps are RFC 3339 UTC. `created_at` is set on
+  create and `updated_at` stays `null` until a field actually changes.
+  `debt_amount` is the non-negative server-maintained cache
+  `SUM(max(sale.total_amount - sale.amount_paid, 0))` over the client's sales,
+  stored as `NUMERIC(12,2)` on PostgreSQL and integer cents on SQLite, and
+  never accepted from a request body.
 - `name` is required and trimmed. The three optional fields are trimmed;
   empty strings become `null`. Create accepts them as omitted, `null`, or
   empty. Update is partial: omitted fields stay unchanged, explicit `null`
@@ -332,8 +336,8 @@ Never log passwords, tokens, authorization headers, or full request bodies.
 ## Sales
 
 - Endpoints under `/api/v1/sales`: list, create, stats, get, update, delete,
-  item list/add/update/delete, and payment list/create/delete. All require an
-  active user.
+  item list/add/update/delete, payment list/create/delete, and client-level
+  payment create. All require an active user.
 - The response shape is `{id, total_amount, debt_amount, payment_status,
   delivery_status, amount_paid, client_id, created_at, updated_at,
   created_by_id, created_by, client}`. `created_by` is the full user without
@@ -348,13 +352,15 @@ Never log passwords, tokens, authorization headers, or full request bodies.
   and `0 <= delivered_quantity <= quantity`. `unit_price` defaults to the
   product price. Totals, payment status, and delivery status are derived by
   the service. `created_by_id` comes from the authenticated user, never from
-  the body.
+  the body. A sale with an outstanding balance requires `client_id`; fully paid
+  anonymous sales remain valid.
 - `sales.amount_paid` is a cache of the sum of `sale_payments.amount`.
   `POST /sales` with `amount_paid > 0` requires a method and inserts exactly
   one opening payment for the authenticated user; zero paid inserts none.
   `amount_paid > total_amount` is `422`.
-- Update accepts only `client_id`; omitted stays unchanged and `null` clears.
-  `amount_paid` and `payment_method` are rejected as unknown fields (`422`).
+- Update accepts only `client_id`; omitted stays unchanged and `null` clears,
+  unless the sale still carries debt (`422`). `amount_paid` and
+  `payment_method` are rejected as unknown fields (`422`).
 - Item mutations adjust stock by the quantity delta, recalculate the sale,
   and set `updated_at`. Deleting a sale or one of its items restores stock.
   Deleting a sale cascades its payment rows. An empty sale has total `0` and
@@ -363,10 +369,23 @@ Never log passwords, tokens, authorization headers, or full request bodies.
   payment returns `{id, sale_id, amount, payment_method, created_at,
   created_by_id, created_by}`; `created_by` is the full user without password
   fields. Legacy backfilled rows may have a null method or creator.
-- Creating or deleting a payment locks the sale row, validates against the
-  remaining debt, recomputes `amount_paid` from `SUM(sale_payments.amount)`
-  (never `+=`), then re-derives status, debt, and `updated_at` in the same
-  transaction. A paid sale or an amount above the debt is `422`.
+- Creating or deleting a payment locks the client then the sale row, validates
+  against the remaining debt, recomputes `amount_paid` from
+  `SUM(sale_payments.amount)` (never `+=`), then re-derives status, debt, the
+  client cache, and `updated_at` in the same transaction. A paid sale or an
+  amount above the debt is `422`.
+- `POST /sales/clients/{id}/payments` locks the client, allocates the amount
+  over that client's debtor sales ordered `created_at ASC, id ASC`, inserts one
+  payment row per affected sale with the chosen method and authenticated user,
+  recomputes each sale, and recomputes the client cache once. The response
+  carries `client_id`, `amount`, `remaining_debt`, and `allocations`. The
+  amount is validated against the in-transaction ledger sum, not the cache; it
+  must be a plain JSON number with at most two decimals inside
+  `(0, 9999999999.99]`, and a batch that would touch more than 1,000 open
+  sales is rejected before writing. Unknown client is `404`; no debt,
+  overpayment, zero/negative amount, more than two decimals, exponent/NaN/Inf,
+  amount above the ceiling, too many affected sales, or invalid method is
+  `422`; nothing is written on error.
 - `GET /sales?payment_method=` uses `EXISTS` against `sale_payments`, so it
   matches sales paid with that method at least once.
 - Status values are lowercase in the API and uppercase in the database. The
@@ -411,27 +430,30 @@ Sale creation:
 ```text
 BEGIN
   validate client and products
+  ClientDebtRepository.Lock(client id)                -- when a client is set
   StockRepository.LockForUpdate(product ids sorted ascending)
   verify stock for every item
   StockRepository.ApplyDelta(-quantity)
   insert sale
   insert items
+  recompute client debt
 COMMIT
 ```
 
 Any failure rolls back the whole sale. If `amount_paid > 0`, the same
 transaction inserts its opening payment and recomputes the cached total.
 
-Sale and payment mutations lock the sale row before reading or writing
-`amount_paid`:
+Sale and payment mutations lock the client row before the sale row:
 
 ```text
 BEGIN
-  SELECT ... FROM sales WHERE id = ? FOR UPDATE      -- SQLite: write txn
+  ClientDebtRepository.Lock(client id)                -- SQLite: write txn
+  SELECT ... FROM sales WHERE id = ? FOR UPDATE
   read amount_paid / validate remaining debt
   insert or delete sale_payments row
   amount_paid = SUM(sale_payments.amount) for this sale
   update payment_status, debt_amount, updated_at
+  recompute client debt from source
 COMMIT
 ```
 
@@ -439,10 +461,12 @@ The lock is taken by `Update`, item add/update/delete, recalculation, sale
 delete, and payment insert/delete. A stale item recalculation therefore cannot
 overwrite a committed payment. Item mutations use the same boundary, adjusting
 stock by the delta and recalculating the sale. Deleting a sale locks the
-product ids, restores each item quantity, deletes the items, then deletes the
-sale (payments cascade). PostgreSQL serializes competing writers with
-`SELECT ... FOR UPDATE`; SQLite forces a write transaction before the read.
-The same stock rule applies to order receiving.
+product ids, restores each item quantity, deletes the items, deletes the sale
+(payments cascade), then recomputes the client debt. PostgreSQL serializes
+competing writers with `SELECT ... FOR UPDATE`; SQLite forces a write
+transaction before the read. Client reassignment locks both client rows in
+ascending id order, then the sale. The same stock rule applies to order
+receiving.
 
 Order receiving:
 
@@ -501,14 +525,16 @@ TCP timeout. The `auto` probe keeps its 3-second timeout.
   embedded with `embed.FS`.
 - Naming: `00001_enums.sql`, `00002_catalog.sql`, `00003_identity.sql`,
   `00004_products.sql`, `00005_purchases.sql`, `00006_sales.sql`,
-  `00007_sale_payments.sql`.
+  `00007_sale_payments.sql`, `00008_client_debt.sql`.
 - PostgreSQL integer ids use `GENERATED BY DEFAULT AS IDENTITY`. The legacy
   per-table `id` and name indexes (`ix_*_id`, `ix_products_name`,
   `ix_providers_name`, `ix_users_full_name`) are gone.
 - The initial schema is split by domain across versions 1–6; version 7 adds
   the sale payment ledger, backfills one opening payment per paid sale, and
   drops `sales.payment_method`. SQLite rebuilds `sales` to remove the column
-  and its table CHECK. Future changes get one new file each.
+  and its table CHECK. Version 8 adds `clients.debt_amount` with a
+  non-negative CHECK and backfills it from `sales`; SQLite stores integer
+  cents. Future changes get one new file each.
 - The split changed the baseline: databases created before the split must be
   recreated. A goose row for version `1` alone is not a valid baseline for the
   split set.

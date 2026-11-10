@@ -24,6 +24,7 @@ func NewSaleService(repository outbound.SaleRepository, unitOfWork outbound.Unit
 }
 
 var _ inbound.SaleUseCase = (*SaleService)(nil)
+var _ inbound.ClientPaymentUseCase = (*SaleService)(nil)
 
 func (s *SaleService) List(ctx context.Context, filter inbound.SaleFilter) (*inbound.SaleList, error) {
 	if !domain.ValidPaymentStatus(filter.PaymentStatus) {
@@ -62,7 +63,7 @@ func (s *SaleService) Create(ctx context.Context, input inbound.CreateSaleInput)
 	var result *domain.Sale
 	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
 		if input.ClientID != nil {
-			if _, err := repos.Clients.Get(ctx, *input.ClientID); err != nil {
+			if err := lockClient(ctx, repos, *input.ClientID); err != nil {
 				return referenceError(err, "Client", *input.ClientID)
 			}
 		}
@@ -111,17 +112,21 @@ func (s *SaleService) Create(ctx context.Context, input inbound.CreateSaleInput)
 			})
 		}
 
+		now := nowUTC()
+		paid := input.AmountPaid.Round(2)
+		if paid.GreaterThan(total) {
+			return fmt.Errorf("%w: amount_paid cannot exceed total_amount", domain.ErrValidation)
+		}
+		if input.ClientID == nil && total.GreaterThan(paid) {
+			return requiredClientForDebt()
+		}
+
 		for _, item := range items {
 			if err := repos.Stock.ApplyDelta(ctx, item.ProductID, int64(-item.Quantity)); err != nil {
 				return stockError(err, products[item.ProductID].SKU, stock[item.ProductID], item.Quantity)
 			}
 		}
 
-		now := nowUTC()
-		paid := input.AmountPaid.Round(2)
-		if paid.GreaterThan(total) {
-			return fmt.Errorf("%w: amount_paid cannot exceed total_amount", domain.ErrValidation)
-		}
 		sale := &domain.Sale{
 			CreatedAt:      now,
 			TotalAmount:    total,
@@ -147,6 +152,9 @@ func (s *SaleService) Create(ctx context.Context, input inbound.CreateSaleInput)
 				return err
 			}
 		}
+		if err := recomputeClientDebt(ctx, repos, input.ClientID); err != nil {
+			return err
+		}
 		result, err = repos.Sales.Get(ctx, created.ID)
 		return err
 	})
@@ -165,26 +173,51 @@ func (s *SaleService) Update(ctx context.Context, id int64, input inbound.Update
 	}
 
 	var result *domain.Sale
-	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
+	err := withinTxRetry(ctx, s.unitOfWork, func(ctx context.Context, repos outbound.TxRepos) error {
+		current, err := repos.Sales.Get(ctx, id)
+		if err != nil {
+			return referenceError(err, "Sale", id)
+		}
+		oldClientID := current.ClientID
+		newClientID := input.ClientID.Value
+
+		ids := make([]int64, 0, 2)
+		if oldClientID != nil {
+			ids = append(ids, *oldClientID)
+		}
+		if newClientID != nil {
+			ids = append(ids, *newClientID)
+		}
+		for _, clientID := range sortedIDs(ids) {
+			if err := lockClient(ctx, repos, clientID); err != nil {
+				return referenceError(err, "Client", clientID)
+			}
+		}
+
 		sale, err := repos.Sales.Lock(ctx, id)
 		if err != nil {
 			return referenceError(err, "Sale", id)
 		}
-		if input.ClientID.Set {
-			if input.ClientID.Value == nil {
-				sale.ClientID = nil
-			} else {
-				if _, err := repos.Clients.Get(ctx, *input.ClientID.Value); err != nil {
-					return referenceError(err, "Client", *input.ClientID.Value)
-				}
-				sale.ClientID = input.ClientID.Value
-			}
+		if !sameClientID(oldClientID, sale.ClientID) {
+			return errClientChanged
 		}
+		if newClientID == nil && sale.DebtAmount.IsPositive() {
+			return requiredClientForDebt()
+		}
+		sale.ClientID = newClientID
 		sale.PaymentStatus = derivePaymentStatus(sale.TotalAmount, sale.AmountPaid)
 		sale.DebtAmount = debtAmount(sale.TotalAmount, sale.AmountPaid)
 		now := nowUTC()
 		sale.UpdatedAt = &now
 		if err := repos.Sales.Update(ctx, id, sale); err != nil {
+			return err
+		}
+		if !sameClientID(oldClientID, newClientID) {
+			if err := recomputeClientDebt(ctx, repos, oldClientID); err != nil {
+				return err
+			}
+		}
+		if err := recomputeClientDebt(ctx, repos, newClientID); err != nil {
 			return err
 		}
 		result, err = repos.Sales.Get(ctx, id)
@@ -198,10 +231,23 @@ func (s *SaleService) Update(ctx context.Context, id int64, input inbound.Update
 
 func (s *SaleService) Delete(ctx context.Context, id int64) (*domain.Sale, error) {
 	var result *domain.Sale
-	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
+	err := withinTxRetry(ctx, s.unitOfWork, func(ctx context.Context, repos outbound.TxRepos) error {
+		current, err := repos.Sales.Get(ctx, id)
+		if err != nil {
+			return referenceError(err, "Sale", id)
+		}
+		clientID := current.ClientID
+		if clientID != nil {
+			if err := lockClient(ctx, repos, *clientID); err != nil {
+				return referenceError(err, "Client", *clientID)
+			}
+		}
 		sale, err := repos.Sales.Lock(ctx, id)
 		if err != nil {
 			return referenceError(err, "Sale", id)
+		}
+		if !sameClientID(clientID, sale.ClientID) {
+			return errClientChanged
 		}
 		items, err := repos.Sales.ListAllItems(ctx, id)
 		if err != nil {
@@ -223,6 +269,9 @@ func (s *SaleService) Delete(ctx context.Context, id int64) (*domain.Sale, error
 			return err
 		}
 		if err := repos.Sales.Delete(ctx, id); err != nil {
+			return err
+		}
+		if err := recomputeClientDebt(ctx, repos, clientID); err != nil {
 			return err
 		}
 		result = sale
@@ -251,9 +300,9 @@ func (s *SaleService) AddItem(ctx context.Context, saleID int64, input inbound.A
 	}
 
 	var result *domain.Sale
-	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
-		if _, err := repos.Sales.Lock(ctx, saleID); err != nil {
-			return referenceError(err, "Sale", saleID)
+	err := withinTxRetry(ctx, s.unitOfWork, func(ctx context.Context, repos outbound.TxRepos) error {
+		if _, err := lockSaleAndClient(ctx, repos, saleID); err != nil {
+			return err
 		}
 		product, err := repos.Products.Get(ctx, input.ProductID)
 		if err != nil {
@@ -323,9 +372,9 @@ func (s *SaleService) UpdateItem(ctx context.Context, saleID, itemID int64, inpu
 	}
 
 	var result *domain.Sale
-	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
-		if _, err := repos.Sales.Lock(ctx, saleID); err != nil {
-			return referenceError(err, "Sale", saleID)
+	err := withinTxRetry(ctx, s.unitOfWork, func(ctx context.Context, repos outbound.TxRepos) error {
+		if _, err := lockSaleAndClient(ctx, repos, saleID); err != nil {
+			return err
 		}
 		item, err := repos.Sales.GetItem(ctx, saleID, itemID)
 		if err != nil {
@@ -385,9 +434,9 @@ func (s *SaleService) UpdateItem(ctx context.Context, saleID, itemID int64, inpu
 
 func (s *SaleService) DeleteItem(ctx context.Context, saleID, itemID int64) (*domain.Sale, error) {
 	var result *domain.Sale
-	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
-		if _, err := repos.Sales.Lock(ctx, saleID); err != nil {
-			return referenceError(err, "Sale", saleID)
+	err := withinTxRetry(ctx, s.unitOfWork, func(ctx context.Context, repos outbound.TxRepos) error {
+		if _, err := lockSaleAndClient(ctx, repos, saleID); err != nil {
+			return err
 		}
 		item, err := repos.Sales.GetItem(ctx, saleID, itemID)
 		if err != nil {
@@ -432,10 +481,10 @@ func (s *SaleService) CreatePayment(ctx context.Context, saleID int64, input inb
 	}
 
 	var result *domain.Sale
-	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
-		sale, err := repos.Sales.Lock(ctx, saleID)
+	err := withinTxRetry(ctx, s.unitOfWork, func(ctx context.Context, repos outbound.TxRepos) error {
+		sale, err := lockSaleAndClient(ctx, repos, saleID)
 		if err != nil {
-			return referenceError(err, "Sale", saleID)
+			return err
 		}
 		remaining := debtAmount(sale.TotalAmount, sale.AmountPaid)
 		if remaining.IsZero() {
@@ -457,6 +506,9 @@ func (s *SaleService) CreatePayment(ctx context.Context, saleID int64, input inb
 		if err := applyPaymentTotals(ctx, repos, sale, now); err != nil {
 			return err
 		}
+		if err := recomputeClientDebt(ctx, repos, sale.ClientID); err != nil {
+			return err
+		}
 		result, err = repos.Sales.Get(ctx, saleID)
 		return err
 	})
@@ -468,10 +520,10 @@ func (s *SaleService) CreatePayment(ctx context.Context, saleID int64, input inb
 
 func (s *SaleService) DeletePayment(ctx context.Context, saleID, paymentID int64) (*domain.Sale, error) {
 	var result *domain.Sale
-	err := s.unitOfWork.WithinTx(ctx, func(ctx context.Context, repos outbound.TxRepos) error {
-		sale, err := repos.Sales.Lock(ctx, saleID)
+	err := withinTxRetry(ctx, s.unitOfWork, func(ctx context.Context, repos outbound.TxRepos) error {
+		sale, err := lockSaleAndClient(ctx, repos, saleID)
 		if err != nil {
-			return referenceError(err, "Sale", saleID)
+			return err
 		}
 		if _, err := repos.Sales.GetPayment(ctx, saleID, paymentID); err != nil {
 			return referenceError(err, "Sale payment", paymentID)
@@ -482,6 +534,9 @@ func (s *SaleService) DeletePayment(ctx context.Context, saleID, paymentID int64
 		if err := applyPaymentTotals(ctx, repos, sale, nowUTC()); err != nil {
 			return err
 		}
+		if err := recomputeClientDebt(ctx, repos, sale.ClientID); err != nil {
+			return err
+		}
 		result, err = repos.Sales.Get(ctx, saleID)
 		return err
 	})
@@ -489,6 +544,116 @@ func (s *SaleService) DeletePayment(ctx context.Context, saleID, paymentID int64
 		return nil, err
 	}
 	return result, nil
+}
+
+func (s *SaleService) CreateClientPayment(ctx context.Context, input inbound.CreateClientPaymentInput) (*inbound.ClientPaymentResult, error) {
+	if !domain.ValidPaymentMethod(input.PaymentMethod) {
+		return nil, fmt.Errorf("%w: invalid payment_method", domain.ErrValidation)
+	}
+	amount := input.Amount
+	if err := validateClientPaymentAmount(amount); err != nil {
+		return nil, err
+	}
+
+	var result *inbound.ClientPaymentResult
+	err := withinTxRetry(ctx, s.unitOfWork, func(ctx context.Context, repos outbound.TxRepos) error {
+		if _, err := lockClientEntity(ctx, repos, input.ClientID); err != nil {
+			return referenceError(err, "Client", input.ClientID)
+		}
+
+		derived, err := repos.ClientDebt.DebtSum(ctx, input.ClientID)
+		if err != nil {
+			return err
+		}
+		if !derived.IsPositive() {
+			return fmt.Errorf("%w: client has no outstanding debt", domain.ErrValidation)
+		}
+		if amount.GreaterThan(derived) {
+			return fmt.Errorf("%w: amount cannot exceed client debt", domain.ErrValidation)
+		}
+
+		// Read at most one row past the cap; the plan rejects before any write.
+		sales, err := repos.ClientDebt.DebtorSales(ctx, input.ClientID, maxClientPaymentSales+1)
+		if err != nil {
+			return err
+		}
+		remaining := amount
+		plan := make([]inbound.ClientPaymentAllocation, 0, len(sales))
+		for _, debtor := range sales {
+			if !remaining.IsPositive() {
+				break
+			}
+			saleDebt := debtAmount(debtor.TotalAmount, debtor.AmountPaid)
+			if !saleDebt.IsPositive() {
+				continue
+			}
+			allocated := decimal.Min(remaining, saleDebt)
+			plan = append(plan, inbound.ClientPaymentAllocation{SaleID: debtor.ID, Amount: allocated})
+			remaining = remaining.Sub(allocated)
+		}
+		if len(plan) > maxClientPaymentSales {
+			return fmt.Errorf("%w: payment affects more than %d open sales", domain.ErrValidation, maxClientPaymentSales)
+		}
+		if remaining.IsPositive() {
+			return fmt.Errorf("%w: amount cannot exceed client debt", domain.ErrValidation)
+		}
+
+		now := nowUTC()
+		for _, planned := range plan {
+			sale, err := repos.Sales.Lock(ctx, planned.SaleID)
+			if err != nil {
+				return referenceError(err, "Sale", planned.SaleID)
+			}
+			saleDebt := debtAmount(sale.TotalAmount, sale.AmountPaid)
+			if !saleDebt.IsPositive() || saleDebt.LessThan(planned.Amount) {
+				return errClientChanged
+			}
+			if _, err := repos.Sales.CreatePayment(ctx, &domain.SalePayment{
+				SaleID:        sale.ID,
+				Amount:        planned.Amount,
+				PaymentMethod: &input.PaymentMethod,
+				CreatedAt:     now,
+				CreatedByID:   &input.CreatedByID,
+			}); err != nil {
+				return err
+			}
+			if err := applyPaymentTotals(ctx, repos, sale, now); err != nil {
+				return err
+			}
+		}
+
+		if err := recomputeClientDebt(ctx, repos, &input.ClientID); err != nil {
+			return err
+		}
+		updated, err := repos.Clients.Get(ctx, input.ClientID)
+		if err != nil {
+			return err
+		}
+		result = &inbound.ClientPaymentResult{
+			ClientID:      input.ClientID,
+			Amount:        amount,
+			RemainingDebt: updated.DebtAmount,
+			Allocations:   plan,
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func validateClientPaymentAmount(amount decimal.Decimal) error {
+	if amount.Exponent() < -2 {
+		return fmt.Errorf("%w: amount must have at most two decimals", domain.ErrValidation)
+	}
+	if !amount.IsPositive() {
+		return fmt.Errorf("%w: amount must be greater than zero", domain.ErrValidation)
+	}
+	if amount.GreaterThan(maxClientPaymentAmount) {
+		return fmt.Errorf("%w: amount exceeds the maximum allowed value", domain.ErrValidation)
+	}
+	return nil
 }
 
 func applyPaymentTotals(ctx context.Context, repos outbound.TxRepos, sale *domain.Sale, now time.Time) error {
@@ -521,9 +686,15 @@ func (s *SaleService) recalculate(ctx context.Context, repos outbound.TxRepos, s
 		sale.DeliveryStatus = deriveDeliveryStatus(items)
 	}
 	sale.DebtAmount = debtAmount(sale.TotalAmount, sale.AmountPaid)
+	if sale.ClientID == nil && sale.DebtAmount.IsPositive() {
+		return nil, requiredClientForDebt()
+	}
 	now := nowUTC()
 	sale.UpdatedAt = &now
 	if err := repos.Sales.Update(ctx, saleID, sale); err != nil {
+		return nil, err
+	}
+	if err := recomputeClientDebt(ctx, repos, sale.ClientID); err != nil {
 		return nil, err
 	}
 	return repos.Sales.Get(ctx, saleID)
@@ -597,6 +768,85 @@ func referenceError(err error, entity string, id int64) error {
 		return &domain.NotFoundError{Entity: entity, ID: id}
 	}
 	return err
+}
+
+var (
+	errClientChanged     = errors.New("sale client changed during transaction")
+	errMissingClientDebt = errors.New("transaction repositories missing client debt store")
+)
+
+const (
+	saleTxAttempts        = 3
+	maxClientPaymentSales = 1000
+)
+
+var maxClientPaymentAmount = decimal.RequireFromString(domain.MaxMoneyAmount)
+
+func withinTxRetry(ctx context.Context, unitOfWork outbound.UnitOfWork, fn func(context.Context, outbound.TxRepos) error) error {
+	var err error
+	for attempt := 0; attempt < saleTxAttempts; attempt++ {
+		err = unitOfWork.WithinTx(ctx, fn)
+		if !errors.Is(err, errClientChanged) {
+			return err
+		}
+	}
+	return err
+}
+
+func sameClientID(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+func lockClient(ctx context.Context, repos outbound.TxRepos, id int64) error {
+	_, err := lockClientEntity(ctx, repos, id)
+	return err
+}
+
+func lockClientEntity(ctx context.Context, repos outbound.TxRepos, id int64) (*domain.Client, error) {
+	if repos.ClientDebt == nil {
+		return nil, errMissingClientDebt
+	}
+	return repos.ClientDebt.Lock(ctx, id)
+}
+
+// lockSaleAndClient keeps the client -> sale lock order. The non-locking read
+// finds the client before the sale row is locked; if a concurrent reassignment
+// changed it, the transaction retries with the new client.
+func lockSaleAndClient(ctx context.Context, repos outbound.TxRepos, saleID int64) (*domain.Sale, error) {
+	current, err := repos.Sales.Get(ctx, saleID)
+	if err != nil {
+		return nil, referenceError(err, "Sale", saleID)
+	}
+	if current.ClientID != nil {
+		if err := lockClient(ctx, repos, *current.ClientID); err != nil {
+			return nil, referenceError(err, "Client", *current.ClientID)
+		}
+	}
+	sale, err := repos.Sales.Lock(ctx, saleID)
+	if err != nil {
+		return nil, referenceError(err, "Sale", saleID)
+	}
+	if !sameClientID(current.ClientID, sale.ClientID) {
+		return nil, errClientChanged
+	}
+	return sale, nil
+}
+
+func recomputeClientDebt(ctx context.Context, repos outbound.TxRepos, clientID *int64) error {
+	if clientID == nil {
+		return nil
+	}
+	if repos.ClientDebt == nil {
+		return errMissingClientDebt
+	}
+	return repos.ClientDebt.SetClientDebt(ctx, *clientID)
+}
+
+func requiredClientForDebt() error {
+	return fmt.Errorf("%w: client_id is required when the sale has an outstanding balance", domain.ErrValidation)
 }
 
 func stockError(err error, sku string, available int64, requested int) error {

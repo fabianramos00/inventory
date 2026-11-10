@@ -379,3 +379,60 @@ legacy behaviors must be updated. Deletion is unaudited, so reconciliation
 relies on the sale row and backups. The sale row is locked during payment and
 amount-affecting mutations so the cached total cannot be overwritten by a
 stale item recalculation.
+
+## ADR-0023 — Client debt is a transactional cache
+
+**Status:** Accepted
+
+**Context:** Staff need each client's outstanding balance without loading every
+sale. The source of truth remains `sales` plus `sale_payments`; computing
+`SUM(max(total_amount - amount_paid, 0))` on every list/detail read is
+O(rows-per-client). Client-level payments must also allocate across several
+sales without overpaying or partially writing.
+
+**Decision:**
+
+- Add `clients.debt_amount` for O(1) reads: PostgreSQL
+  `numeric(12,2) NOT NULL DEFAULT 0` with a non-negative `CHECK`; SQLite
+  integer cents with a non-negative range `CHECK`. Migration `00008` adds the
+  column and backfills it from `sales`. No new index: the recompute is served
+  by the existing `ix_sales_client_id`.
+- Recompute the affected client from source inside the same transaction after
+  every debt-affecting write: sale create, sale delete, item/total
+  recalculation, client reassignment (old and new client), per-sale payment
+  create/delete, and client batch payment. Never use incremental `+=`.
+  `SetClientDebt` updates only `debt_amount`, never `updated_at`.
+- A `debt_amount` request field is never accepted; the value is server-derived.
+  Overpaid sales clamp to `0`, so client debt is non-negative, and anonymous
+  sales are excluded.
+- Enforce the sale invariant: `amount_paid < total_amount` requires a client
+  on create, clearing the client on a debt sale is rejected, and item/total
+  mutations that would leave debt on an anonymous sale are rejected. Fully
+  paid anonymous sales remain valid.
+- Add `POST /api/v1/sales/clients/{id}/payments`. One method and the
+  authenticated user apply to the whole batch. Under one transaction, lock the
+  client, validate the amount against the in-transaction derived
+  `SUM(max(total_amount - amount_paid, 0))` (never the cache), then allocate
+  `min(remaining, sale_debt)` over the client's debtor sales ordered
+  `created_at ASC, id ASC`, inserting one `sale_payments` row per affected
+  sale, recomputing each sale, and recomputing the client cache once. The
+  amount must be a plain JSON number with at most two decimals inside
+  `(0, 9999999999.99]`; exponents, strings, NaN/Inf, and rounding are rejected
+  at the HTTP boundary with `422`. A batch that would touch more than 1,000
+  open sales is `422` before any write. The response reports `remaining_debt`
+  and the allocations.
+- Lock order is client row first, then sale row(s); reassignment locks both
+  clients in ascending id order, then the sale. Per-sale payments adopted the
+  same order because they now update the client cache. Item/payment paths read
+  the sale's client without a lock, lock the client, lock the sale, and retry
+  the transaction if a concurrent reassignment changed the client.
+
+**Consequences:** Client debt reads are O(1) at the cost of maintaining a cache
+on every debt-affecting path; a missed path drifts silently, so integration
+coverage must exercise each one and the reconciliation query is the release
+gate. Legacy anonymous debt is not representable and the audit must confirm
+none remains. The oldest-first batch allocation creates one ledger row per
+sale, so a batch is visible in each sale's payment history; v1 has no batch
+history table, idempotency key, refund, or payment editing. The global
+client-then-sale lock order prevents lost cache updates, overpayment, and
+deadlocks.

@@ -150,6 +150,9 @@ is both safer and compatible with the UI.
 - Go: `shopspring/decimal`.
 - JSON: number with up to two decimals.
 - Values with more than two decimals round half away from zero to two decimals; PostgreSQL `NUMERIC(12,2)` stores the rounded value.
+- Client-level payments are stricter: they reject more than two decimals,
+  exponent form, strings, NaN/Inf, and values above `9999999999.99` instead of
+  rounding. See [Client payments](#client-payments).
 
 ### Dates and times
 
@@ -220,6 +223,7 @@ is `422`. Product `price` and `cost` round half away from zero to two decimals.
 | GET | `/sales/clients/{id}` | |
 | PUT | `/sales/clients/{id}` | Partial |
 | DELETE | `/sales/clients/{id}` | |
+| POST | `/sales/clients/{id}/payments` | `amount`, `payment_method`; allocates oldest sale first |
 | GET | `/sales` | `skip`, `limit`, `user_id`, `client_id`, `no_client`, `start_date`, `end_date`, `payment_status`, `delivery_status`, `payment_method` |
 | POST | `/sales` | `payment_method?`, `amount_paid`, `client_id?`, `items[]` |
 | GET | `/sales/stats` | `unpaid_count`, `undelivered_count`, `total_amount_sum`, `amount_paid_sum` |
@@ -245,10 +249,16 @@ Item shape:
   "identity_card": "1020304050",
   "email": "ana@example.com",
   "phone": "3001234567",
+  "debt_amount": 150.0,
   "created_at": "2026-10-24T15:04:05Z",
   "updated_at": null
 }
 ```
+
+- `debt_amount` is the server-maintained cache of
+  `SUM(max(sale.total_amount - sale.amount_paid, 0))` over the client's sales.
+  It is non-negative and is never supplied by the client. Anonymous sales are
+  excluded.
 
 - `GET /sales/clients` returns the standard `{items, has_next, skip,
   limit}` shape, ordered `id DESC`, with `limit` defaulting to 100 and capped
@@ -299,6 +309,7 @@ Sale response:
     "identity_card": "1020304050",
     "email": "carlos@example.com",
     "phone": "3001234567",
+    "debt_amount": 0,
     "created_at": "2026-10-24T15:04:05Z",
     "updated_at": null
   }
@@ -347,15 +358,21 @@ Creating a sale requires at least one item. One item per product per sale.
 `unit_price` defaults to the product price. The server calculates subtotals,
 total, payment status, and delivery status.
 
-`amount_paid` is the sum of the sale's payment rows:
+`amount_paid` is the sum of the sale's payment rows.
 
 - `amount_paid > 0` requires `payment_method` and creates one initial payment
   with the authenticated user and the current UTC time.
 - `amount_paid = 0` creates no payment and rejects a supplied
   `payment_method`.
 - `amount_paid > total_amount` is `422`.
+- A sale with `amount_paid < total_amount` requires `client_id`; an anonymous
+  sale with an outstanding balance is `422`. Fully paid anonymous sales remain
+  valid.
 - `PUT /sales/{id}` accepts only `client_id`; `amount_paid` and
-  `payment_method` are rejected as unknown fields (`422`).
+  `payment_method` are rejected as unknown fields (`422`). Clearing
+  `client_id` on a sale that still carries debt is `422`.
+- Item add/update/delete mutations that would leave debt on an anonymous sale
+  are `422` and roll back.
 - `GET /sales?payment_method=` matches sales with at least one payment using
   that method.
 
@@ -399,6 +416,53 @@ Deliberate divergence from the legacy API: overpayment is now rejected on
 sale creation and new payments, and `amount_paid`/`payment_method` are no
 longer editable on `PUT /sales/{id}`. See
 [DECISIONS.md](DECISIONS.md#adr-0022--sale-payments-are-a-hard-delete-ledger).
+
+#### Client payments
+
+`POST /api/v1/sales/clients/{id}/payments`
+
+Request:
+
+```json
+{ "amount": 150.0, "payment_method": "cash" }
+```
+
+Response `200`:
+
+```json
+{
+  "client_id": 12,
+  "amount": 150.0,
+  "remaining_debt": 350.0,
+  "allocations": [
+    { "sale_id": 41, "amount": 100.0 },
+    { "sale_id": 44, "amount": 50.0 }
+  ]
+}
+```
+
+- `amount` is a plain JSON number with at most two decimals; exponent form,
+  strings, NaN/Inf, more than two decimals, zero/negative values, and values
+  above `9999999999.99` are `422`. It must not exceed the client's outstanding
+  debt derived from the sale ledger inside the transaction; the cached
+  `debt_amount` is never the authority.
+- `payment_method` is `cash`, `credit`, or `debit`; one method applies to every
+  allocation.
+- The payment is allocated oldest first (`created_at ASC, id ASC`) across the
+  client's sales that still carry debt. One `sale_payments` row is inserted per
+  affected sale with the authenticated user, each sale is recomputed from its
+  ledger, and the client cache is recomputed once. Everything runs in one
+  transaction with no partial writes.
+- A batch that would affect more than 1,000 open sales is `422` with no writes.
+- Missing client: `404 Client not found`. No debt, zero/negative amount,
+  amount above debt, more than two decimals, invalid/exponent/NaN/Inf amount,
+  amount above the money ceiling, more than 1,000 affected sales, invalid
+  method, or a malformed body: `422 VALIDATION_ERROR`. Missing or invalid
+  token: `401`.
+- Per-sale payment remains `POST /sales/{id}/payments`; this endpoint is the
+  only batch form and has no batch history table or idempotency key in v1.
+
+See [DECISIONS.md](DECISIONS.md#adr-0023--client-debt-is-a-transactional-cache).
 
 ### Supply chain
 
@@ -619,9 +683,10 @@ Time, empty data, and status details:
 
 ## Endpoint count
 
-67 legacy endpoints plus three sale-payment endpoints and `GET /healthz`. The
-parity matrix in [TESTING.md](TESTING.md) tracks each one; the payment ledger
-is an approved additive divergence.
+67 legacy endpoints plus three sale-payment endpoints, one client-payment
+endpoint, and `GET /healthz`. The parity matrix in [TESTING.md](TESTING.md)
+tracks each one; the payment ledger and client debt cache are approved additive
+divergences.
 
 ## Parity rules
 

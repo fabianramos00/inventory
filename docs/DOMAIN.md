@@ -42,7 +42,7 @@ number.
 
 | Entity | Key fields | Rules |
 |---|---|---|
-| `Client` | `name`, `identity_card` unique optional, `email`, `phone` | A sale may have no client |
+| `Client` | `name`, `identity_card` unique optional, `email`, `phone`, `debt_amount` | A sale may have no client; a sale carrying debt requires one. `debt_amount` is a derived, non-negative cache |
 | `Sale` | `total_amount`, `amount_paid`, `payment_status`, `delivery_status`, `client_id`, `created_by_id` | Totals and `amount_paid` are server-calculated; `amount_paid` is the sum of its payment rows |
 | `SaleItem` | `sale_id`, `product_id`, `quantity`, `delivered_quantity`, `unit_price`, `subtotal` | One row per product per sale |
 | `SalePayment` | `sale_id`, `amount`, `payment_method`, `created_at`, `created_by_id` | Append/delete ledger row; hard delete, no void state |
@@ -155,6 +155,21 @@ Several legacy defaults are Python-side only and are absent from PostgreSQL:
 12. Money arithmetic is decimal. Never use `float64` for sums, subtotals, or
     balance calculations.
 13. Stock is an integer. Do not introduce fractional stock.
+14. Client debt is derived from sales:
+    `client.debt_amount = SUM(max(sale.total_amount - sale.amount_paid, 0))`
+    over that client's sales. Anonymous sales are excluded, overpaid sales
+    contribute `0`, and the cache is never negative. `clients.debt_amount` is a
+    cache recomputed from source inside the same transaction as every
+    debt-affecting write; never update it incrementally.
+15. A sale with `amount_paid < total_amount` requires a client. Creating such
+    a sale without one, clearing the client from it, or an item/total mutation
+    that would leave debt on an anonymous sale is rejected. Fully paid
+    anonymous sales remain valid.
+16. Client-level payments allocate across the client's debtor sales oldest
+    first (`created_at ASC, id ASC`), one payment row per affected sale, with a
+    single payment method and the authenticated user. The amount is validated
+    against the in-transaction ledger sum, and a batch affecting more than
+    1,000 open sales is rejected before writing.
 
 ## Stock rules
 

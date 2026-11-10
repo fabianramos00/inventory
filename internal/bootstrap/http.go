@@ -23,6 +23,7 @@ func NewHTTPHandler(cfg *config.Config, stores *Stores, logger *slog.Logger) htt
 		cfg.RefreshTokenTTL(),
 	)
 	userService := application.NewUserService(stores.Users, stores.RefreshTokens, passwords)
+	saleService := application.NewSaleService(stores.Sales, stores.UnitOfWork)
 	return httpapi.NewRouter(httpapi.Deps{
 		Auth:             authService,
 		Users:            userService,
@@ -32,7 +33,8 @@ func NewHTTPHandler(cfg *config.Config, stores *Stores, logger *slog.Logger) htt
 		MeasurementUnits: application.NewMeasurementUnitService(stores.MeasurementUnits),
 		Products:         application.NewProductService(stores.Products),
 		Clients:          application.NewClientService(stores.Clients),
-		Sales:            application.NewSaleService(stores.Sales, stores.UnitOfWork),
+		ClientPayments:   saleService,
+		Sales:            saleService,
 		Providers:        application.NewProviderService(stores.Providers),
 		SupplierCatalogs: application.NewSupplierCatalogService(stores.SupplierCatalogs),
 		PurchaseOrders:   application.NewPurchaseOrderService(stores.PurchaseOrders, stores.UnitOfWork),

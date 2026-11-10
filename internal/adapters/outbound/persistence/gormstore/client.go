@@ -2,6 +2,7 @@ package gormstore
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -27,22 +28,6 @@ func (clientModel) TableName() string {
 	return "clients"
 }
 
-func (m clientModel) toDomain() *domain.Client {
-	client := &domain.Client{
-		ID:           m.ID,
-		Name:         m.Name,
-		IdentityCard: cloneString(m.IdentityCard),
-		Email:        cloneString(m.Email),
-		Phone:        cloneString(m.Phone),
-		CreatedAt:    m.CreatedAt.Time(),
-	}
-	if m.UpdatedAt != nil {
-		updated := m.UpdatedAt.Time()
-		client.UpdatedAt = &updated
-	}
-	return client
-}
-
 func clientModelFromDomain(client *domain.Client) clientModel {
 	return clientModel{
 		CreatedAt:    Timestamp(client.CreatedAt),
@@ -62,59 +47,135 @@ func clientTimestamp(value *time.Time) *Timestamp {
 	return &converted
 }
 
+func clientSelectSQL(sqlite bool) string {
+	return `SELECT id, created_at, updated_at, name, identity_card, email, phone, ` +
+		moneySQL(sqlite, "debt_amount") + ` FROM clients`
+}
+
+func scanClient(row rowScanner, sqlite bool) (*domain.Client, error) {
+	var (
+		id           int64
+		createdAt    Timestamp
+		updatedAt    nullableTimestamp
+		name         string
+		identityCard *string
+		email        *string
+		phone        *string
+		debtRaw      any
+	)
+	err := row.Scan(&id, &createdAt, &updatedAt, &name, &identityCard, &email, &phone, &debtRaw)
+	if err != nil {
+		return nil, err
+	}
+	debt, err := moneyFromDB(sqlite, debtRaw)
+	if err != nil {
+		return nil, fmt.Errorf("decode client debt: %w", err)
+	}
+	return &domain.Client{
+		ID:           id,
+		Name:         name,
+		IdentityCard: identityCard,
+		Email:        email,
+		Phone:        phone,
+		DebtAmount:   debt,
+		CreatedAt:    createdAt.Time(),
+		UpdatedAt:    updatedAt.timePtr(),
+	}, nil
+}
+
 type clientStore struct {
-	db *gorm.DB
+	db     *gorm.DB
+	sqlite bool
 }
 
 var _ outbound.ClientRepository = (*clientStore)(nil)
 
 func NewClientStore(db *gorm.DB) outbound.ClientRepository {
-	return &clientStore{db: db}
+	return &clientStore{db: db, sqlite: db.Dialector.Name() == "sqlite"}
 }
 
 func (s *clientStore) Get(ctx context.Context, id int64) (*domain.Client, error) {
-	var record clientModel
-	err := s.db.WithContext(ctx).Where("id = ?", id).Take(&record).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	row := s.db.WithContext(ctx).Raw(clientSelectSQL(s.sqlite)+" WHERE id = ?", id).Row()
+	client, err := scanClient(row, s.sqlite)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get client: %w", err)
 	}
-	return record.toDomain(), nil
+	return client, nil
 }
 
 func (s *clientStore) List(ctx context.Context, skip, limit int, search string) ([]*domain.Client, bool, error) {
 	search = strings.TrimSpace(search)
-	var records []clientModel
 
-	if search != "" && s.db.Dialector.Name() == "sqlite" {
+	if search != "" && s.sqlite {
 		// ponytail: SQLite search scans the whole table so Go can case-fold Unicode; add FTS5 when the client table makes it measurable.
-		if err := s.db.WithContext(ctx).Order("id DESC").Find(&records).Error; err != nil {
+		rows, err := s.db.WithContext(ctx).Raw(clientSelectSQL(true) + " ORDER BY id DESC").Rows()
+		if err != nil {
 			return nil, false, storeError(s.db, "list clients", err)
 		}
+		items, scanErr := scanClients(rows, true)
+		if scanErr != nil {
+			return nil, false, storeError(s.db, "list clients", scanErr)
+		}
 		needle := strings.ToLower(search)
-		items, hasNext := filterPage(records, func(record clientModel) bool {
-			return clientMatches(record, needle)
-		}, skip, limit, clientModel.toDomain)
-		return items, hasNext, nil
+		matched := items[:0]
+		for _, item := range items {
+			if clientMatches(item, needle) {
+				matched = append(matched, item)
+			}
+		}
+		if skip >= len(matched) {
+			matched = nil
+		} else {
+			matched = matched[skip:]
+		}
+		hasNext := len(matched) > limit
+		if hasNext {
+			matched = matched[:limit]
+		}
+		return matched, hasNext, nil
 	}
 
-	query := s.db.WithContext(ctx).Model(new(clientModel))
+	query := clientSelectSQL(s.sqlite)
+	args := make([]any, 0, 6)
 	if search != "" {
-		query = query.Where(
-			`strpos(lower(name), lower(?)) > 0
+		query += ` WHERE strpos(lower(name), lower(?)) > 0
 			OR strpos(lower(COALESCE(identity_card, '')), lower(?)) > 0
 			OR strpos(lower(COALESCE(email, '')), lower(?)) > 0
-			OR strpos(lower(COALESCE(phone, '')), lower(?)) > 0`,
-			search, search, search, search,
-		)
+			OR strpos(lower(COALESCE(phone, '')), lower(?)) > 0`
+		args = append(args, search, search, search, search)
 	}
-	if err := query.Order("id DESC").Offset(skip).Limit(limit + 1).Find(&records).Error; err != nil {
+	query += " ORDER BY id DESC LIMIT ? OFFSET ?"
+	args = append(args, limit+1, skip)
+
+	rows, err := s.db.WithContext(ctx).Raw(query, args...).Rows()
+	if err != nil {
 		return nil, false, storeError(s.db, "list clients", err)
 	}
-	items, hasNext := filterPage(records, nil, 0, limit, clientModel.toDomain)
+	items, err := scanClients(rows, s.sqlite)
+	if err != nil {
+		return nil, false, storeError(s.db, "list clients", err)
+	}
+	hasNext := len(items) > limit
+	if hasNext {
+		items = items[:limit]
+	}
 	return items, hasNext, nil
+}
+
+func scanClients(rows *sql.Rows, sqlite bool) ([]*domain.Client, error) {
+	defer rows.Close()
+	items := make([]*domain.Client, 0)
+	for rows.Next() {
+		client, err := scanClient(rows, sqlite)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, client)
+	}
+	return items, rows.Err()
 }
 
 func (s *clientStore) Create(ctx context.Context, client *domain.Client) (*domain.Client, error) {
@@ -122,7 +183,7 @@ func (s *clientStore) Create(ctx context.Context, client *domain.Client) (*domai
 	if err := s.db.WithContext(ctx).Create(&record).Error; err != nil {
 		return nil, storeError(s.db, "create client", err)
 	}
-	return record.toDomain(), nil
+	return s.Get(ctx, record.ID)
 }
 
 func (s *clientStore) Update(ctx context.Context, id int64, client *domain.Client) error {
@@ -145,21 +206,21 @@ func (s *clientStore) Update(ctx context.Context, id int64, client *domain.Clien
 }
 
 func (s *clientStore) Delete(ctx context.Context, id int64) (*domain.Client, error) {
-	var record clientModel
-	err := s.db.WithContext(ctx).Where("id = ?", id).Take(&record).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	client, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	result := s.db.WithContext(ctx).Exec("DELETE FROM clients WHERE id = ?", id)
+	if result.Error != nil {
+		return nil, storeError(s.db, "delete client", result.Error)
+	}
+	if result.RowsAffected == 0 {
 		return nil, domain.ErrNotFound
 	}
-	if err != nil {
-		return nil, fmt.Errorf("load client for delete: %w", err)
-	}
-	if err := s.db.WithContext(ctx).Delete(&record).Error; err != nil {
-		return nil, storeError(s.db, "delete client", err)
-	}
-	return record.toDomain(), nil
+	return client, nil
 }
 
-func clientMatches(record clientModel, needle string) bool {
+func clientMatches(record *domain.Client, needle string) bool {
 	fields := []string{record.Name}
 	for _, value := range []*string{record.IdentityCard, record.Email, record.Phone} {
 		if value != nil {

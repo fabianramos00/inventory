@@ -17,6 +17,7 @@ type Deps struct {
 	MeasurementUnits inbound.CatalogUseCase[domain.MeasurementUnit, inbound.CreateMeasurementUnitInput, inbound.UpdateMeasurementUnitInput]
 	Products         inbound.ProductUseCase
 	Clients          inbound.ClientUseCase
+	ClientPayments   inbound.ClientPaymentUseCase
 	Sales            inbound.SaleUseCase
 	Providers        inbound.ProviderUseCase
 	SupplierCatalogs inbound.SupplierCatalogUseCase
@@ -43,6 +44,7 @@ func NewRouter(deps Deps) http.Handler {
 	measurementUnitsHandler := newMeasurementUnitHandler(deps.MeasurementUnits, logger)
 	productsHandler := NewProductHandler(deps.Products, logger)
 	clientsHandler := NewClientHandler(deps.Clients, logger)
+	clientPaymentsHandler := NewClientPaymentHandler(deps.ClientPayments, logger)
 	salesHandler := NewSaleHandler(deps.Sales, logger)
 	providersHandler := NewProviderHandler(deps.Providers, logger)
 	supplierCatalogsHandler := NewSupplierCatalogHandler(deps.SupplierCatalogs, logger)
@@ -76,6 +78,7 @@ func NewRouter(deps Deps) http.Handler {
 
 	mux.HandleFunc("GET /api/v1/sales/clients", clientsHandler.List)
 	mux.HandleFunc("POST /api/v1/sales/clients", clientsHandler.Create)
+	mux.HandleFunc("POST /api/v1/sales/clients/{id}/payments", clientPaymentsHandler.Create)
 	mux.HandleFunc("GET /api/v1/sales/clients/{id}", clientsHandler.Get)
 	mux.HandleFunc("PUT /api/v1/sales/clients/{id}", clientsHandler.Update)
 	mux.HandleFunc("DELETE /api/v1/sales/clients/{id}", clientsHandler.Delete)

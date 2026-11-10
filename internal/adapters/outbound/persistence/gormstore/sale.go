@@ -659,12 +659,23 @@ func (s *saleStore) attachRelations(ctx context.Context, sales []*domain.Sale) e
 
 	clients := make(map[int64]*domain.Client, len(clientIDs))
 	if len(clientIDs) > 0 {
-		var records []clientModel
-		if err := s.db.WithContext(ctx).Where("id IN ?", clientIDs).Find(&records).Error; err != nil {
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(clientIDs)), ",")
+		args := make([]any, len(clientIDs))
+		for i, id := range clientIDs {
+			args[i] = id
+		}
+		rows, err := s.db.WithContext(ctx).Raw(
+			clientSelectSQL(s.sqlite)+" WHERE id IN ("+placeholders+")", args...,
+		).Rows()
+		if err != nil {
 			return fmt.Errorf("load sale clients: %w", err)
 		}
-		for i := range records {
-			clients[records[i].ID] = records[i].toDomain()
+		records, err := scanClients(rows, s.sqlite)
+		if err != nil {
+			return fmt.Errorf("load sale clients: %w", err)
+		}
+		for _, client := range records {
+			clients[client.ID] = client
 		}
 	}
 
