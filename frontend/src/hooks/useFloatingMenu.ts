@@ -107,7 +107,6 @@ export interface UseFloatingMenuOptions {
 }
 export interface FloatingMenu {
   panelProps: { style: CSSProperties; 'data-floating-menu': '' }
-  placement: 'down' | 'up'
 }
 
 interface FloatingState {
@@ -241,6 +240,5 @@ export function useFloatingMenu({
 
   return {
     panelProps: { style: panelStyle, 'data-floating-menu': '' },
-    placement: state?.placement.placement ?? 'down',
   }
 }
