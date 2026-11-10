@@ -127,6 +127,36 @@ they must offset themselves instead of assuming the top of the viewport:
   or non-sqlite. The visual overlap itself is covered by Playwright, where
   geometry and stacking are observable.
 
+### Inline notices
+
+Transient success confirmations use
+[`src/components/InlineNotice/InlineNotice.tsx`](../frontend/src/components/InlineNotice/InlineNotice.tsx)
+and its CSS Module. Do not add another toast or notification layer.
+
+- Props: `tone` (`success` | `error` | `info`), `onClose`, optional
+  `autoCloseMs`, and the message as `children`.
+- Success notices auto-dismiss after 5000 ms by default. Pass `autoCloseMs` to
+  override the window; `0` disables auto-dismiss.
+- Error notices never auto-dismiss; they remain until the user closes them.
+  `tone="error"` uses `role="alert"`; success and info use `role="status"`
+  with `aria-live="polite"`.
+- The close button is visible, keyboard reachable, named
+  `Cerrar notificación`, and has `:focus-visible` styling.
+- Hovering or focusing inside the notice pauses the timer. Leaving or blurring
+  restarts the full window. The timer is cleared on unmount and on manual
+  close, and it cannot fire after close.
+- Auto-dismiss never moves focus. If the close button has focus, the notice
+  stays until focus leaves.
+- Use it for completion feedback after a mutation (payments, create, update,
+  delete). Do not use it for permanent metadata, status badges, or form
+  validation errors.
+
+Current consumers: client payments on `/#/clients` and `/#/clients/:id`, sale
+payments and sale updates in `/#/sales/:id`, and create/update/delete
+confirmations for clients, products, providers, users, and sales. Product
+create/delete messages travel through router state and are consumed by the
+inventory list.
+
 ### Floating menus
 
 Every menu that can open near the bottom of a page is portaled to
@@ -230,7 +260,9 @@ change the payload, the validation or the derived `payment_status` badge.
 - The invalid controls are: no items → the product search
   (`Agrega al menos un producto a la venta.`), `delivered_quantity >
   quantity` → that item's `Cant. entregada`, amount above the total →
-  `Monto pagado`, amount above zero without a method → `Método de pago`.
+  `Monto pagado`, amount above zero without a method → `Método de pago`, and
+  `amount_paid < total` without a client → the `Cliente` selector
+  (`Una venta con saldo pendiente requiere un cliente.`).
 - The receipt total is a live region (`aria-live="polite"`), so a total
   change is announced.
 
@@ -255,7 +287,7 @@ change the payload, the validation or the derived `payment_status` badge.
   - `['sales', { page, ...filters, limit }]`, `['salesStats']`
   - `['sale', id]`, `['saleItems', id]`, `['salePayments', id]`
   - `['orders', ...]`, `['order', id]`, `['orderItems', id]`
-  - `['clients', ...]`, `['providers', ...]`, `['users', ...]`
+  - `['clients', ...]`, `['client', id]`, `['providers', ...]`, `['users', ...]`
   - `['dashboardSummary']`, `['dashboardTrend']`, `['dashboardTopProducts']`,
     `['dashboardOrderStatus']`, `['dashboardLowStock']`
 - Invalidate by prefix after writes. Forms call the API directly, then
@@ -267,28 +299,36 @@ change the payload, the validation or the derived `payment_status` badge.
   `contact_info`, `email`, or `phone`.
 - Sale create/delete and sale-item add/update/delete change stock. Updating a
   sale changes only client details; it does not change stock or payments.
+  Because client debt is derived from sales, every sale write also invalidates
+  `['clients']` (list prefix) and `['client']` (detail prefix) so the client
+  header cannot keep a stale `debt_amount` within `staleTime`.
   These mutations invalidate `['sales']`, `['salesStats']`, `['products']`,
   `['product']` (detail prefix), `['inventoryStats']`, `['dashboardSummary']`,
   `['dashboardTrend']`, `['dashboardTopProducts']`, and
   `['dashboardLowStock']`. Item mutations also invalidate `['sale', id]` and
-  `['saleItems', id]`. Clients changes invalidate `['clients']`.
+  `['saleItems', id]`. Client create/edit/delete invalidates `['clients']`; a
+  client edit also invalidates `['client', id]`. Client-level payments
+  invalidate `['clients']`, `['client', id]`, `['sales']`, `['salesStats']`,
+  the affected `['sale', id]`, `['saleItems', id]`, and
+  `['salePayments', id]` prefixes, plus the dashboard keys. See
+  [Client detail and client payments](#client-detail-and-client-payments).
 - The Sales `Usuario` filter reads `GET /users/options` through
   `getUserOptions`, which any authenticated user may call. The Users admin
   page keeps `GET /users`, which is superuser-only.
 - Sale payments use `GET /sales/{id}/payments?skip=0&limit=5` (cursor via
   `has_next`, newest first) and `POST`/`DELETE /sales/{id}/payments` returning
-  the updated sale. Payment writes invalidate `['sale', id]`,
-  `['salePayments', id]`, `['sales']`, `['salesStats']`, and the dashboard keys
-  through `invalidateSaleData`. The modal registers one payment and the history
-  card loads older pages with `Ver más`; deleting a payment asks for
-  confirmation and refreshes the same prefixes.
+  the updated sale. Payment writes invalidate the same sale, client, product,
+  inventory, and dashboard keys through `invalidateSaleData`. The modal
+  registers one payment and the history card loads older pages with `Ver más`;
+  deleting a payment asks for confirmation and refreshes the same prefixes.
 - The create-sale payload is `payment_method`, `amount_paid`, `client_id`,
   and `items[{ product_id, quantity, delivered_quantity, unit_price }]`. It
   does not send `payment_status`; the server derives it from `amount_paid`.
   The method field is always rendered and enabled; it is required only when
   `amount_paid > 0`, and the payload sends `payment_method: null` when
-  `amount_paid` is 0. The create form shows the derived status as a
-  read-only badge and does not offer a manual override.
+  `amount_paid` is 0. `client_id` is required when `amount_paid < total`; it
+  stays `null` only for fully paid anonymous sales. The create form shows the
+  derived status as a read-only badge and does not offer a manual override.
 - Sale detail hides `Pagar` when `debt_amount` is 0 or the sale is paid. The
   payment history renders date/time (`DD/MM/YYYY`, 24h), method, registering
   user, and amount. Legacy payments may have `payment_method` or
@@ -331,6 +371,44 @@ change the payload, the validation or the derived `payment_status` badge.
   `min_stock`/`min_stock_quantity` names are not sent. Pagination is
   cursor-only: lists use `has_next`, and there is no total count or page range.
 - Keep `isLoading` for skeletons and `isFetching` for background refreshes.
+
+### Client detail and client payments
+
+- Route `/clients/:id`, entered from the client name on `/clients`. The client
+  list card and the detail header show `Saldo pendiente` from
+  `client.debt_amount`; it is red only when above zero, and the header shows
+  `Sin deuda` at zero.
+- Each client card with debt above zero also shows `Pagar` next to `Editar` and
+  `Eliminar`. It opens the same `ClientPaymentModal` used by the detail page.
+  After a successful payment the list refetches `['clients']` and
+  `['client', id]`, so the card shows the new balance; the action stays while
+  debt remains and disappears at zero. The trigger is `Pagar deuda de <name>`
+  for assistive technology, and focus returns to `Pagar` if debt remains or to
+  the `role="status"` success message when the action disappears.
+- The header carries identity/contact and `Editar cliente` (ghost) and
+  `Pagar deuda` (the only near-black primary) while debt is above zero. Editing
+  reuses `CreateFormModal` with `CLIENT_FIELDS` and invalidates `['client', id]`
+  and `['clients']`.
+- `Ventas del cliente` reuses `useSales` with `client_id`, newest first and
+  cursor paginated. Filters are payment status (`Todas`, `Pendiente`,
+  `Parcial`, `Pagada`), delivery status (`Todos`, `Pendiente`, `Parcial`,
+  `Entregado`), and `Desde`/`Hasta`; each change resets to page 1. An inverted
+  date range shows the inline Spanish error and the list ignores both dates
+  until corrected.
+- Columns are `Fecha`, `Total`, `Pagado`, `Saldo`, `Estado pago`,
+  `Estado entrega`, and `Ver`. `Ver` and a row click open `/sales/:id`; the
+  client page has no per-row payment action.
+- `ClientPaymentModal` calls
+  `POST /sales/clients/{id}/payments` with `{ amount, payment_method }` from
+  `Pagar todo` (fixed to the remaining debt) or `Pago parcial`. It shows the
+  remaining-debt preview, the oldest-first note, inline `role="alert"`
+  validation, keeps the values on API error, and disables submit while
+  pending. The page reports success through an inline `role="status"` and
+  refreshes the client, list, affected sales, stats, and dashboard keys.
+- The sale form requires a client when `amount_paid < total`; otherwise it
+  shows `Una venta con saldo pendiente requiere un cliente.` next to the client
+  field and focuses that control. Editing a sale with debt cannot clear the
+  client. A fully paid anonymous sale remains valid.
 
 ### Dashboard
 

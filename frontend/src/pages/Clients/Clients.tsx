@@ -1,28 +1,45 @@
-import { useState } from 'react'
-import { Plus, Phone, Mail, Edit, Trash2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus, Phone, Mail, Edit, Trash2, Wallet } from 'lucide-react'
 import styles from './Clients.module.css'
 import PageHeader from '@/components/PageHeader/PageHeader'
 import CommandBar from '@/components/CommandBar/CommandBar'
 import { clientsApi } from '@/lib/api/clients'
-import { formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import CreateFormModal from '@/components/CreateFormModal/CreateFormModal'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteModal'
+import ClientPaymentModal from '@/components/ClientPaymentModal/ClientPaymentModal'
+import InlineNotice from '@/components/InlineNotice/InlineNotice'
 import ErrorState from '@/components/ErrorState/ErrorState'
 import CardGridSkeleton from '@/components/CardGridSkeleton/CardGridSkeleton'
 import Pagination from '@/components/Pagination'
 import { usePagedList } from '@/hooks/usePagedList'
 import { useDeleteConfirm } from '@/hooks/useDeleteConfirm'
+import { applyClientPaymentResult } from '@/hooks/useClient'
 import { CLIENT_FIELDS, buildClientCreatePayload } from '@/lib/formFields'
-import type { Client } from '@/types'
+import type { Client, ClientPaymentResult, PaymentMethod } from '@/types'
 
 export default function Clients() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const queryClient = useQueryClient()
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
+  const [payingClient, setPayingClient] = useState<Client | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const payTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const successRef = useRef<HTMLDivElement>(null)
+
+  const paymentMutation = useMutation({
+    mutationFn: ({ clientId, data }: { clientId: number; data: { amount: number; payment_method: Exclude<PaymentMethod, null> } }) =>
+      clientsApi.addClientPayment(clientId, data),
+    onSuccess: (response, { clientId }) => {
+      applyClientPaymentResult(queryClient, clientId, response.data)
+    },
+  })
 
   const debouncedSearch = useDebouncedValue(search, 300, () => setPage(1))
 
@@ -40,8 +57,13 @@ export default function Clients() {
     target: clientToDelete,
     requestDelete: requestClientDelete,
     close: closeClientDelete,
-    confirm: confirmClientDelete,
+    confirm: deleteClient,
   } = useDeleteConfirm<{ id: number; name: string }>(deleteMutation.mutateAsync)
+
+  async function confirmClientDelete() {
+    await deleteClient()
+    setNotice('Cliente eliminado exitosamente.')
+  }
 
   function openEditModal(client: Client) {
     setEditingClient(client)
@@ -51,6 +73,7 @@ export default function Clients() {
   function handleClientCreated() {
     setIsCreateModalOpen(false)
     invalidate()
+    setNotice('Cliente creado exitosamente.')
   }
 
   async function submitEditClient(values: Record<string, string>) {
@@ -69,6 +92,34 @@ export default function Clients() {
     setIsEditModalOpen(false)
     setEditingClient(null)
     invalidate()
+    setNotice('Cliente actualizado exitosamente.')
+  }
+
+  function openPaymentModal(client: Client, trigger: HTMLButtonElement) {
+    payTriggerRef.current = trigger
+    setNotice(null)
+    setPayingClient(client)
+  }
+
+  async function submitClientPayment(data: { amount: number; payment_method: Exclude<PaymentMethod, null> }) {
+    if (!payingClient) throw new Error('Client not loaded')
+    try {
+      const response = await paymentMutation.mutateAsync({ clientId: payingClient.id, data })
+      return response.data
+    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: ['clients'] })
+      queryClient.invalidateQueries({ queryKey: ['client', payingClient.id] })
+      throw error
+    }
+  }
+
+  function handlePaymentSuccess(result: ClientPaymentResult) {
+    setPayingClient(null)
+    setNotice(`Pago registrado. Saldo pendiente: ${formatCurrency(result.remaining_debt)}.`)
+    requestAnimationFrame(() => {
+      if (result.remaining_debt > 0) payTriggerRef.current?.focus()
+      else successRef.current?.focus()
+    })
   }
 
   async function submitCreateClient(values: Record<string, string>) {
@@ -90,6 +141,10 @@ export default function Clients() {
         phone: '',
       }
 
+  const paymentClient = payingClient
+    ? clients.find(c => c.id === payingClient.id) ?? payingClient
+    : null
+
   return (
     <div className={styles.container}>
       <PageHeader
@@ -109,6 +164,12 @@ export default function Clients() {
         placeholder="Buscar cliente por nombre, cédula o contacto..."
       />
 
+      {notice && (
+        <InlineNotice ref={successRef} tone="success" onClose={() => setNotice(null)}>
+          {notice}
+        </InlineNotice>
+      )}
+
       {isLoading ? (
         <CardGridSkeleton label="Cargando clientes..." />
       ) : isError && clients.length === 0 ? (
@@ -122,11 +183,29 @@ export default function Clients() {
                   <div className={styles.identity}>
                     <span className={styles.monogram} aria-hidden="true">{c.name.charAt(0).toUpperCase()}</span>
                     <div className={styles.clientInfo}>
-                      <div className={styles.clientName}>{c.name}</div>
+                      <a
+                        className={styles.clientName}
+                        href={`#/clients/${c.id}`}
+                        title={`Ver cliente ${c.name}`}
+                      >
+                        {c.name}
+                      </a>
                       {c.identity_card && <div className={styles.clientIdCard}>ID: {c.identity_card}</div>}
                     </div>
                   </div>
                   <div className={styles.cardActions}>
+                    {c.debt_amount > 0 && (
+                      <button
+                        type="button"
+                        className={styles.payButton}
+                        onClick={event => openPaymentModal(c, event.currentTarget)}
+                        title="Pagar"
+                        aria-label={`Pagar deuda de ${c.name}`}
+                      >
+                        <Wallet size={14} aria-hidden="true" />
+                        <span>Pagar</span>
+                      </button>
+                    )}
                     <button className="action-btn" onClick={() => openEditModal(c)} title="Editar">
                       <Edit size={14} />
                     </button>
@@ -137,6 +216,12 @@ export default function Clients() {
                 </div>
 
                 <div className={styles.detailsList}>
+                  <div className={styles.debtRow}>
+                    <span className={styles.dateLabel}>Saldo pendiente</span>
+                    <span className={c.debt_amount > 0 ? styles.debtAmount : styles.debtSettled}>
+                      {c.debt_amount > 0 ? formatCurrency(c.debt_amount) : 'Sin deuda'}
+                    </span>
+                  </div>
                   {c.email && (
                     <div className={styles.detailItem}>
                       <Mail size={14} className={styles.detailIcon} />
@@ -178,6 +263,15 @@ export default function Clients() {
           onSubmit={submitCreateClient}
           onClose={() => setIsCreateModalOpen(false)}
           onCreated={handleClientCreated}
+        />
+      )}
+
+      {paymentClient && (
+        <ClientPaymentModal
+          client={paymentClient}
+          onClose={() => setPayingClient(null)}
+          onSubmit={submitClientPayment}
+          onSuccess={handlePaymentSuccess}
         />
       )}
 

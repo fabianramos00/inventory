@@ -69,8 +69,21 @@ export interface Client {
   identity_card?: string | null
   email?: string | null
   phone?: string | null
+  debt_amount: number
   created_at: string
   updated_at: string | null
+}
+
+export interface ClientPaymentAllocation {
+  sale_id: number
+  amount: number
+}
+
+export interface ClientPaymentResult {
+  client_id: number
+  amount: number
+  remaining_debt: number
+  allocations: ClientPaymentAllocation[]
 }
 
 // ─── Order ───────────────────────────────────────────────────────────────────

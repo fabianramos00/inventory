@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Eye, Trash2 } from 'lucide-react'
 import styles from './Inventory.module.css'
 import PageHeader from '@/components/PageHeader/PageHeader'
@@ -7,6 +7,7 @@ import CommandBar from '@/components/CommandBar/CommandBar'
 import DataCard from '@/components/DataCard/DataCard'
 import FilterSelect from '@/components/FilterSelect/FilterSelect'
 import SearchSelect from '@/components/SearchSelect/SearchSelect'
+import InlineNotice from '@/components/InlineNotice/InlineNotice'
 import { inventoryApi } from '@/lib/api/inventory'
 import { PAGE_LIMIT } from '@/lib/constants'
 import { formatCurrency, formatNumber, getProductStatus } from '@/lib/utils'
@@ -114,6 +115,7 @@ const VALID_TABS = ['productos', 'categorias', 'marcas', 'materiales', 'unidades
 
 export default function Inventory() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const activeTab = tabParam && VALID_TABS.includes(tabParam as typeof VALID_TABS[number]) ? tabParam : 'productos'
@@ -124,6 +126,13 @@ export default function Inventory() {
   const [selectedAvailability, setSelectedAvailability] = useState('')
 
   const [page, setPage] = useState(1)
+  const routeMessage = (location.state as { successMessage?: string } | null)?.successMessage
+  const [notice, setNotice] = useState<string | null>(routeMessage ?? null)
+
+  useEffect(() => {
+    if (!routeMessage) return
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [routeMessage, location.pathname, location.search, navigate])
 
   const debouncedSearch = useDebouncedValue(search, 300, () => setPage(1))
 
@@ -176,6 +185,12 @@ export default function Inventory() {
           </button>
         }
       />
+
+      {notice && (
+        <InlineNotice tone="success" onClose={() => setNotice(null)}>
+          {notice}
+        </InlineNotice>
+      )}
 
       <KpiStrip cards={[
         { label: 'Productos', value: formatNumber(stats?.totalProducts ?? 0), kind: 'count' },

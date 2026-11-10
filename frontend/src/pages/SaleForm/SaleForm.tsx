@@ -14,6 +14,7 @@ import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteMod
 import SearchSelect from '@/components/SearchSelect/SearchSelect'
 import Dropdown from '@/components/Dropdown/Dropdown'
 import SalePaymentModal from '@/components/SalePaymentModal/SalePaymentModal'
+import InlineNotice from '@/components/InlineNotice/InlineNotice'
 import DiscardChangesModal from './DiscardChangesModal'
 import { paymentStatusLabel, paymentStatusBadge, deliveryStatusLabel, deliveryStatusBadge, paymentMethodLabel } from '@/lib/constants'
 import { formatDate, formatDateTime, formatCurrency, safeNumber } from '@/lib/utils'
@@ -92,7 +93,7 @@ export default function SaleForm() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentToDelete, setPaymentToDelete] = useState<SalePayment | null>(null)
   const [deletingPaymentId, setDeletingPaymentId] = useState<number | null>(null)
-  const [paymentAnnouncement, setPaymentAnnouncement] = useState<string | null>(null)
+  const [successNotice, setSuccessNotice] = useState<string | null>(null)
   const payButtonRef = useRef<HTMLButtonElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const amountPaidRef = useRef<HTMLInputElement>(null)
@@ -104,6 +105,8 @@ export default function SaleForm() {
 
   const [clientId, setClientId] = useState<number | ''>('')
   const [selectedClient, setSelectedClient] = useState<FilterOption | null>(null)
+  const [clientError, setClientError] = useState<string | null>(null)
+  const clientFieldRef = useRef<HTMLDivElement>(null)
 
   const [productSearch, setProductSearch] = useState('')
   const [productSearchOpen, setProductSearchOpen] = useState(false)
@@ -173,15 +176,22 @@ export default function SaleForm() {
     if (!sale) return
     setClientId(sale.client?.id ?? '')
     setSelectedClient(sale.client ? { id: sale.client.id, name: sale.client.name } : null)
+    setClientError(null)
     setIsEditingDetails(true)
   }
 
   function handleCancelEditDetails() {
     setIsEditingDetails(false)
+    setClientError(null)
   }
 
   async function handleSaveDetails() {
     if (!sale) return
+    if (sale.debt_amount > 0 && !clientId) {
+      setClientError('Una venta con saldo pendiente requiere un cliente.')
+      clientFieldRef.current?.querySelector('button')?.focus()
+      return
+    }
     setIsSaving(true)
     try {
       const res = await salesApi.updateSale(sale.id, {
@@ -189,7 +199,9 @@ export default function SaleForm() {
       })
       queryClient.setQueryData(['sale', sale.id], res.data)
       invalidateSaleData(queryClient, sale.id)
+      setClientError(null)
       setIsEditingDetails(false)
+      setSuccessNotice('Venta actualizada exitosamente.')
     } catch (err) {
       setApiError(getAPIErrorMessage(err, 'Error al guardar los detalles de la venta. Intenta de nuevo.'))
     } finally {
@@ -201,7 +213,7 @@ export default function SaleForm() {
     setShowPaymentModal(false)
     queryClient.setQueryData(['sale', updatedSale.id], updatedSale)
     invalidateSaleData(queryClient, updatedSale.id)
-    setPaymentAnnouncement(`Pago de ${formatCurrency(amount)} registrado. Saldo pendiente: ${formatCurrency(updatedSale.debt_amount)}.`)
+    setSuccessNotice(`Pago de ${formatCurrency(amount)} registrado. Saldo pendiente: ${formatCurrency(updatedSale.debt_amount)}.`)
     requestAnimationFrame(() => {
       if (payButtonRef.current) payButtonRef.current.focus()
       else titleRef.current?.focus()
@@ -215,7 +227,7 @@ export default function SaleForm() {
       const res = await salesApi.deleteSalePayment(sale.id, paymentToDelete.id)
       queryClient.setQueryData(['sale', sale.id], res.data)
       invalidateSaleData(queryClient, sale.id)
-      setPaymentAnnouncement(`Pago eliminado. Saldo pendiente: ${formatCurrency(res.data.debt_amount)}.`)
+      setSuccessNotice(`Pago eliminado. Saldo pendiente: ${formatCurrency(res.data.debt_amount)}.`)
       setPaymentToDelete(null)
     } catch (err) {
       setApiError(getAPIErrorMessage(err, 'No se pudo eliminar el pago. Intenta de nuevo.'))
@@ -229,7 +241,7 @@ export default function SaleForm() {
     if (!sale) return
     await salesApi.deleteSale(sale.id)
     invalidateSaleData(queryClient)
-    navigate('/sales')
+    navigate('/sales', { state: { successMessage: 'Venta eliminada exitosamente.' } })
   }
 
   async function submitCreateClient(values: Record<string, string>) {
@@ -420,6 +432,12 @@ export default function SaleForm() {
       paymentMethodFieldRef.current?.querySelector('button')?.focus()
       return
     }
+    if (paid < draftTotal && !clientId) {
+      setClientError('Una venta con saldo pendiente requiere un cliente.')
+      clientFieldRef.current?.querySelector('button')?.focus()
+      return
+    }
+    setClientError(null)
 
     setIsSubmitting(true)
     try {
@@ -431,7 +449,7 @@ export default function SaleForm() {
       })
       await salesApi.createSale(payload)
       invalidateSaleData(queryClient)
-      navigate('/sales')
+      navigate('/sales', { state: { successMessage: 'Venta creada exitosamente.' } })
     } catch (error) {
       setApiError(getAPIErrorMessage(error, 'Error al crear la venta.'))
     } finally {
@@ -542,7 +560,11 @@ export default function SaleForm() {
         )}
       </div>
 
-      {paymentAnnouncement && <div className={styles.statusAnnouncement} role="status">{paymentAnnouncement}</div>}
+      {successNotice && (
+        <InlineNotice tone="success" onClose={() => setSuccessNotice(null)}>
+          {successNotice}
+        </InlineNotice>
+      )}
 
       {apiError && <div className={styles.errorBox} role="alert">{apiError}</div>}
 
@@ -1050,7 +1072,7 @@ export default function SaleForm() {
                   <div className={styles.fieldRowEditing}>
                     <dt className={styles.fieldLabel}>Cliente</dt>
                     <dd className={styles.fieldValueFull}>
-                      <div className={styles.selectWithAction}>
+                      <div className={styles.selectWithAction} ref={clientFieldRef}>
                         <SearchSelect
                           label="Cliente"
                           placeholder="Sin cliente"
@@ -1060,6 +1082,7 @@ export default function SaleForm() {
                           onChange={(value, option) => {
                             setClientId(value)
                             setSelectedClient(option ?? null)
+                            setClientError(null)
                           }}
                           fetchOptions={search =>
                             clientsApi.getClients({ search: search || undefined, skip: 0, limit: 10 })
@@ -1077,6 +1100,7 @@ export default function SaleForm() {
                           <Plus size={14} />
                         </button>
                       </div>
+                      {clientError && <span className={styles.fieldError} role="alert">{clientError}</span>}
                     </dd>
                   </div>
                 </>
@@ -1086,7 +1110,7 @@ export default function SaleForm() {
                     <dt className={styles.fieldLabel}>Cliente</dt>
                     {detailsEditable ? (
                       <dd className={styles.fieldValueFull}>
-                        <div className={styles.selectWithAction}>
+                        <div className={styles.selectWithAction} ref={clientFieldRef}>
                           <SearchSelect
                             label="Cliente"
                             placeholder="Sin cliente"
@@ -1096,6 +1120,7 @@ export default function SaleForm() {
                             onChange={(value, option) => {
                               setClientId(value)
                               setSelectedClient(option ?? null)
+                              setClientError(null)
                             }}
                             fetchOptions={search =>
                               clientsApi.getClients({ search: search || undefined, skip: 0, limit: 10 })
@@ -1105,6 +1130,7 @@ export default function SaleForm() {
                             ariaLabel={`Cliente: ${selectedClient?.name ?? 'Sin cliente'}`}
                           />
                         </div>
+                        {clientError && <span className={styles.fieldError} role="alert">{clientError}</span>}
                       </dd>
                     ) : (
                       <dd className={styles.fieldValue}>{sale?.client?.name ?? <span className={styles.summaryMuted}>Sin cliente</span>}</dd>

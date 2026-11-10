@@ -1032,16 +1032,6 @@
 
 /* ── Payment history ────────────────────────────────────────────────── */
 
-.statusAnnouncement {
-  padding: 10px 14px;
-  border: 1px solid var(--success-ink);
-  border-radius: var(--radius-control);
-  background: var(--success-bg);
-  color: var(--success-ink);
-  font-size: 14px;
-  font-weight: 500;
-}
-
 .historyHeader {
   display: flex;
   align-items: center;

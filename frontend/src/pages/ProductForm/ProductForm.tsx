@@ -12,6 +12,7 @@ import { useProduct } from '@/hooks/useProduct'
 import ProductDropdown from '@/components/ProductDropdown/ProductDropdown'
 import CreateFormModal, { type FieldConfig } from '@/components/CreateFormModal/CreateFormModal'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteModal'
+import InlineNotice from '@/components/InlineNotice/InlineNotice'
 import StockMeter from '@/components/StockMeter/StockMeter'
 import type { Product, FilterOption, CreateProductInput } from '@/types'
 import styles from '../formPage.module.css'
@@ -74,6 +75,7 @@ export default function ProductForm() {
   const { product: productData, isLoading: productLoading, error: productError } = useProduct(id)
   const [isEditing, setIsEditing] = useState(isCreateMode)
   const [apiError, setApiError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
   const [activeModal, setActiveModal] = useState<EntityType | null>(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -211,6 +213,7 @@ export default function ProductForm() {
 
   async function onSubmit(data: ProductFormInputs) {
     setApiError(null)
+    setNotice(null)
     try {
       const { price, sku, ...rest } = data
       const payload: CreateProductInput = {
@@ -244,6 +247,7 @@ export default function ProductForm() {
         populateForm(response.data)
         setIsEditing(false)
         setOpenDropdownId(null)
+        setNotice('Producto actualizado exitosamente.')
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message :
@@ -344,6 +348,12 @@ export default function ProductForm() {
           )}
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice tone="success" onClose={() => setNotice(null)}>
+          {notice}
+        </InlineNotice>
+      )}
 
       {apiError && <div className={styles.errorBox}>{apiError}</div>}
 

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Eye, Trash2 } from 'lucide-react'
 import DataTable from '@/components/DataTable/DataTable'
 import KpiStrip from '@/components/KpiStrip/KpiStrip'
@@ -8,6 +8,7 @@ import listStyles from '@/pages/listPage.module.css'
 import PageHeader from '@/components/PageHeader/PageHeader'
 import CommandBar from '@/components/CommandBar/CommandBar'
 import DataCard from '@/components/DataCard/DataCard'
+import InlineNotice from '@/components/InlineNotice/InlineNotice'
 import DateFilterInput from '@/components/DateFilterInput/DateFilterInput'
 import FilterSelect from '@/components/FilterSelect/FilterSelect'
 import SearchSelect from '@/components/SearchSelect/SearchSelect'
@@ -27,7 +28,15 @@ const fetchClients = (search: string) =>
 
 export default function Sales() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [page, setPage] = useState(1)
+  const routeMessage = (location.state as { successMessage?: string } | null)?.successMessage
+  const [notice, setNotice] = useState<string | null>(routeMessage ?? null)
+
+  useEffect(() => {
+    if (!routeMessage) return
+    navigate(location.pathname, { replace: true, state: null })
+  }, [routeMessage, location.pathname, navigate])
 
   const [selectedUser, setSelectedUser] = useState<number | ''>('')
   const [selectedClient, setSelectedClient] = useState<number | ''>('')
@@ -56,8 +65,13 @@ export default function Sales() {
     target: saleToDelete,
     requestDelete: requestSaleDelete,
     close: closeSaleDelete,
-    confirm: confirmSaleDelete,
+    confirm: deleteSale,
   } = useDeleteConfirm<{ id: number; label: string }>(deleteMutation.mutateAsync)
+
+  async function confirmSaleDelete() {
+    await deleteSale()
+    setNotice('Venta eliminada exitosamente.')
+  }
 
   const clientFilterActive = noClient || !!selectedClient
 
@@ -100,6 +114,12 @@ export default function Sales() {
           </button>
         }
       />
+
+      {notice && (
+        <InlineNotice tone="success" onClose={() => setNotice(null)}>
+          {notice}
+        </InlineNotice>
+      )}
 
       <KpiStrip cards={[
         { label: 'Total vendido', value: formatCurrency(stats.totalAmountSum), kind: 'money' },

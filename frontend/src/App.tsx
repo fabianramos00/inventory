@@ -18,6 +18,7 @@ const SaleForm = lazy(() => import('@/pages/SaleForm/SaleForm'))
 const Orders = lazy(() => import('@/pages/Orders/Orders'))
 const OrderForm = lazy(() => import('@/pages/OrderForm/OrderForm'))
 const Clients = lazy(() => import('@/pages/Clients/Clients'))
+const ClientDetail = lazy(() => import('@/pages/ClientDetail/ClientDetail'))
 const Providers = lazy(() => import('@/pages/Providers/Providers'))
 
 export default function App() {
@@ -43,6 +44,7 @@ export default function App() {
                   <Route path="/orders/create" element={<OrderForm />} />
                   <Route path="/orders/:id" element={<OrderForm />} />
                   <Route path="/clients" element={<Clients />} />
+                  <Route path="/clients/:id" element={<ClientDetail />} />
                   <Route path="/providers" element={<Providers />} />
                 </Route>
                 <Route element={<SuperuserRoute />}>

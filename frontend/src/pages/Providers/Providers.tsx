@@ -7,6 +7,7 @@ import { providersApi } from '@/lib/api/providers'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import CreateFormModal from '@/components/CreateFormModal/CreateFormModal'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteModal'
+import InlineNotice from '@/components/InlineNotice/InlineNotice'
 import ErrorState from '@/components/ErrorState/ErrorState'
 import CardGridSkeleton from '@/components/CardGridSkeleton/CardGridSkeleton'
 import Pagination from '@/components/Pagination'
@@ -22,6 +23,7 @@ export default function Providers() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const debouncedSearch = useDebouncedValue(search, 300, () => setPage(1))
 
@@ -39,8 +41,13 @@ export default function Providers() {
     target: providerToDelete,
     requestDelete: requestProviderDelete,
     close: closeProviderDelete,
-    confirm: confirmProviderDelete,
+    confirm: deleteProvider,
   } = useDeleteConfirm<{ id: number; name: string }>(deleteMutation.mutateAsync)
+
+  async function confirmProviderDelete() {
+    await deleteProvider()
+    setNotice('Proveedor eliminado exitosamente.')
+  }
 
   function openEditModal(provider: Provider) {
     setEditingProvider(provider)
@@ -50,6 +57,7 @@ export default function Providers() {
   function handleProviderCreated() {
     setIsCreateModalOpen(false)
     invalidate()
+    setNotice('Proveedor creado exitosamente.')
   }
 
   async function submitEditProvider(values: Record<string, string>) {
@@ -68,6 +76,7 @@ export default function Providers() {
     setIsEditModalOpen(false)
     setEditingProvider(null)
     invalidate()
+    setNotice('Proveedor actualizado exitosamente.')
   }
 
   async function submitCreateProvider(values: Record<string, string>) {
@@ -107,6 +116,12 @@ export default function Providers() {
         onSearchChange={setSearch}
         placeholder="Buscar proveedor por nombre, correo o teléfono..."
       />
+
+      {notice && (
+        <InlineNotice tone="success" onClose={() => setNotice(null)}>
+          {notice}
+        </InlineNotice>
+      )}
 
       {isLoading ? (
         <CardGridSkeleton label="Cargando proveedores..." />

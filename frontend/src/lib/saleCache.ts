@@ -5,6 +5,9 @@ export const SALE_RELATED_KEYS = [
   'product',
   'products',
   'inventoryStats',
+  // Client debt is derived from sales, so any sale write can change it.
+  'clients',
+  'client',
   'dashboardSummary',
   'dashboardTrend',
   'dashboardTopProducts',

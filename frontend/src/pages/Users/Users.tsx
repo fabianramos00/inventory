@@ -11,6 +11,7 @@ import { getApiErrorCode } from '@/lib/apiError'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import CreateFormModal, { type FieldConfig } from '@/components/CreateFormModal/CreateFormModal'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal/ConfirmDeleteModal'
+import InlineNotice from '@/components/InlineNotice/InlineNotice'
 import { useUsers } from '@/hooks/useUsers'
 import { useDeleteConfirm } from '@/hooks/useDeleteConfirm'
 import type { User } from '@/types'
@@ -55,6 +56,7 @@ export default function Users() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const debouncedSearch = useDebouncedValue(search, 300, () => setPage(1))
 
@@ -75,8 +77,13 @@ export default function Users() {
     target: userToDelete,
     requestDelete: requestUserDelete,
     close: closeUserDelete,
-    confirm: confirmUserDelete,
+    confirm: deleteUserById,
   } = useDeleteConfirm<{ id: number; name: string }>(deleteUser)
+
+  async function confirmUserDelete() {
+    await deleteUserById()
+    setNotice('Usuario eliminado exitosamente.')
+  }
 
   function openEditModal(user: User) {
     setEditingUser(user)
@@ -86,6 +93,7 @@ export default function Users() {
   function handleUserCreated() {
     setIsCreateModalOpen(false)
     invalidate()
+    setNotice('Usuario creado exitosamente.')
   }
 
   async function submitEditUser(values: Record<string, string>) {
@@ -108,10 +116,15 @@ export default function Users() {
     setIsEditModalOpen(false)
     setEditingUser(null)
     invalidate()
+    setNotice('Usuario actualizado exitosamente.')
   }
 
   function handleToggleActive(user: User) {
-    toggleActiveMutation.mutate(user)
+    toggleActiveMutation.mutate(user, {
+      onSuccess: () => {
+        setNotice(user.is_active ? 'Usuario desactivado exitosamente.' : 'Usuario activado exitosamente.')
+      },
+    })
   }
 
   async function submitCreateUser(values: Record<string, string>) {
@@ -143,6 +156,12 @@ export default function Users() {
           onSearchChange={setSearch}
           placeholder="Buscar usuario..."
         />
+
+        {notice && (
+          <InlineNotice tone="success" onClose={() => setNotice(null)}>
+            {notice}
+          </InlineNotice>
+        )}
 
         <DataCard>
           <DataTable
